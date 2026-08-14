@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "target": {
+    "entityKey": "atlas-audit-retention",
+    "pagePath": "requirements/AtlasAuditRetention.md",
+    "pageTitle": "Atlas audit retention",
+    "pageType": "requirement"
+  },
+  "sources": [
+    {
+      "key": "primary",
+      "uri": "docs/normalized/evidence-primary.md",
+      "content": "# Atlas retention\n\nAtlas audit capsules must be retained for 365 days.",
+      "claims": [
+        {
+          "key": "retention-365",
+          "text": "Atlas audit capsules must be retained for 365 days.",
+          "kind": "requirement",
+          "origin": "explicit",
+          "confidence": 1
+        },
+        {
+          "key": "storage-inference",
+          "text": "A shorter retention window could reduce archive storage pressure.",
+          "kind": "inference",
+          "origin": "synthesized",
+          "confidence": 0.55
+        }
+      ]
+    },
+    {
+      "key": "duplicate",
+      "uri": "docs/normalized/evidence-duplicate.md",
+      "content": "# Repeated Atlas retention\n\nAtlas audit capsules must be retained for 365 days.",
+      "claims": [
+        {
+          "key": "retention-365-duplicate",
+          "text": "Atlas audit capsules must be retained for 365 days.",
+          "kind": "requirement",
+          "origin": "explicit",
+          "confidence": 1
+        }
+      ]
+    },
+    {
+      "key": "contradiction",
+      "uri": "docs/normalized/evidence-contradiction.md",
+      "content": "# Conflicting Atlas retention\n\nAtlas audit capsules must be retained for only 90 days.",
+      "claims": [
+        {
+          "key": "retention-90",
+          "text": "Atlas audit capsules must be retained for only 90 days.",
+          "kind": "requirement",
+          "origin": "extracted",
+          "confidence": 0.99,
+          "relations": [
+            { "type": "contradicts", "targetKey": "retention-365" }
+          ]
+        }
+      ]
+    }
+  ]
+}

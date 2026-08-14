@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "files": [
+    {
+      "path": "src/config.ts",
+      "content": "/** Maximum retry attempts for order persistence. */\nexport const RETRY_LIMIT = Number(process.env.RETRY_LIMIT ?? 3);\n"
+    },
+    {
+      "path": "src/database.ts",
+      "content": "/** Persist an accepted order in the orders database table. */\nexport async function saveOrder(orderId: string): Promise<void> {\n  await database.table(\"orders\").insert({ orderId });\n}\n"
+    },
+    {
+      "path": "src/order-service.ts",
+      "content": "import { RETRY_LIMIT } from \"./config.js\";\nimport { saveOrder } from \"./database.js\";\n\n/** Validate and persist a submitted order with bounded retry behavior. */\nexport async function processOrder(orderId: string): Promise<number> {\n  validateOrder(orderId);\n  await saveOrder(orderId);\n  return RETRY_LIMIT;\n}\n\nfunction validateOrder(orderId: string): void {\n  if (!orderId) throw new Error(\"order id required\");\n}\n\nexport class OrderCoordinator {\n  async coordinate(orderId: string): Promise<number> {\n    return processOrder(orderId);\n  }\n}\n"
+    },
+    {
+      "path": "src/order-routes.ts",
+      "content": "import { processOrder } from \"./order-service.js\";\nrouter.post(\"/orders\", processOrder);\n"
+    },
+    {
+      "path": "tests/order-service.test.ts",
+      "content": "import { processOrder } from \"../src/order-service.js\";\ntest(\"processes retry and persistence for a submitted order\", async () => {\n  await processOrder(\"order-1\");\n});\n"
+    }
+  ],
+  "tasks": {
+    "definitions": [
+      { "symbol": "processOrder", "expected": "src/order-service.ts#processOrder" },
+      { "symbol": "OrderCoordinator.coordinate", "expected": "src/order-service.ts#OrderCoordinator.coordinate" }
+    ],
+    "callers": [
+      {
+        "symbol": "processOrder",
+        "expected": [
+          "src/order-routes.ts#route:POST /orders",
+          "src/order-service.ts#OrderCoordinator.coordinate",
+          "tests/order-service.test.ts#test:processes retry and persistence for a submitted order"
+        ]
+      },
+      {
+        "symbol": "saveOrder",
+        "expected": ["src/order-service.ts#processOrder"]
+      }
+    ],
+    "implementationTests": [
+      {
+        "symbol": "processOrder",
+        "expected": ["tests/order-service.test.ts#test:processes retry and persistence for a submitted order"]
+      }
+    ],
+    "routes": [
+      {
+        "query": "POST /orders",
+        "route": "src/order-routes.ts#route:POST /orders",
+        "handler": "processOrder",
+        "dependencies": ["validateOrder", "saveOrder"]
+      }
+    ],
+    "configs": [
+      { "query": "RETRY_LIMIT", "expected": "src/order-service.ts#processOrder" }
+    ],
+    "multiFile": [
+      {
+        "query": "submitted order route persistence retry test",
+        "expectedPaths": [
+          "src/database.ts",
+          "src/order-routes.ts",
+          "src/order-service.ts",
+          "tests/order-service.test.ts"
+        ]
+      }
+    ],
+    "rename": {
+      "path": "src/order-service.ts",
+      "from": "processOrder",
+      "to": "fulfillOrder"
+    },
+    "delete": {
+      "path": "tests/order-service.test.ts",
+      "symbol": "processes retry and persistence for a submitted order"
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "baseFixture": "hybrid-retrieval-golden.json",
+  "semanticPages": [
+    {
+      "concept": "surge-protection",
+      "path": "requirements/SaffronIngress.md",
+      "title": "Saffron ingress policy",
+      "type": "requirement",
+      "body": "# Pressure relief\n\nPressure relief choreography sheds excess arrivals ahead of saturation."
+    },
+    {
+      "concept": "replay-reconciliation",
+      "path": "decisions/IndigoReplay.md",
+      "title": "Indigo replay procedure",
+      "type": "decision",
+      "body": "# Quarantine ledger\n\nQuarantine ledger reconciliation neutralizes replayed envelopes before settlement."
+    }
+  ],
+  "semanticOnlyQueries": [
+    {
+      "id": "semantic-only-surge",
+      "concept": "surge-protection",
+      "query": "maintain responsiveness amid sudden popularity surges",
+      "expectedPaths": ["requirements/SaffronIngress.md"]
+    },
+    {
+      "id": "semantic-only-replay",
+      "concept": "replay-reconciliation",
+      "query": "recover trustworthy balances after duplicated delivery",
+      "expectedPaths": ["decisions/IndigoReplay.md"]
+    }
+  ],
+  "exactIdentifierQueryId": "exact-identifier"
+}

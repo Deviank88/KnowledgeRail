@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "fixtureVersion": 1,
+  "fixtureSha256": "b06f8c287941476baef0dc1531fe30629b89d658ab8811b101b65285efff0b69",
+  "sourceVersions": [1, 2, 3],
+  "minimumCanonicalPreservationRate": 1,
+  "minimumCustomMetadataPreservationRate": 1,
+  "minimumBackupCompletenessRate": 1,
+  "maximumDryRunWriteCount": 0,
+  "minimumTargetV4Rate": 1,
+  "minimumRollbackRecoveryRate": 1,
+  "minimumPageCountPreservationRate": 1,
+  "minimumSourceCountPreservationRate": 1,
+  "minimumGraphLinkPreservationRate": 1,
+  "minimumRetrievalRecallBefore": 1,
+  "minimumRetrievalRecallAfter": 1,
+  "minimumDocumentRecallBefore": 1,
+  "minimumDocumentRecallAfter": 1,
+  "minimumLegacyUnverifiedBackfillRate": 1,
+  "minimumUnknownSourceTrackingRate": 1,
+  "maximumEnrichmentProposalCount": 0,
+  "minimumJournalCompletionRate": 1
+}

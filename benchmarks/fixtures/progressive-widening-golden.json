@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "baseFixture": "hybrid-retrieval-golden.json",
+  "initialBudget": {
+    "maxSeedCandidates": 2,
+    "maxVisitedNodes": 12,
+    "maxDepth": 1,
+    "maxEvidence": 4,
+    "tokenBudget": 700
+  },
+  "maximumBudget": {
+    "maxSeedCandidates": 8,
+    "maxVisitedNodes": 60,
+    "maxDepth": 3,
+    "maxEvidence": 10,
+    "tokenBudget": 2000
+  },
+  "queries": [
+    {"id": "exact-identifier", "difficulty": "easy"},
+    {"id": "lexical-relevance", "difficulty": "easy"},
+    {
+      "id": "graph-only",
+      "difficulty": "difficult",
+      "initialBudget": {"maxDepth": 0},
+      "coverageRequirements": {"requiredPageTypes": ["requirement", "implementation"]}
+    },
+    {
+      "id": "same-request-sibling",
+      "difficulty": "difficult",
+      "initialBudget": {"maxDepth": 0},
+      "coverageRequirements": {"requiredPageTypes": ["request", "test_result"]}
+    },
+    {
+      "id": "two-hop-evidence",
+      "difficulty": "difficult",
+      "coverageRequirements": {"requiredPageTypes": ["decision"]}
+    },
+    {
+      "id": "three-hop-evidence",
+      "difficulty": "difficult",
+      "query": "Saffron edge broker initiation",
+      "coverageRequirements": {"requiredPageTypes": ["requirement"]}
+    },
+    {
+      "id": "high-degree-hub",
+      "difficulty": "difficult",
+      "coverageRequirements": {"requiredPageTypes": ["requirement"]}
+    },
+    {"id": "ambiguous-entity", "difficulty": "easy"},
+    {
+      "id": "contradictory-evidence",
+      "difficulty": "difficult",
+      "query": "check Atlas production audit retention 365 for contradictions",
+      "initialBudget": {"maxDepth": 0},
+      "coverageRequirements": {"requireContradictionCheck": true, "minimumSourceDiversity": 2}
+    },
+    {"id": "relevant-deep-passage", "difficulty": "easy"},
+    {
+      "id": "multiple-sources",
+      "difficulty": "difficult",
+      "query": "Omega shipment customs release evidence from multiple sources",
+      "initialBudget": {"maxDepth": 0},
+      "coverageRequirements": {"minimumSourceDiversity": 3, "requiredPageTypes": ["requirement", "decision", "test_result"]}
+    },
+    {
+      "id": "traceability-chain",
+      "difficulty": "difficult",
+      "initialBudget": {"maxDepth": 0},
+      "coverageRequirements": {"requiredPageTypes": ["requirement", "decision", "implementation", "test_result"]}
+    },
+    {
+      "id": "historical-incident",
+      "difficulty": "difficult",
+      "initialBudget": {"maxDepth": 0},
+      "coverageRequirements": {"requiredPageTypes": ["implementation", "analysis"]}
+    },
+    {"id": "independent-facets", "difficulty": "easy"}
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "sourceUri": "docs/client/approval-to-be.md",
+  "sourceContent": "Il processo approvativo TO-BE è validato dal cliente e deve mantenere audit e controllo di concorrenza.",
+  "sections": [
+    {
+      "id": "to-be-multihop",
+      "documentType": "functional_spec",
+      "title": "Soluzione TO-BE",
+      "query": "processo approvativo validazione audit",
+      "expectedMarkers": ["EVID-EDITORIAL-REQ", "EVID-EDITORIAL-DEC", "EVID-EDITORIAL-IMPL"],
+      "expectedRequiredEvidence": ["requirement", "implementation"],
+      "expectGap": false,
+      "maxPages": 6,
+      "maxOutputChars": 6000,
+      "outputTokenBudget": 2000,
+      "heuristicTokenBudget": 4000
+    },
+    {
+      "id": "security-gap",
+      "documentType": "architecture_doc",
+      "title": "Security Architecture",
+      "query": "security encryption authorization",
+      "expectedMarkers": ["EVID-EDITORIAL-SEC"],
+      "expectedRequiredEvidence": ["requirement", "test"],
+      "expectGap": true,
+      "expectedMissingEvidence": ["test"],
+      "maxPages": 4,
+      "maxOutputChars": 5000,
+      "outputTokenBudget": 1800,
+      "heuristicTokenBudget": 3000
+    }
+  ]
+}

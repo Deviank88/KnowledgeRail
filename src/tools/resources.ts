@@ -1,0 +1,81 @@
+import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/server";
+import { readWikiResource } from "../context/resource-reader.js";
+import { readCodeResource } from "../core/code-evidence/resource-reader.js";
+import { getWikiRoot } from "../core/paths.js";
+import { logFile, schemaFile, wikiDir } from "../core/paths.js";
+import { readFileSafe } from "../core/utils.js";
+
+const DEFAULT_RESOURCE_MAX_CHARS = 6_000;
+
+export function registerWikiResources(server: McpServer): void {
+  server.registerResource(
+    "wiki-schema",
+    "wiki://schema",
+    { title: "Wiki schema", description: "Convenzioni e workflow della wiki", mimeType: "text/markdown" },
+    async () => ({ contents: [{ uri: "wiki://schema", text: await readFileSafe(schemaFile()) ?? "SCHEMA.md non trovato." }] })
+  );
+  server.registerResource(
+    "wiki-log",
+    "wiki://log",
+    { title: "Wiki log", description: "Registro operativo della wiki", mimeType: "text/markdown" },
+    async () => ({ contents: [{ uri: "wiki://log", text: await readFileSafe(logFile()) ?? "log.md non trovato." }] })
+  );
+  server.registerResource(
+    "wiki-evidence",
+    new ResourceTemplate("knowledge-rail://page/{+path}{?passage}", { list: undefined }),
+    {
+      title: "Wiki evidence",
+      description: "Read one wiki page or content-addressed passage referenced by task context.",
+      mimeType: "text/markdown",
+      cacheHint: { ttlMs: 0, cacheScope: "private" },
+    },
+    async (uri) => {
+      const read = await readWikiResource({
+        wikiRoot: wikiDir(),
+        resourceUri: uri.href,
+        maxCharacters: DEFAULT_RESOURCE_MAX_CHARS,
+      });
+      const returnedCharacters = [...read.text].length;
+      const label = read.heading ? `${read.title} — ${read.heading}` : read.title;
+      const truncation = read.truncated
+        ? `\n\n[Truncated: ${returnedCharacters}/${read.totalCharacters} characters returned]`
+        : "";
+      return {
+        contents: [{
+          uri: read.uri,
+          mimeType: "text/markdown",
+          text: `# ${label}\n\n${read.text}${truncation}`,
+        }],
+      };
+    }
+  );
+  server.registerResource(
+    "code-evidence",
+    new ResourceTemplate("code://repo/{+path}#{symbol}", { list: undefined }),
+    {
+      title: "Code evidence",
+      description: "Read only the indexed symbol body or targeted line range referenced by code evidence.",
+      mimeType: "text/plain",
+      cacheHint: { ttlMs: 0, cacheScope: "private" },
+    },
+    async (uri) => {
+      const read = await readCodeResource({
+        repositoryRoot: getWikiRoot(),
+        wikiRoot: wikiDir(),
+        resourceUri: uri.href,
+        maxCharacters: DEFAULT_RESOURCE_MAX_CHARS,
+      });
+      const returnedCharacters = [...read.text].length;
+      const truncation = read.truncated
+        ? `\n\n[Truncated: ${returnedCharacters}/${read.totalCharacters} characters returned]`
+        : "";
+      return {
+        contents: [{
+          uri: read.uri,
+          mimeType: "text/plain",
+          text: `${read.path}:${read.startLine}-${read.endLine} — ${read.qualifiedName}\n\n${read.text}${truncation}`,
+        }],
+      };
+    }
+  );
+}

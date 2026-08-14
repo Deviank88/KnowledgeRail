@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "fixtureVersion": 1,
+  "fixtureSha256": "8e097ba384f17d4bd907f5aefb183cda4f75d00ba7de1e9d67746b0defd858f7",
+  "sourceChars": 159480,
+  "segmentMaxChars": 4096,
+  "segmentCount": 42,
+  "finalSegmentId": "seg-3dbb4180076df55ef86b7ae2",
+  "minimumRelevantMarkerOffsetPercent": 90
+}

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "fixtureVersion": 1,
+  "fixtureSha256": "78286c632a730905c08793853b80a1a53a7befd73ae06d1491cd93453013203f",
+  "claimId": "claim-3626312651811a084decf48067243678",
+  "recoveryEventId": "recovery-d7b0fbdf793f1d054cdcc848f4ee1d15",
+  "resolvedPagePath": "requirements/AtlasDeliveryRetry.md",
+  "uniqueRecoveryEventCount": 1,
+  "duplicateEventOccurrences": 2,
+  "initialLateRecoveryRate": 0.6666666666666666,
+  "maximumFinalLateRecoveryRate": 0.3333333333333333
+}

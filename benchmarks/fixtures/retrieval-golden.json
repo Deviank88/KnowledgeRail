@@ -1,0 +1,183 @@
+{
+  "pages": [
+    {
+      "path": "requirements/REQ_RETRY.md",
+      "title": "Resilient order synchronization",
+      "type": "requirement",
+      "tags": ["integration", "reliability"],
+      "body": "# Requirement\n\nOrder synchronization must remain asynchronous and must never block the primary business transaction. A failed delivery may be retried at most five times.\n\n## Acceptance criteria\n\nAfter the fifth failed attempt the message is moved to the dead-letter queue and an operational alert is emitted."
+    },
+    {
+      "path": "decisions/DEC_RETRY.md",
+      "title": "Exponential backoff decision",
+      "type": "decision",
+      "tags": ["architecture", "reliability"],
+      "body": "# Decision\n\nRetries are executed by the asynchronous worker using exponential backoff with jitter. Retry behavior must not be implemented inside the remote API client.\n\n## Rationale\n\nJitter reduces synchronized retry storms after a downstream outage while preserving the maximum-attempt requirement."
+    },
+    {
+      "path": "implementations/OrderSyncWorker.md",
+      "title": "Order synchronization worker",
+      "type": "implementation",
+      "tags": ["integration", "worker"],
+      "body": "# Current implementation\n\nThe OrderSyncWorker consumes queued order events and sends them to the ERP adapter. The current implementation uses a fixed retry interval of five seconds and records the final failure before sending the event to the dead-letter queue.\n\n## Dependencies\n\nThe worker depends on the event queue, ERP adapter, monitoring service and dead-letter processor."
+    },
+    {
+      "path": "tests/TEST_RETRY.md",
+      "title": "Retry policy verification",
+      "type": "test_result",
+      "tags": ["test", "reliability"],
+      "body": "# Retry tests\n\nThe test suite verifies that a transient ERP failure is retried, that no more than five delivery attempts occur and that the final failed message reaches the dead-letter queue.\n\n## Regression coverage\n\nThe primary transaction remains non-blocking while retries are pending."
+    },
+    {
+      "path": "analysis/INC_OUTAGE.md",
+      "title": "ERP outage retry storm incident",
+      "type": "analysis",
+      "tags": ["incident", "reliability"],
+      "body": "# Incident\n\nDuring an ERP outage many workers retried at the same fixed interval. The synchronized retries caused a thundering-herd load spike as soon as the ERP became reachable.\n\n## Lesson learned\n\nBackoff should include jitter so workers do not retry simultaneously."
+    },
+    {
+      "path": "concepts/Idempotency.md",
+      "title": "Idempotent processing",
+      "type": "concept",
+      "tags": ["reliability", "integration"],
+      "body": "# Idempotency\n\nIdempotent processing prevents the same business event from producing duplicate side effects when a delivery is repeated.\n\n## Pattern\n\nPersist an idempotency key and reject or safely replay duplicate requests."
+    },
+    {
+      "path": "api/OrdersAPI.md",
+      "title": "Orders API",
+      "type": "api",
+      "tags": ["api", "orders"],
+      "body": "# Create order\n\nPOST /orders accepts an Idempotency-Key header so callers can safely retry a request without creating duplicate orders.\n\n## Errors\n\nA 409 response indicates a conflicting request state rather than a transient delivery failure."
+    },
+    {
+      "path": "decisions/DEC_AUTH.md",
+      "title": "Service authentication decision",
+      "type": "decision",
+      "tags": ["security", "api"],
+      "body": "# Decision\n\nService-to-service calls use short-lived OAuth credentials. Static shared passwords are not permitted.\n\n## Scope\n\nThe rule applies to internal APIs and asynchronous workers calling protected services."
+    },
+    {
+      "path": "concepts/Reporting.md",
+      "title": "Operational reporting",
+      "type": "concept",
+      "tags": ["reporting"],
+      "body": "# Reporting\n\nOperational dashboards aggregate successful and failed processing counts by day and region."
+    },
+    {
+      "path": "requirements/REQ_204.md",
+      "title": "REQ-204 invoice API throttling",
+      "type": "requirement",
+      "tags": ["api", "invoice", "performance"],
+      "body": "# REQ-204\n\nThe endpoint /v2/invoices must accept at most 120 write requests per minute for each tenant.\n\n## Error contract\n\nWhen the tenant limit is exceeded the API returns HTTP 429 and a Retry-After header."
+    },
+    {
+      "path": "analysis/InvoiceApproval.md",
+      "title": "Processo di approvazione fatture",
+      "type": "analysis",
+      "tags": ["finance", "process"],
+      "body": "# Processo attuale\n\nLe fatture con importo superiore a 10.000 euro richiedono l'approvazione di un responsabile finanziario prima della contabilizzazione.\n\n## Eccezioni\n\nLe note di credito seguono un flusso separato e non utilizzano questa soglia."
+    },
+    {
+      "path": "requirements/WarehouseAllocation.md",
+      "title": "Warehouse allocation policy",
+      "type": "requirement",
+      "tags": ["logistics", "allocation"],
+      "body": "# Allocation rule\n\nAn order is allocated to the closest eligible warehouse that has sufficient available stock.\n\n## Constraint\n\nA warehouse under maintenance is never considered eligible even when stock is available."
+    },
+    {
+      "path": "decisions/DEC_INVOICE_BATCH.md",
+      "title": "Invoice batch processing decision",
+      "type": "decision",
+      "tags": ["invoice", "batch"],
+      "body": "# Decision\n\nNightly invoice exports are processed in batches and are not subject to the interactive API write-rate limit.\n\n## Rationale\n\nBatch exports have an independent capacity envelope and retry policy."
+    }
+  ],
+  "queries": [
+    {
+      "id": "retry-limit",
+      "query": "maximum five retry attempts dead-letter queue",
+      "relevant": [
+        { "path": "requirements/REQ_RETRY.md", "grade": 3, "heading": "Acceptance criteria" },
+        { "path": "tests/TEST_RETRY.md", "grade": 2, "heading": "Retry tests" },
+        { "path": "implementations/OrderSyncWorker.md", "grade": 1, "heading": "Current implementation" }
+      ]
+    },
+    {
+      "id": "retry-storm",
+      "query": "thundering herd after ERP outage synchronized retries",
+      "relevant": [
+        { "path": "analysis/INC_OUTAGE.md", "grade": 3, "heading": "Incident" },
+        { "path": "decisions/DEC_RETRY.md", "grade": 2, "heading": "Rationale" }
+      ]
+    },
+    {
+      "id": "backoff-jitter",
+      "query": "exponential backoff with jitter retry worker",
+      "relevant": [
+        { "path": "decisions/DEC_RETRY.md", "grade": 3, "heading": "Decision" },
+        { "path": "analysis/INC_OUTAGE.md", "grade": 2, "heading": "Lesson learned" },
+        { "path": "implementations/OrderSyncWorker.md", "grade": 1, "heading": "Current implementation" }
+      ]
+    },
+    {
+      "id": "retry-tests",
+      "query": "tests validating retry attempts and non-blocking transaction",
+      "relevant": [
+        { "path": "tests/TEST_RETRY.md", "grade": 3, "heading": "Regression coverage" },
+        { "path": "requirements/REQ_RETRY.md", "grade": 2, "heading": "Requirement" }
+      ]
+    },
+    {
+      "id": "idempotency",
+      "query": "prevent duplicate orders when requests are retried",
+      "relevant": [
+        { "path": "concepts/Idempotency.md", "grade": 3, "heading": "Idempotency" },
+        { "path": "api/OrdersAPI.md", "grade": 3, "heading": "Create order" }
+      ]
+    },
+    {
+      "id": "worker-dependencies",
+      "query": "what does the order synchronization worker depend on",
+      "relevant": [
+        { "path": "implementations/OrderSyncWorker.md", "grade": 3, "heading": "Dependencies" }
+      ]
+    },
+    {
+      "id": "current-retry-state",
+      "query": "current implementation fixed retry interval five seconds",
+      "relevant": [
+        { "path": "implementations/OrderSyncWorker.md", "grade": 3, "heading": "Current implementation" },
+        { "path": "analysis/INC_OUTAGE.md", "grade": 1, "heading": "Incident" }
+      ]
+    },
+    {
+      "id": "exact-technical-id",
+      "query": "REQ-204 /v2/invoices 120 requests HTTP 429 Retry-After",
+      "relevant": [
+        { "path": "requirements/REQ_204.md", "grade": 3, "heading": "Error contract" },
+        { "path": "decisions/DEC_INVOICE_BATCH.md", "grade": 1, "heading": "Decision" }
+      ]
+    },
+    {
+      "id": "oauth-decision",
+      "query": "short-lived OAuth credentials service-to-service internal APIs",
+      "relevant": [
+        { "path": "decisions/DEC_AUTH.md", "grade": 3, "heading": "Decision" }
+      ]
+    },
+    {
+      "id": "italian-business-process",
+      "query": "fatture superiori a 10.000 euro approvazione responsabile finanziario",
+      "relevant": [
+        { "path": "analysis/InvoiceApproval.md", "grade": 3, "heading": "Processo attuale" }
+      ]
+    },
+    {
+      "id": "warehouse-policy",
+      "query": "closest eligible warehouse sufficient available stock maintenance",
+      "relevant": [
+        { "path": "requirements/WarehouseAllocation.md", "grade": 3, "heading": "Allocation rule" }
+      ]
+    }
+  ]
+}

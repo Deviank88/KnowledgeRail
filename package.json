@@ -1,0 +1,97 @@
+{
+  "name": "knowledge-rail",
+  "version": "1.0.0",
+  "mcpName": "io.github.deviank88/knowledge-rail",
+  "description": "Local-first MCP 2.0 server for persistent, evidence-backed project knowledge and task context",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Deviank88/KnowledgeRail.git"
+  },
+  "homepage": "https://github.com/Deviank88/KnowledgeRail#readme",
+  "bugs": {
+    "url": "https://github.com/Deviank88/KnowledgeRail/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "knowledge-base",
+    "context-retrieval",
+    "ai-agents"
+  ],
+  "files": [
+    "ACKNOWLEDGEMENTS.md",
+    "dist",
+    "server.json"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "knowledge-rail": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "test": "node scripts/run-tests.mjs",
+    "verify": "npm run check && npm test",
+    "audit:runtime": "npm audit --omit=dev --audit-level=high",
+    "bench": "tsx benchmarks/search-bench.ts",
+    "bench:scale": "tsx benchmarks/search-bench.ts",
+    "bench:mcp": "tsx benchmarks/mcp-protocol-bench.ts",
+    "bench:context": "tsx benchmarks/context-disclosure-bench.ts",
+    "bench:graph-runtime": "tsx benchmarks/graph-runtime-bench.ts",
+    "eval:retrieval": "tsx benchmarks/retrieval-quality-eval.ts",
+    "eval:retrieval:gate": "tsx benchmarks/retrieval-baseline-gate.ts",
+    "eval:hybrid": "tsx benchmarks/hybrid-retrieval-quality-eval.ts",
+    "eval:hybrid:gate": "tsx benchmarks/hybrid-retrieval-baseline-gate.ts",
+    "eval:widening": "tsx benchmarks/progressive-widening-eval.ts",
+    "eval:widening:gate": "tsx benchmarks/progressive-widening-baseline-gate.ts",
+    "eval:source-coverage": "tsx benchmarks/source-coverage-eval.ts",
+    "eval:source-coverage:gate": "tsx benchmarks/source-coverage-baseline-gate.ts",
+    "eval:evidence-ir": "tsx benchmarks/evidence-ir-eval.ts",
+    "eval:evidence-ir:gate": "tsx benchmarks/evidence-ir-baseline-gate.ts",
+    "eval:code-evidence": "tsx benchmarks/code-evidence-eval.ts",
+    "eval:code-evidence:gate": "tsx benchmarks/code-evidence-baseline-gate.ts",
+    "eval:recovery": "tsx benchmarks/knowledge-recovery-eval.ts",
+    "eval:recovery:gate": "tsx benchmarks/knowledge-recovery-baseline-gate.ts",
+    "eval:task-context": "tsx benchmarks/task-context-compiler-eval.ts",
+    "eval:task-context:gate": "tsx benchmarks/task-context-compiler-baseline-gate.ts",
+    "eval:semantic": "tsx benchmarks/semantic-retrieval-eval.ts",
+    "eval:semantic:gate": "tsx benchmarks/semantic-retrieval-baseline-gate.ts",
+    "eval:migration": "tsx benchmarks/legacy-migration-eval.ts",
+    "eval:migration:gate": "tsx benchmarks/legacy-migration-baseline-gate.ts",
+    "eval:quality": "tsx benchmarks/document-quality-eval.ts",
+    "eval:editorial": "tsx benchmarks/editorial-intelligence-eval.ts",
+    "eval:editorial:gate": "tsx benchmarks/editorial-intelligence-baseline-gate.ts",
+    "eval:documents": "tsx benchmarks/document-contract-eval.ts",
+    "eval:documents:gate": "tsx benchmarks/document-contract-baseline-gate.ts",
+    "eval:tool-surface": "tsx benchmarks/tool-surface-eval.ts",
+    "eval:tool-surface:gate": "tsx benchmarks/tool-surface-baseline-gate.ts",
+    "dogfood:self-wiki": "node --import tsx scripts/dogfood-self-wiki.ts",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rimraf dist"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "@mermaid-js/mermaid-cli": "^11.16.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "docx": "^8.5.0",
+    "fast-glob": "^3.3.3",
+    "jszip": "^3.10.1",
+    "pdf-to-png-converter": "3.14.0",
+    "puppeteer": "25.6.0",
+    "zod": "^4.4.3"
+  },
+  "allowScripts": {
+    "puppeteer@25.6.0": true
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "rimraf": "^6.0.1",
+    "tsx": "^4.23.12",
+    "typescript": "^5.7.0"
+  }
+}

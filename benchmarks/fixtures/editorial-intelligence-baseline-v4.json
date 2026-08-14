@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixtureVersion": 1,
+  "fixtureSha256": "4610ee4abbded4e56d4f992ecc09ba193277f2f00df14172a99fc7f6713c569d",
+  "sectionIds": ["to-be-multihop", "security-gap"],
+  "minimumDocumentQualityRecall": 1,
+  "maximumDocumentOutputChars": 6000,
+  "baselineV3SectionEvidenceRecall": 0.5,
+  "minimumSectionEvidenceRecall": 1,
+  "minimumSectionEvidenceRecallDelta": 0.5,
+  "minimumGapReportingRate": 1,
+  "minimumRequiredEvidencePlanAccuracy": 1,
+  "minimumSourceCoveragePercent": 100,
+  "maximumClaimsWithoutProvenance": 0,
+  "maximumContextTokens": 2000,
+  "maximumTokenBudgetViolationCount": 0,
+  "maximumFullGraphScanAttempts": 0,
+  "maximumFullSourceGrepAttempts": 0,
+  "maximumFallbackUses": 0
+}

@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "fixtureVersion": 1,
+  "fixtureSha256": "3d305e720670b975f026d84a2c03509f15d93e06bf265c4504dd64fffd60f236",
+  "baseFixtureVersion": 1,
+  "baseFixtureSha256": "658e369ffe59b1a033e5ba11f0549657fcd53f08ca56ab633b3382b6e8bd3e03",
+  "queryIds": [
+    "exact-identifier",
+    "lexical-relevance",
+    "graph-only",
+    "same-request-sibling",
+    "two-hop-evidence",
+    "three-hop-evidence",
+    "high-degree-hub",
+    "ambiguous-entity",
+    "contradictory-evidence",
+    "relevant-deep-passage",
+    "multiple-sources",
+    "traceability-chain",
+    "historical-incident",
+    "independent-facets",
+    "semantic-only-surge",
+    "semantic-only-replay"
+  ],
+  "exactIdentifierQueryId": "exact-identifier",
+  "provider": {
+    "id": "deterministic-semantic-golden",
+    "model": "golden-concept-axis",
+    "version": "1",
+    "dimensions": 8
+  },
+  "engine": {
+    "id": "lsh-cosine",
+    "version": "1",
+    "dimensions": 8,
+    "tables": 12,
+    "bitsPerTable": 16,
+    "probes": 4,
+    "minimumScore": 0.95
+  },
+  "minimumBaselineRecall": 0.875,
+  "minimumSemanticRecall": 1,
+  "minimumRecallDelta": 0.125,
+  "minimumSemanticOnlyRecall": 1,
+  "minimumSemanticOnlyImprovedCases": 2,
+  "maximumOracleRegressionCases": 0,
+  "maximumExactIdentifierRankDelta": 0,
+  "maximumNoBenefitTokenGrowthQueries": 0,
+  "maximumFullVectorScanAttempts": 0,
+  "maximumAnnCandidateRatio": 0.02
+}

@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "sourceVersions": [1, 2, 3],
+  "knownSource": {
+    "path": "docs/specs/orchid-settlement.md",
+    "content": "# Orchid settlement\n\nThe Orchid gateway retries settlement five times before manual review.\n"
+  },
+  "pages": [
+    {
+      "path": "requirements/REQ_ORCHID.md",
+      "title": "REQ-ORCHID settlement retries",
+      "type": "requirement",
+      "requestId": "REQ-ORCHID",
+      "sources": ["docs/specs/orchid-settlement.md", "vendor/orchid-archive.pdf"],
+      "customFrontmatter": ["domain_profile: payments-vendor", "legacy_owner: operations"],
+      "body": "# Settlement requirement\n\nThe Orchid gateway retries settlement five times before manual review."
+    },
+    {
+      "path": "decisions/OrchidDecision.md",
+      "title": "Orchid manual review decision",
+      "type": "decision",
+      "requestId": "REQ-ORCHID",
+      "sources": ["docs/specs/orchid-settlement.md"],
+      "customFrontmatter": ["decision_authority: legacy-board"],
+      "body": "# Decision\n\nManual review owns every settlement that exhausts the retry budget."
+    },
+    {
+      "path": "tests/OrchidTest.md",
+      "title": "Orchid retry verification",
+      "type": "test_result",
+      "requestId": "REQ-ORCHID",
+      "sources": ["docs/specs/orchid-settlement.md"],
+      "customFrontmatter": ["test_harness: legacy-suite"],
+      "body": "# Verification\n\nThe suite proves review begins after exactly five failed settlements."
+    },
+    {
+      "path": "custom/VendorAllocation.md",
+      "title": "Vendor allocation convention",
+      "type": "business_rule_custom",
+      "sources": [],
+      "customFrontmatter": ["custom_meta: preserve-me", "semantic_status: unclassified"],
+      "body": "# Vendor allocation\n\nChoose the nearest eligible settlement processor with spare capacity."
+    }
+  ],
+  "retrievalQueries": [
+    {
+      "id": "exact-request",
+      "query": "REQ-ORCHID five failed settlements manual review",
+      "expectedPaths": ["requirements/REQ_ORCHID.md", "tests/OrchidTest.md"]
+    },
+    {
+      "id": "custom-page",
+      "query": "nearest eligible settlement processor spare capacity",
+      "expectedPaths": ["custom/VendorAllocation.md"]
+    }
+  ],
+  "documentQuery": {
+    "query": "Orchid settlement retry requirement decision verification",
+    "expectedPaths": [
+      "requirements/REQ_ORCHID.md",
+      "decisions/OrchidDecision.md",
+      "tests/OrchidTest.md"
+    ]
+  }
+}

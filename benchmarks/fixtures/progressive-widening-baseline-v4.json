@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "fixtureVersion": 1,
+  "fixtureSha256": "e7303d16535090ffe65f604a0dec9582c67b940fa4bb334412d6b326006ca8ed",
+  "baseFixtureVersion": 1,
+  "baseFixtureSha256": "658e369ffe59b1a033e5ba11f0549657fcd53f08ca56ab633b3382b6e8bd3e03",
+  "pageCount": 44,
+  "queryCount": 14,
+  "evidenceCount": 27,
+  "easyQueryIds": [
+    "exact-identifier",
+    "lexical-relevance",
+    "ambiguous-entity",
+    "relevant-deep-passage",
+    "independent-facets"
+  ],
+  "difficultQueryIds": [
+    "graph-only",
+    "same-request-sibling",
+    "two-hop-evidence",
+    "three-hop-evidence",
+    "high-degree-hub",
+    "contradictory-evidence",
+    "multiple-sources",
+    "traceability-chain",
+    "historical-incident"
+  ],
+  "initialBudget": {
+    "maxSeedCandidates": 2,
+    "maxVisitedNodes": 12,
+    "maxDepth": 1,
+    "maxEvidence": 4,
+    "tokenBudget": 700
+  },
+  "maximumBudget": {
+    "maxSeedCandidates": 8,
+    "maxVisitedNodes": 60,
+    "maxDepth": 3,
+    "maxEvidence": 10,
+    "tokenBudget": 2000
+  },
+  "milestoneAMinimumRecall": {
+    "candidateRecallAtK": 1,
+    "evidenceRecallAtK": 1,
+    "passageRecallAtK": 1,
+    "graphOnlyRecoveryRate": 1,
+    "multiHopRecall": 1,
+    "sourceCoverageRecall": 1
+  },
+  "minimum": {
+    "oracleRecallAfterWidening": 1,
+    "easyW0Rate": 0.6,
+    "difficultWideningRate": 1
+  },
+  "maximum": {
+    "lostRelevantAfterWidening": 0,
+    "fullGraphScanAttempts": 0,
+    "w3FallbackRate": 0
+  },
+  "observed": {
+    "candidateRecallAtK": 1,
+    "evidenceRecallAtK": 1,
+    "passageRecallAtK": 1,
+    "mrr": 1,
+    "ndcgAtK": 0.9888646691535373,
+    "graphOnlyRecoveryRate": 1,
+    "multiHopRecall": 1,
+    "sourceCoverageRecall": 1,
+    "initialBudgetSuccessRate": 0.35714285714285715,
+    "wideningRate": 0.6428571428571429,
+    "averageWideningLevel": 0.7857142857142857,
+    "oracleRecallAfterWidening": 1,
+    "contextTokensAfterWidening": 248.57142857142858,
+    "lostRelevantAfterWidening": 0,
+    "easyW0Rate": 1,
+    "difficultWideningRate": 1,
+    "fullGraphScanAttempts": 0,
+    "w3FallbackRate": 0,
+    "meanTotalVisitedNodes": 20.928571428571427
+  }
+}

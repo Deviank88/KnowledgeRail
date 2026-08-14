@@ -1,0 +1,35 @@
+node_modules/
+dist/
+coverage/
+.nyc_output/
+.cache/
+*.tsbuildinfo
+npm-debug.log*
+*.tgz
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+.claude/
+.cursor/
+.idea/
+.vscode/
+*.pem
+*.key
+
+# Operating-system and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# Generated project knowledge and deliverables
+raw/
+wiki/
+docs/
+.docx-analysis/
+benchmarks/results/
+.puppeteer-cache/

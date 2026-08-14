@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "sourceUri": "docs/normalized/source-coverage-100k.md",
+  "segmentMaxChars": 4096,
+  "fillerSectionCount": 20,
+  "fillerParagraphRepeats": 64,
+  "fillerSentence": "Historical archive placeholder {section} preserves neutral padding for deterministic coverage accounting without actionable facts. ",
+  "relevantHeading": "Terminal retention requirement",
+  "relevantMarker": "FINAL-OMEGA-909",
+  "relevantFact": "FINAL-OMEGA-909 requires the sealed audit capsule to remain retrievable for exactly 913 days.",
+  "query": "FINAL-OMEGA-909 sealed audit capsule 913 days",
+  "sourceKind": "client_source",
+  "title": "FINAL-OMEGA-909 terminal retention"
+}

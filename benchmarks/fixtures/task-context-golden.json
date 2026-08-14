@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "baseFixture": "hybrid-retrieval-golden.json",
+  "maxEvidence": 10,
+  "heuristicTokenBudget": 4000,
+  "tasks": [
+    {
+      "id": "understand-topology",
+      "intent": "understand",
+      "queryId": "two-hop-evidence",
+      "objective": "Understand the Quartz failover topology and its isolation decision.",
+      "expectedCategories": {
+        "currentState": ["concepts/TwoHopSeed.md"],
+        "decisions": ["concepts/TwoHopTarget.md"]
+      }
+    },
+    {
+      "id": "implement-traceability",
+      "intent": "implement",
+      "queryId": "traceability-chain",
+      "objective": "Implement Pine correlation propagation with requirements, decisions and tests.",
+      "expectedCategories": {
+        "requirements": ["requirements/TraceRequirement.md"],
+        "decisions": ["decisions/TraceDecision.md"],
+        "implementationEvidence": ["implementations/TraceImplementation.md"],
+        "tests": ["tests/TraceTest.md"]
+      }
+    },
+    {
+      "id": "modify-traceability",
+      "intent": "modify",
+      "queryId": "traceability-chain",
+      "objective": "Modify the Pine emitter without breaking traceability.",
+      "changedPaths": ["implementations/TraceImplementation.md"],
+      "expectedCategories": {
+        "affectedComponents": ["implementations/TraceImplementation.md"],
+        "requirements": ["requirements/TraceRequirement.md"],
+        "decisions": ["decisions/TraceDecision.md"],
+        "implementationEvidence": ["implementations/TraceImplementation.md"],
+        "tests": ["tests/TraceTest.md"]
+      },
+      "expectedImpact": {
+        "incomingDependencies": ["requirements/TraceRequirement.md"],
+        "outgoingDependencies": ["tests/TraceTest.md"]
+      }
+    },
+    {
+      "id": "debug-historical-incident",
+      "intent": "debug",
+      "queryId": "historical-incident",
+      "objective": "Debug the Copper circuit behavior using the historical recovery incident.",
+      "expectedCategories": {
+        "implementationEvidence": ["implementations/CurrentCircuit.md"],
+        "incidents": ["analysis/CircuitIncident.md"]
+      }
+    },
+    {
+      "id": "review-contradiction",
+      "intent": "review",
+      "queryId": "contradictory-evidence",
+      "objective": "Review Atlas retention against unresolved contradictory evidence.",
+      "expectedCategories": {
+        "requirements": ["requirements/Retention365.md"],
+        "decisions": ["decisions/Retention90.md"],
+        "contradictions": ["requirements/Retention365.md", "decisions/Retention90.md"]
+      },
+      "expectedUnknownKinds": ["contradiction"]
+    },
+    {
+      "id": "document-multiple-sources",
+      "intent": "document",
+      "queryId": "multiple-sources",
+      "objective": "Document Omega shipment release from requirement, decision and verification evidence.",
+      "expectedCategories": {
+        "requirements": ["requirements/ShipmentRule.md"],
+        "decisions": ["decisions/ShipmentDecision.md"],
+        "tests": ["tests/ShipmentTest.md"]
+      }
+    }
+  ]
+}
