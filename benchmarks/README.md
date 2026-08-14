@@ -147,27 +147,27 @@ The evaluator covers all eleven declared document types. Every non-custom type m
 
 ## MCP tool surface and agent guidance
 
-Run the menu-first usability evaluation through the real MCP transport:
+Run the agent-native surface evaluation through the real MCP transport:
 
 ```bash
 npm run eval:tool-surface
 npm run eval:tool-surface:gate
 ```
 
-The evaluator verifies every required modern tool in one session and measures the
-serialized `tools/list` response, a reproducible `UTF-8 bytes / 3` token proxy,
-initial and per-step branching reduction, workflow/tool coverage and invalid
-transitions. A minimal deterministic controller then follows golden menu traces
-for read, ingest, code, document and admin, including widening, ingestion loops,
-fallback, document-review recovery and migration plan/apply branching.
-The same real transport compares `knowledge_context` full and compact responses and
-requires identical evidence pointers and knowledge gaps while the compact payload
-meets its reduction threshold.
+The evaluator requires exactly eight domain tools with no menu or historical aliases.
+It measures the serialized `tools/list` response, a reproducible `UTF-8 bytes / 3`
+token proxy, tool/action affordance over 18 natural-language golden requests, and
+server-side rejection of incomplete action arguments. It then executes five real
+workflow traces covering initialization, canonical pages, atomic Evidence IR
+orchestration, document planning/review and code-index maintenance. The same
+transport compares `knowledge_context` full and default-compact responses and
+requires identical evidence pointers and knowledge gaps.
 
 This proves that the advertised MCP protocol is complete and mechanically
-followable without profiles or hidden client state. It is not a substitute for a
-provider-specific A/B of natural-language routing quality: model/tokenizer claims
-must be measured separately before attributing results to a particular LLM.
+followable without profiles, menu state or hidden client configuration. The
+catalog-affordance score is a deterministic schema-quality signal, not an LLM
+benchmark; provider-specific A/B remains required before attributing results to a
+particular model.
 
 ## Scaling baseline
 

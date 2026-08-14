@@ -1,24 +1,11 @@
-import type {
-  JSONRPCMessage,
-  JSONRPCRequest,
-  Transport,
-} from "@modelcontextprotocol/server";
+import type { JSONRPCMessage, JSONRPCRequest, Transport } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { pathToFileURL } from "node:url";
-import {
-  GUIDED_WORKFLOWS,
-  MENU_AREAS,
-  MENU_OPERATIONS,
-  resolveWorkflowTransition,
-  type MenuArea,
-  type WorkflowOutcome,
-} from "../src/mcp/workflows.js";
-import { buildServer } from "../src/mcp/server.js";
-import { getWikiRoot, setWikiRoot } from "../src/core/paths.js";
 import { clearRetrievalIndexes } from "../src/core/retrieval-index.js";
+import { getWikiRoot, setWikiRoot } from "../src/core/paths.js";
+import { buildServer } from "../src/mcp/server.js";
 
 const MODERN_VERSION = "2026-07-28";
 type RpcId = string | number;
@@ -34,10 +21,7 @@ class MemoryTransport implements Transport {
   private started = false;
   private closed = false;
 
-  async start(): Promise<void> {
-    this.started = true;
-  }
-
+  async start(): Promise<void> { this.started = true; }
   async send(message: JSONRPCMessage): Promise<void> {
     if (!this.started || this.closed || !this.peer?.started || this.peer.closed) {
       throw new Error("Memory transport is not open.");
@@ -45,7 +29,6 @@ class MemoryTransport implements Transport {
     const peer = this.peer;
     queueMicrotask(() => peer.onmessage?.(structuredClone(message)));
   }
-
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
@@ -64,163 +47,9 @@ function linkedPair(): [MemoryTransport, MemoryTransport] {
 function modernMeta() {
   return {
     "io.modelcontextprotocol/protocolVersion": MODERN_VERSION,
-    "io.modelcontextprotocol/clientInfo": { name: "knowledge-rail-tool-surface-eval", version: "1.0.0" },
+    "io.modelcontextprotocol/clientInfo": { name: "knowledge-rail-agent-surface-eval", version: "1.0.0" },
     "io.modelcontextprotocol/clientCapabilities": {},
   };
-}
-
-interface GoldenCheckpoint {
-  completedStepId?: string;
-  outcome?: WorkflowOutcome;
-  coverageSufficient?: boolean;
-  evidenceGaps?: readonly string[];
-  expectedNext?: string;
-  complete?: true;
-}
-
-interface GoldenAgentTrace {
-  area: MenuArea;
-  operation: string;
-  checkpoints: readonly GoldenCheckpoint[];
-}
-
-const GOLDEN_AGENT_TRACES: readonly GoldenAgentTrace[] = [
-  {
-    area: "read",
-    operation: "modify",
-    checkpoints: [
-      { expectedNext: "compile_context" },
-      { completedStepId: "compile_context", expectedNext: "read_selected_resources" },
-      {
-        completedStepId: "read_selected_resources",
-        outcome: "coverage_insufficient",
-        coverageSufficient: false,
-        evidenceGaps: ["truncated_frontier"],
-        expectedNext: "widen_context",
-      },
-      { completedStepId: "widen_context", expectedNext: "read_selected_resources" },
-      {
-        completedStepId: "read_selected_resources",
-        outcome: "coverage_sufficient",
-        coverageSufficient: true,
-        evidenceGaps: [],
-        complete: true,
-      },
-    ],
-  },
-  {
-    area: "ingest",
-    operation: "normalized_source",
-    checkpoints: [
-      { expectedNext: "plan_source" },
-      { completedStepId: "plan_source", expectedNext: "next_segment" },
-      { completedStepId: "next_segment", outcome: "more_items", expectedNext: "record_claims" },
-      { completedStepId: "record_claims", expectedNext: "link_claims" },
-      { completedStepId: "link_claims", expectedNext: "plan_synthesis" },
-      { completedStepId: "plan_synthesis", expectedNext: "synthesize" },
-      { completedStepId: "synthesize", expectedNext: "next_segment" },
-      { completedStepId: "next_segment", outcome: "no_more_items", expectedNext: "check_coverage" },
-      {
-        completedStepId: "check_coverage",
-        outcome: "coverage_insufficient",
-        expectedNext: "next_segment",
-      },
-      { completedStepId: "next_segment", outcome: "no_more_items", expectedNext: "check_coverage" },
-      {
-        completedStepId: "check_coverage",
-        outcome: "coverage_sufficient",
-        expectedNext: "finalize_source",
-      },
-      { completedStepId: "finalize_source", complete: true },
-    ],
-  },
-  {
-    area: "code",
-    operation: "search",
-    checkpoints: [
-      { expectedNext: "check_code_index" },
-      { completedStepId: "check_code_index", outcome: "blocked", expectedNext: "rebuild_code_index" },
-      { completedStepId: "rebuild_code_index", expectedNext: "find_code_evidence" },
-      { completedStepId: "find_code_evidence", expectedNext: "read_code_resources" },
-      {
-        completedStepId: "read_code_resources",
-        outcome: "coverage_insufficient",
-        expectedNext: "record_code_fallback",
-      },
-      { completedStepId: "record_code_fallback", complete: true },
-    ],
-  },
-  {
-    area: "document",
-    operation: "create",
-    checkpoints: [
-      { expectedNext: "plan_document" },
-      { completedStepId: "plan_document", expectedNext: "compile_section_context" },
-      { completedStepId: "compile_section_context", expectedNext: "read_section_resources" },
-      { completedStepId: "read_section_resources", outcome: "more_items", expectedNext: "compile_section_context" },
-      { completedStepId: "read_section_resources", outcome: "no_more_items", expectedNext: "write_document" },
-      { completedStepId: "write_document", expectedNext: "review_document" },
-      { completedStepId: "review_document", outcome: "findings", expectedNext: "compile_section_context" },
-      { completedStepId: "review_document", outcome: "no_findings", complete: true },
-    ],
-  },
-  {
-    area: "admin",
-    operation: "migrate",
-    checkpoints: [
-      { expectedNext: "plan_migration" },
-      { completedStepId: "plan_migration", outcome: "success", expectedNext: "apply_migration" },
-      { completedStepId: "apply_migration", expectedNext: "verify_admin_operation" },
-      { completedStepId: "verify_admin_operation", complete: true },
-    ],
-  },
-];
-
-function resultOf(message: JSONRPCMessage): Record<string, unknown> {
-  if (!("result" in message)) throw new Error(`Expected MCP result: ${JSON.stringify(message)}`);
-  return (message as { result: Record<string, unknown> }).result;
-}
-
-async function materializeContextFixture(projectRoot: string): Promise<void> {
-  const pages = [
-    {
-      path: "requirements/ApprovalAudit.md",
-      title: "Approval Audit Requirement",
-      type: "requirement",
-      body: "Every approval records user role, timestamp and motivation in an immutable audit trail. See [[Approval Audit Decision]].",
-    },
-    {
-      path: "decisions/ApprovalAuditDecision.md",
-      title: "Approval Audit Decision",
-      type: "decision",
-      body: "The audit trail is append-only and retained for seven years. See [[Approval Audit Implementation]].",
-    },
-    {
-      path: "implementations/ApprovalAuditImplementation.md",
-      title: "Approval Audit Implementation",
-      type: "implementation",
-      body: "ApprovalAuditWriter persists actor role, UTC timestamp and motivation before acknowledging approval.",
-    },
-  ];
-  await Promise.all(pages.map(async (page) => {
-    const target = path.join(projectRoot, "wiki", page.path);
-    await fs.mkdir(path.dirname(target), { recursive: true });
-    await fs.writeFile(target, [
-      "---",
-      `title: \"${page.title}\"`,
-      `type: ${page.type}`,
-      "tags: [approval, audit]",
-      "created: 2026-08-14",
-      "updated: 2026-08-14",
-      "sources: [\"docs/client/approval.md\"]",
-      "---",
-      "",
-      `# ${page.title}`,
-      "",
-      page.body,
-      "",
-    ].join("\n"), "utf8");
-  }));
 }
 
 async function createHarness() {
@@ -237,321 +66,310 @@ async function createHarness() {
   };
   await peer.start();
   const handle = serveStdio((context) => buildServer(context), { transport: wire, legacy: "serve" });
-  return {
-    request: (message: JSONRPCRequest) => new Promise<JSONRPCMessage>((resolve, reject) => {
+  let sequence = 0;
+  const request = (method: string, params: Record<string, unknown>): Promise<JSONRPCMessage> =>
+    new Promise((resolve, reject) => {
+      const id = `agent-surface-${++sequence}`;
       const timeout = setTimeout(() => {
-        waiters.delete(message.id);
-        reject(new Error(`Timed out waiting for ${message.method}`));
+        waiters.delete(id);
+        reject(new Error(`Timed out waiting for ${method}`));
       }, 5_000);
       timeout.unref();
-      waiters.set(message.id, (response) => {
+      waiters.set(id, (response) => {
         clearTimeout(timeout);
         resolve(response);
       });
+      const message: JSONRPCRequest = { jsonrpc: "2.0", id, method, params };
       void peer.send(message).catch(reject);
-    }),
-    close: async () => {
-      await handle.close();
-      await peer.close();
-    },
+    });
+  return {
+    request,
+    close: async () => { await handle.close(); await peer.close(); },
   };
 }
 
-export interface ToolSurfaceReport {
-  modernCatalogBytes: number;
-  heuristicCatalogTokens: number;
-  reductionVsBaselinePercent: number;
-  toolCount: number;
-  menuAreaCount: number;
-  operationCount: number;
-  workflowStepCount: number;
-  workflowToolCoverage: number;
-  invalidTransitions: number;
-  initialChoiceReductionPercent: number;
-  guidedChoiceReductionPercent: number;
-  maximumOperationChoices: number;
-  maximumGuidanceHeuristicTokens: number;
-  maximumNextActionCount: number;
-  goldenTraceCount: number;
-  goldenTraceCheckpointCount: number;
-  goldenTraceAccuracy: number;
-  branchingOutcomeCheckpointCount: number;
-  fullContextResponseBytes: number;
-  compactContextResponseBytes: number;
-  compactContextReductionPercent: number;
-  compactContextEvidenceParity: boolean;
-  compactContextGapParity: boolean;
-  officialInstructionsAdvertised: boolean;
-  menuReadOnly: boolean;
-  contextOutputSchemaAdvertised: boolean;
-  toolNames: string[];
+function resultOf(message: JSONRPCMessage): Record<string, unknown> {
+  if (!("result" in message)) throw new Error(`Expected MCP result: ${JSON.stringify(message)}`);
+  return (message as { result: Record<string, unknown> }).result;
 }
 
-export async function evaluateToolSurface(baselineCatalogBytes = 26_080): Promise<ToolSurfaceReport> {
+function textOf(result: Record<string, unknown>): string {
+  return (result.content as Array<{ type?: string; text?: string }> | undefined)
+    ?.filter((item) => item.type === "text")
+    .map((item) => item.text ?? "")
+    .join("\n") ?? "";
+}
+
+function structuredOf(result: Record<string, unknown>): Record<string, unknown> {
+  return result.structuredContent && typeof result.structuredContent === "object"
+    ? result.structuredContent as Record<string, unknown>
+    : {};
+}
+
+function nextOf(result: Record<string, unknown>): Record<string, unknown> | null {
+  const next = structuredOf(result).nextAction;
+  return next && typeof next === "object" ? next as Record<string, unknown> : null;
+}
+
+function tokens(text: string): Set<string> {
+  return new Set(text.toLowerCase().replace(/[_/=-]/g, " ").match(/[a-z0-9]+/g) ?? []);
+}
+
+function overlap(left: Set<string>, right: Set<string>): number {
+  let score = 0;
+  for (const token of left) if (right.has(token)) score++;
+  return score;
+}
+
+interface CatalogTool {
+  name: string;
+  title?: string;
+  description?: string;
+  inputSchema: { properties?: Record<string, { enum?: string[]; description?: string }> };
+}
+
+const ROUTING_GOLDENS = [
+  ["Retrieve bounded project knowledge with explicit coverage and gaps", "knowledge_context", "task"],
+  ["Search project knowledge as a lexical diagnostic", "knowledge_context", "search"],
+  ["Run a graph traceability diagnostic", "knowledge_context", "graph"],
+  ["Write a canonical knowledge page", "knowledge_page", "write"],
+  ["Append the durable page mutation log", "knowledge_page", "append_log"],
+  ["List controlled source files in docs", "knowledge_files", "list"],
+  ["Normalize a source file without changing the original", "knowledge_files", "normalize"],
+  ["Start the guided source evidence integration loop", "knowledge_ingest", "start"],
+  ["Apply evidence claims and synthesize agent memory", "knowledge_ingest", "apply"],
+  ["Search deterministic code evidence", "knowledge_code", "search"],
+  ["Rebuild the code index", "knowledge_code", "rebuild"],
+  ["Plan an evidence backed typed document", "knowledge_document_context", "plan"],
+  ["Compile the bounded context for a document section", "knowledge_document_context", "section"],
+  ["Write a Markdown deliverable", "knowledge_document", "write"],
+  ["Export a reviewed document to DOCX", "knowledge_document", "export"],
+  ["Init KnowledgeRail storage", "knowledge_admin", "init"],
+  ["Lint canonical knowledge", "knowledge_admin", "lint"],
+  ["Plan a conservative data migrate operation", "knowledge_admin", "migrate"],
+] as const;
+
+function routeFromCatalog(task: string, tools: readonly CatalogTool[]): { tool: string; discriminator?: string } {
+  const taskTokens = tokens(task);
+  const ranked = tools.map((tool) => ({
+    tool,
+    score: overlap(taskTokens, tokens(`${tool.name} ${tool.title ?? ""} ${tool.description ?? ""}`)),
+  })).sort((left, right) => right.score - left.score || left.tool.name.localeCompare(right.tool.name));
+  const selected = ranked[0]!.tool;
+  const property = selected.inputSchema.properties?.action ?? selected.inputSchema.properties?.mode;
+  const discriminator = property?.enum?.map((value) => ({
+    value,
+    score: overlap(taskTokens, tokens([
+      value,
+      property.description?.split(";").find((segment) => segment.trim().startsWith(`${value}=`)) ?? "",
+    ].join(" "))),
+  })).sort((left, right) => right.score - left.score || left.value.localeCompare(right.value))[0]?.value;
+  return { tool: selected.name, discriminator };
+}
+
+async function materializeContextFixture(projectRoot: string): Promise<void> {
+  const file = path.join(projectRoot, "wiki", "requirements", "ApprovalAudit.md");
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.mkdir(path.join(projectRoot, "docs", "client"), { recursive: true });
+  await fs.writeFile(path.join(projectRoot, "docs", "client", "approval.md"), "approved source", "utf8");
+  await fs.writeFile(file, [
+    "---",
+    'title: "Approval audit"',
+    "type: requirement",
+    "tags: [approval, audit]",
+    "created: 2026-08-15",
+    "updated: 2026-08-15",
+    'sources: ["docs/client/approval.md"]',
+    "---",
+    "",
+    "# Approval audit",
+    "",
+    "Every approval records user role, timestamp and motivation in an immutable audit trail.",
+  ].join("\n"), "utf8");
+}
+
+export interface ToolSurfaceReport {
+  toolCount: number;
+  toolNames: string[];
+  modernCatalogBytes: number;
+  heuristicCatalogTokens: number;
+  previousToolCount: number;
+  previousCatalogBytes: number;
+  toolCountReductionPercent: number;
+  catalogByteReductionPercent: number;
+  menuRemoved: boolean;
+  legacyAliasesRemoved: boolean;
+  officialInstructionsAdvertised: boolean;
+  routingGoldenCount: number;
+  catalogAffordanceAccuracy: number;
+  routingFailures: string[];
+  invalidCallCount: number;
+  invalidCallRejectionRate: number;
+  workflowTraceCount: number;
+  workflowCompletionRate: number;
+  compactContextEvidenceParity: boolean;
+  compactContextGapParity: boolean;
+  defaultContextIsCompact: boolean;
+}
+
+export async function evaluateToolSurface(): Promise<ToolSurfaceReport> {
+  const previousRoot = getWikiRoot();
+  const projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-agent-surface-"));
+  clearRetrievalIndexes();
+  setWikiRoot(projectRoot);
   const harness = await createHarness();
-  const originalRoot = getWikiRoot();
-  const contextRoot = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-tool-surface-context-"));
+  const call = async (name: string, args: Record<string, unknown>) => resultOf(await harness.request("tools/call", {
+    name,
+    arguments: args,
+    _meta: modernMeta(),
+  }));
   try {
-    const discoverResult = resultOf(await harness.request({
-      jsonrpc: "2.0",
-      id: "tool-surface-discover",
-      method: "server/discover",
-      params: { _meta: modernMeta() },
-    }));
-    const listResult = resultOf(await harness.request({
-      jsonrpc: "2.0",
-      id: "tool-surface-list",
-      method: "tools/list",
-      params: { _meta: modernMeta() },
-    }));
-    const tools = listResult.tools as Array<{
-      name: string;
-      outputSchema?: unknown;
-      annotations?: { readOnlyHint?: boolean };
-    }>;
+    const listed = resultOf(await harness.request("tools/list", { _meta: modernMeta() }));
+    const tools = listed.tools as CatalogTool[];
+    const modernCatalogBytes = Buffer.byteLength(JSON.stringify(tools), "utf8");
     const toolNames = tools.map((tool) => tool.name).sort();
-    const toolNameSet = new Set(toolNames);
-    const modernCatalogBytes = Buffer.byteLength(JSON.stringify(listResult), "utf8");
-    let workflowStepCount = 0;
-    let coveredToolSteps = 0;
-    let toolSteps = 0;
-    let invalidTransitions = 0;
-    let maximumGuidanceBytes = 0;
-    let maximumNextActionCount = 0;
-    let goldenTraceCheckpointCount = 0;
-    let goldenTraceCheckpointMatches = 0;
-    let branchingOutcomeCheckpointCount = 0;
+    const discover = resultOf(await harness.request("server/discover", { _meta: modernMeta() }));
+    const instructions = String(discover.instructions ?? "");
 
-    const rootMenu = resultOf(await harness.request({
-      jsonrpc: "2.0",
-      id: "tool-surface-menu-root",
-      method: "tools/call",
-      params: { name: "knowledge_menu", arguments: {}, _meta: modernMeta() },
-    }));
-    maximumGuidanceBytes = Buffer.byteLength(JSON.stringify(rootMenu), "utf8");
-    const rootStructured = rootMenu.structuredContent as {
-      areas?: unknown[];
-      next?: { tool?: string; arguments?: { area?: string } };
-    } | undefined;
-    if (
-      rootStructured?.areas?.length !== MENU_AREAS.length ||
-      rootStructured.next?.tool !== "knowledge_menu" ||
-      rootStructured.next.arguments?.area !== "<chosen area>"
-    ) {
-      invalidTransitions++;
+    const routingFailures: string[] = [];
+    const routed = ROUTING_GOLDENS.filter(([task, expectedTool, expectedDiscriminator]) => {
+      const actual = routeFromCatalog(task, tools);
+      const correct = actual.tool === expectedTool && actual.discriminator === expectedDiscriminator;
+      if (!correct) {
+        routingFailures.push(`${task}: expected ${expectedTool}/${expectedDiscriminator}, got ${actual.tool}/${actual.discriminator ?? "none"}`);
+      }
+      return correct;
+    }).length;
+
+    const invalidCalls = [
+      ["knowledge_page", { action: "edit", path: "analysis/A.md" }],
+      ["knowledge_ingest", { action: "apply", normalized_filename: "source.md", segment_id: "seg-missing" }],
+      ["knowledge_code", { action: "record_fallback", query: "raw lookup" }],
+      ["knowledge_document", { action: "export", filename: "x", document_type: "custom" }],
+      ["knowledge_admin", { action: "migrate", migration_action: "rollback" }],
+    ] as const;
+    let rejected = 0;
+    for (const [name, args] of invalidCalls) {
+      const response = await harness.request("tools/call", { name, arguments: args, _meta: modernMeta() });
+      if ("error" in response || ("result" in response && (response.result as { isError?: boolean }).isError)) rejected++;
     }
 
-    for (const workflow of Object.values(GUIDED_WORKFLOWS)) {
-      workflowStepCount += workflow.steps.length;
-      const reachableStepIds = new Set<string>();
-      const pendingStepIds = workflow.steps[0] ? [workflow.steps[0].id] : [];
-      let reachableTerminalCount = 0;
-      while (pendingStepIds.length > 0) {
-        const stepId = pendingStepIds.shift()!;
-        if (reachableStepIds.has(stepId)) continue;
-        reachableStepIds.add(stepId);
-        const transition = resolveWorkflowTransition(workflow, stepId, undefined);
-        if (transition.allowedOutcomes.length > 0) {
-          for (const outcome of transition.allowedOutcomes) {
-            const branch = resolveWorkflowTransition(workflow, stepId, outcome);
-            if (branch.complete) reachableTerminalCount++;
-            if (branch.next) pendingStepIds.push(branch.next.id);
-          }
-        } else if (transition.complete) {
-          reachableTerminalCount++;
-        } else if (transition.next) {
-          pendingStepIds.push(transition.next.id);
-        }
-      }
-      if (reachableStepIds.size !== workflow.steps.length || reachableTerminalCount === 0) {
-        invalidTransitions++;
-      }
-      for (const step of workflow.steps) {
-        if (step.tool) {
-          toolSteps++;
-          if (toolNameSet.has(step.tool)) coveredToolSteps++;
-        }
-        try {
-          const transition = resolveWorkflowTransition(workflow, step.id, undefined);
-          for (const outcome of transition.allowedOutcomes) {
-            const branch = resolveWorkflowTransition(workflow, step.id, outcome);
-            if (!branch.complete && !branch.next) invalidTransitions++;
-          }
-        } catch {
-          invalidTransitions++;
-        }
-      }
+    const traces: boolean[] = [];
+    const initialized = await call("knowledge_admin", { action: "init" });
+    traces.push(nextOf(initialized)?.tool === "knowledge_context");
+    await materializeContextFixture(projectRoot);
+
+    const pageContent = [
+      "---",
+      'title: "Agent surface"',
+      "type: analysis",
+      "tags: [agent-surface]",
+      "created: 2026-08-15",
+      "updated: 2026-08-15",
+      'sources: ["docs/client/approval.md"]',
+      "---",
+      "",
+      "# Agent surface",
+      "",
+      "The public surface guides agents through one deterministic next action.",
+    ].join("\n");
+    const page = await call("knowledge_page", {
+      action: "write", path: "analysis/AgentSurface.md", content: pageContent,
+    });
+    traces.push(nextOf(page)?.tool === "knowledge_admin" && nextOf(page)?.action === "lint");
+
+    const normalized = "Lease renewal requires explicit approval and an audit timestamp.";
+    await fs.writeFile(path.join(projectRoot, "docs", "normalized", "lease.md"), normalized, "utf8");
+    const started = await call("knowledge_ingest", { action: "start", normalized_filename: "lease.md" });
+    const first = await call("knowledge_ingest", { action: "next", normalized_filename: "lease.md" });
+    const segmentId = textOf(first).match(/Segmento: `([^`]+)`/)?.[1];
+    let ingestComplete = nextOf(started)?.action === "next" && Boolean(segmentId);
+    if (segmentId) {
+      const applied = await call("knowledge_ingest", {
+        action: "apply",
+        normalized_filename: "lease.md",
+        segment_id: segmentId,
+        claims: [{
+          text: normalized,
+          kind: "requirement",
+          origin: "explicit",
+          confidence: 1,
+          target: { page_path: "requirements/LeaseRenewal.md", page_title: "Lease renewal", page_type: "requirement" },
+        }],
+      });
+      const after = await call("knowledge_ingest", { action: "next", normalized_filename: "lease.md" });
+      const status = await call("knowledge_ingest", { action: "status", normalized_filename: "lease.md" });
+      const finalized = await call("knowledge_ingest", { action: "finalize", normalized_filename: "lease.md" });
+      ingestComplete = ingestComplete && nextOf(applied)?.action === "next" &&
+        nextOf(after)?.action === "status" && nextOf(status)?.action === "finalize" &&
+        structuredOf(finalized).state === "source_finalized";
     }
+    traces.push(ingestComplete);
 
-    for (const area of MENU_AREAS) {
-      const menuResult = resultOf(await harness.request({
-        jsonrpc: "2.0",
-        id: `tool-surface-menu-${area}`,
-        method: "tools/call",
-        params: {
-          name: "knowledge_menu",
-          arguments: { area },
-          _meta: modernMeta(),
-        },
-      }));
-      maximumGuidanceBytes = Math.max(
-        maximumGuidanceBytes,
-        Buffer.byteLength(JSON.stringify(menuResult), "utf8")
-      );
-      const structured = menuResult.structuredContent as {
-        operations?: unknown[];
-        next?: { tool?: string; arguments?: { area?: string; operation?: string } };
-      } | undefined;
-      if (
-        structured?.operations?.length !== MENU_OPERATIONS[area].length ||
-        structured.next?.tool !== "knowledge_menu" ||
-        structured.next.arguments?.area !== area ||
-        structured.next.arguments.operation !== "<chosen operation id>"
-      ) {
-        invalidTransitions++;
-      }
+    const plan = await call("knowledge_document_context", { action: "plan", document_type: "custom" });
+    const written = await call("knowledge_document", {
+      action: "write",
+      filename: "agent-surface.md",
+      title: "Agent surface",
+      document_type: "custom",
+      content: "# Agent surface\n\n## Purpose\n\nThis reviewed document explains the agent-oriented tool surface with enough concrete detail for maintainers and users.",
+    });
+    const reviewed = await call("knowledge_document", {
+      action: "review", filename: "agent-surface.md", document_type: "custom",
+    });
+    traces.push(nextOf(plan)?.action === "section" && nextOf(written)?.action === "review" &&
+      ["write", "export"].includes(String(nextOf(reviewed)?.action)));
 
-      for (const operation of MENU_OPERATIONS[area]) {
-        const stepResult = resultOf(await harness.request({
-          jsonrpc: "2.0",
-          id: `tool-surface-step-${area}-${operation.id}`,
-          method: "tools/call",
-          params: {
-            name: "knowledge_menu",
-            arguments: { area, operation: operation.id },
-            _meta: modernMeta(),
-          },
-        }));
-        maximumGuidanceBytes = Math.max(
-          maximumGuidanceBytes,
-          Buffer.byteLength(JSON.stringify(stepResult), "utf8")
-        );
-        const stepStructured = stepResult.structuredContent as { next?: unknown } | undefined;
-        const nextActionCount = stepStructured?.next ? 1 : 0;
-        maximumNextActionCount = Math.max(maximumNextActionCount, nextActionCount);
-        if (nextActionCount !== 1) invalidTransitions++;
-      }
-    }
+    await fs.mkdir(path.join(projectRoot, "src"), { recursive: true });
+    await fs.writeFile(path.join(projectRoot, "src", "lease.ts"), "export function renewLease(): boolean { return true; }\n", "utf8");
+    const rebuilt = await call("knowledge_code", { action: "rebuild" });
+    const codeStatus = await call("knowledge_code", { action: "status" });
+    traces.push(nextOf(rebuilt)?.action === "status" && structuredOf(codeStatus).state === "code_status_complete");
 
-    for (const trace of GOLDEN_AGENT_TRACES) {
-      for (const checkpoint of trace.checkpoints) {
-        const traceResult = resultOf(await harness.request({
-          jsonrpc: "2.0",
-          id: `tool-surface-trace-${trace.area}-${trace.operation}-${goldenTraceCheckpointCount}`,
-          method: "tools/call",
-          params: {
-            name: "knowledge_menu",
-            arguments: {
-              area: trace.area,
-              operation: trace.operation,
-              ...(checkpoint.completedStepId ? { completed_step_id: checkpoint.completedStepId } : {}),
-              ...(checkpoint.outcome ? { outcome: checkpoint.outcome } : {}),
-              ...(checkpoint.coverageSufficient !== undefined
-                ? { coverage_sufficient: checkpoint.coverageSufficient }
-                : {}),
-              ...(checkpoint.evidenceGaps ? { evidence_gaps: checkpoint.evidenceGaps } : {}),
-            },
-            _meta: modernMeta(),
-          },
-        }));
-        const structured = traceResult.structuredContent as {
-          next?: { id?: string } | null;
-          complete?: boolean;
-        } | undefined;
-        const matched = checkpoint.complete
-          ? structured?.complete === true && structured.next === null
-          : structured?.complete === false && structured.next?.id === checkpoint.expectedNext;
-        goldenTraceCheckpointCount++;
-        if (matched) goldenTraceCheckpointMatches++;
-        if (checkpoint.outcome) branchingOutcomeCheckpointCount++;
-      }
-    }
-
-    await materializeContextFixture(contextRoot);
-    clearRetrievalIndexes();
-    setWikiRoot(contextRoot);
-    const contextArguments = {
+    const contextArgs = {
+      mode: "task",
       intent: "review",
       objective: "Review approval audit traceability",
-      query: "approval audit user role timestamp motivation immutable trail",
-      max_evidence: 6,
-      heuristic_token_budget: 2_000,
+      query: "user role timestamp motivation immutable audit",
+      max_evidence: 4,
+      heuristic_token_budget: 1_500,
     };
-    const fullContext = resultOf(await harness.request({
-      jsonrpc: "2.0",
-      id: "tool-surface-context-full",
-      method: "tools/call",
-      params: {
-        name: "knowledge_context",
-        arguments: { ...contextArguments, response_detail: "full" },
-        _meta: modernMeta(),
-      },
-    }));
-    const compactContext = resultOf(await harness.request({
-      jsonrpc: "2.0",
-      id: "tool-surface-context-compact",
-      method: "tools/call",
-      params: {
-        name: "knowledge_context",
-        arguments: { ...contextArguments, response_detail: "compact" },
-        _meta: modernMeta(),
-      },
-    }));
-    const fullContextResponseBytes = Buffer.byteLength(JSON.stringify(fullContext), "utf8");
-    const compactContextResponseBytes = Buffer.byteLength(JSON.stringify(compactContext), "utf8");
-    const fullStructured = fullContext.structuredContent as {
-      evidence?: Array<{ uri?: string }>;
-      gaps?: unknown[];
-    } | undefined;
-    const compactStructured = compactContext.structuredContent as {
-      evidence?: Array<{ uri?: string }>;
-      gaps?: unknown[];
-    } | undefined;
-    const fullEvidenceUris = (fullStructured?.evidence ?? []).map((evidence) => evidence.uri).sort();
-    const compactEvidenceUris = (compactStructured?.evidence ?? []).map((evidence) => evidence.uri).sort();
+    const compact = await call("knowledge_context", contextArgs);
+    const full = await call("knowledge_context", { ...contextArgs, response_detail: "full" });
+    const compactStructured = structuredOf(compact);
+    const fullStructured = structuredOf(full);
+    const compactEvidence = (compactStructured.evidence as Array<{ path?: string }> | undefined)?.map((item) => item.path) ?? [];
+    const fullEvidence = (fullStructured.evidence as Array<{ path?: string }> | undefined)?.map((item) => item.path) ?? [];
 
-    const menu = tools.find((tool) => tool.name === "knowledge_menu");
-    const context = tools.find((tool) => tool.name === "knowledge_context");
     return {
+      toolCount: tools.length,
+      toolNames,
       modernCatalogBytes,
       heuristicCatalogTokens: Math.ceil(modernCatalogBytes / 3),
-      reductionVsBaselinePercent: ((baselineCatalogBytes - modernCatalogBytes) / baselineCatalogBytes) * 100,
-      toolCount: tools.length,
-      menuAreaCount: MENU_AREAS.length,
-      operationCount: Object.values(MENU_OPERATIONS).reduce((sum, operations) => sum + operations.length, 0),
-      workflowStepCount,
-      workflowToolCoverage: toolSteps === 0 ? 1 : coveredToolSteps / toolSteps,
-      invalidTransitions,
-      initialChoiceReductionPercent: ((22 - MENU_AREAS.length) / 22) * 100,
-      guidedChoiceReductionPercent: ((22 - 1) / 22) * 100,
-      maximumOperationChoices: Math.max(...Object.values(MENU_OPERATIONS).map((items) => items.length)),
-      maximumGuidanceHeuristicTokens: Math.ceil(maximumGuidanceBytes / 3),
-      maximumNextActionCount,
-      goldenTraceCount: GOLDEN_AGENT_TRACES.length,
-      goldenTraceCheckpointCount,
-      goldenTraceAccuracy: goldenTraceCheckpointCount === 0
-        ? 0
-        : goldenTraceCheckpointMatches / goldenTraceCheckpointCount,
-      branchingOutcomeCheckpointCount,
-      fullContextResponseBytes,
-      compactContextResponseBytes,
-      compactContextReductionPercent: fullContextResponseBytes === 0
-        ? 0
-        : ((fullContextResponseBytes - compactContextResponseBytes) / fullContextResponseBytes) * 100,
-      compactContextEvidenceParity: JSON.stringify(fullEvidenceUris) === JSON.stringify(compactEvidenceUris),
-      compactContextGapParity:
-        JSON.stringify(fullStructured?.gaps ?? []) === JSON.stringify(compactStructured?.gaps ?? []),
-      officialInstructionsAdvertised:
-        typeof discoverResult.instructions === "string" && discoverResult.instructions.includes("knowledge_menu"),
-      menuReadOnly: menu?.annotations?.readOnlyHint === true,
-      contextOutputSchemaAdvertised: context?.outputSchema !== undefined,
-      toolNames,
+      previousToolCount: 24,
+      previousCatalogBytes: 19_926,
+      toolCountReductionPercent: Number(((1 - tools.length / 24) * 100).toFixed(2)),
+      catalogByteReductionPercent: Number(((1 - modernCatalogBytes / 19_926) * 100).toFixed(2)),
+      menuRemoved: !toolNames.includes("knowledge_menu"),
+      legacyAliasesRemoved: !toolNames.some((name) => name.startsWith("wiki_")),
+      officialInstructionsAdvertised: instructions.includes("eight KnowledgeRail domain tools") &&
+        instructions.includes("knowledge_context mode=task") && instructions.includes("nextAction"),
+      routingGoldenCount: ROUTING_GOLDENS.length,
+      catalogAffordanceAccuracy: routed / ROUTING_GOLDENS.length,
+      routingFailures,
+      invalidCallCount: invalidCalls.length,
+      invalidCallRejectionRate: rejected / invalidCalls.length,
+      workflowTraceCount: traces.length,
+      workflowCompletionRate: traces.filter(Boolean).length / traces.length,
+      compactContextEvidenceParity: JSON.stringify(compactEvidence) === JSON.stringify(fullEvidence),
+      compactContextGapParity: JSON.stringify(compactStructured.gaps ?? []) === JSON.stringify(fullStructured.unknowns ?? []),
+      defaultContextIsCompact: !("currentState" in compactStructured),
     };
   } finally {
-    setWikiRoot(originalRoot);
-    clearRetrievalIndexes();
-    await fs.rm(contextRoot, { recursive: true, force: true });
     await harness.close();
+    clearRetrievalIndexes();
+    setWikiRoot(previousRoot);
+    await fs.rm(projectRoot, { recursive: true, force: true });
   }
 }
 
@@ -559,7 +377,7 @@ async function main(): Promise<void> {
   process.stdout.write(`${JSON.stringify(await evaluateToolSurface(), null, 2)}\n`);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1]?.endsWith("tool-surface-eval.ts")) {
   main().catch((error: unknown) => {
     process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`);
     process.exit(1);

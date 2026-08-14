@@ -81,7 +81,7 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
     };
   });
 
-  server.registerTool(toolName("sectionContext", era), { description: `Compile one bounded, provenance-aware section pack with explicit gaps; selected by ${toolName("menu", era)}.`, inputSchema: z.object({
+  server.registerTool(toolName("sectionContext", era), { description: "Internal bounded section-context operation with explicit gaps.", inputSchema: z.object({
               section_title: z.string(),
               query: z.string().optional(),
               document_type: z.enum(DOCUMENT_TYPES),
@@ -156,7 +156,7 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
                   `Titolo: ${title} [${document_type}]`,
                   `Dim: ${sizeKB} KB`,
                   `Stato contratto: ${review.readyForExport ? "review-ready" : `draft con ${review.blockerCount} blocker`}`,
-                  `Prossimo step: ${toolName("reviewDocument", era)}.`,
+                  "Prossimo step: knowledge_document action=review.",
                   `Percorso: ${abs}`,
                 ].join("\n") }],
                 structuredContent: {
@@ -190,7 +190,7 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
               const markdown = await readFileSafe(mdPath);
               if (markdown === null) {
                 return errorResult(
-                  `Documento sorgente non trovato: docs/deliverables/${baseName}.md\nCrearlo prima con ${toolName("writeDocument", era)}.`
+                  `Documento sorgente non trovato: docs/deliverables/${baseName}.md\nCrearlo prima con knowledge_document action=write.`
                 );
               }
               const reviewOptions = reviewOptionsFor(document_type, {
@@ -209,7 +209,7 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
                   .map((finding) => finding.code);
                 return errorResult(
                   `Export bloccato dal contratto ${document_type}: ${blockerCodes.join(", ")}. ` +
-                  `Correggere il documento e rieseguire ${toolName("reviewDocument", era)}.`
+                  "Correggere il documento e rieseguire knowledge_document action=review."
                 );
               }
               if (!overwrite) {

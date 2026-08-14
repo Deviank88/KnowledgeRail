@@ -11,29 +11,23 @@ import {
   resolveAndActivateWorkspace,
   resolveLegacyMcpWorkspace,
 } from "./workspace.js";
-import { registerContextTools } from "../tools/context-tools.js";
-import { registerDocumentTools } from "../tools/document-tools.js";
+import { registerAgentTools } from "../tools/agent-tools.js";
 import { registerWikiPrompts } from "../tools/prompts.js";
-import { registerSourceTools } from "../tools/source-tools.js";
-import { registerWikiTools } from "../tools/wiki-tools.js";
 import { registerWikiResources } from "../tools/resources.js";
-import { registerEvidenceTools } from "../tools/evidence-tools.js";
-import { registerCodeEvidenceTools } from "../tools/code-evidence-tools.js";
-import { registerWorkflowTools } from "../tools/workflow-tools.js";
-import { toolName, type ProtocolEra } from "./tool-names.js";
+import { type ProtocolEra } from "./tool-names.js";
 
 const STATIC_CATALOG_TTL_MS = 5 * 60 * 1_000;
 
 export function mcpAgentInstructions(era: ProtocolEra): string {
-  const menu = toolName("menu", era);
-  const context = toolName("context", era);
+  void era;
   return (
-    `Start every KnowledgeRail task by calling ${menu} with no arguments. ` +
-    "Choose an area and operation from its responses, execute only the returned next tool/action, " +
-    `then call ${menu} again with completed_step_id and any requested outcome. For read workflows, ` +
-    "materialize selected passage links with resources/read and copy coverageSufficient/evidenceGaps " +
-    `from the latest ${context} when reporting the coverage outcome. ` +
-    "This preserves coverage, provenance and bounded context across models with different capabilities."
+    "Use one of the eight KnowledgeRail domain tools directly; do not look for a navigation menu. " +
+    "For normal project work start with knowledge_context mode=task and a concrete objective; " +
+    "omit response_detail so the compact default is used. " +
+    "Follow the structured nextAction returned by each operation. Materialize only relevant " +
+    "knowledge-rail:// or code:// links with resources/read when available; otherwise use " +
+    "knowledge_page action=read for knowledge-rail:// links. If coverage remains insufficient after " +
+    "the suggested widening, preserve evidenceGaps as explicit unknowns instead of guessing."
   );
 }
 
@@ -109,13 +103,7 @@ export function buildServer(
     }
   );
 
-  registerWorkflowTools(server, context.era);
-  registerWikiTools(server, context.era);
-  registerContextTools(server, context.era);
-  registerSourceTools(server, context.era);
-  registerEvidenceTools(server, context.era);
-  registerCodeEvidenceTools(server, context.era);
-  registerDocumentTools(server, context.era);
+  registerAgentTools(server, context.era);
   registerWikiPrompts(server, context.era);
   registerWikiResources(server);
 

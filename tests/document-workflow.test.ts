@@ -203,7 +203,7 @@ test("development report contract blocks incomplete reports and prepares request
     requestId: "REQ-42",
     objective: "Aggiornare automazione.",
   });
-  assert.equal(plan.includes("knowledge_prepare_request_ingestion"), true);
+  assert.equal(plan.includes("knowledge_ingest action=report"), true);
   assert.equal(plan.includes("## Automazioni"), true);
 
   const incomplete = validateDevReport([

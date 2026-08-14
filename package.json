@@ -30,7 +30,8 @@
     "knowledge-rail": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "rimraf dist && tsc",
+    "prepack": "npm run build",
     "check": "tsc --noEmit",
     "test": "node scripts/run-tests.mjs",
     "verify": "npm run check && npm test",

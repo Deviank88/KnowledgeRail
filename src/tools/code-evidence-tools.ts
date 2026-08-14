@@ -67,8 +67,7 @@ export function registerCodeEvidenceTools(
     toolName("codeEvidence", era),
     {
       title: "Index and retrieve code evidence",
-      description:
-        `Deterministic code index selected by ${toolName("menu", era)}: search symbols/references and read code:// resources. Record any raw fallback and recovered knowledge debt.`,
+      description: "Internal deterministic code-evidence operation.",
       inputSchema: z.object({
         action: ActionSchema,
         path: z.string().min(1).optional(),

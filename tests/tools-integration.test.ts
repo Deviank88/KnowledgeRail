@@ -321,7 +321,7 @@ test("source ingestion: normalize, prepare drafts, dev report ingestion, traceab
   });
   assert.equal(sourceDraft.isError, undefined);
   assert.equal(sourceDraft.content[0].text.includes("Unità estrazione Evidence IR"), true);
-  assert.equal(sourceDraft.content[0].text.includes("Non scrivere direttamente una pagina"), true);
+  assert.equal(sourceDraft.content[0].text.includes("record, link, validazione e synthesis sono orchestrati internamente"), true);
   assert.equal(sourceDraft.content[0].text.includes("Coda unresolved:"), true);
   assert.equal(sourceDraft.content[0].text.includes("```source"), true);
 
@@ -351,7 +351,7 @@ test("source ingestion: normalize, prepare drafts, dev report ingestion, traceab
     page_refs: ["index.md"],
   });
   assert.equal(representedBypass.isError, true);
-  assert.equal(representedBypass.content[0].text.includes("derivati esclusivamente da Evidence IR"), true);
+  assert.equal(representedBypass.content[0].text.includes("derivati esclusivamente da knowledge_ingest action=apply"), true);
 
   const evidenceRecord = await tools.get("knowledge_evidence_ir")!({
     action: "record",
@@ -532,7 +532,7 @@ test("document tools: section context, write, review, knowledge update, docx exp
     sources: "src/alpha-service.ts",
   });
   assert.equal(draft.messages[0].content.text.includes("analysis/Requisiti_Alpha.md"), true);
-  assert.equal(draft.messages[0].content.text.includes("wiki_write_page"), true);
+  assert.equal(draft.messages[0].content.text.includes("knowledge_page action=write"), true);
 
   const docx = await tools.get("knowledge_export_docx")!({
     filename: "brief",
@@ -553,7 +553,7 @@ test("MCP prompts return editorial and dev-report plans", async () => {
     project_name: "Alpha Project",
   });
   assert.equal(planDoc.messages[0].content.text.includes("Piano editoriale documento"), true);
-  assert.equal(planDoc.messages[0].content.text.includes("knowledge_section_context"), true);
+  assert.equal(planDoc.messages[0].content.text.includes('knowledge_document_context action="section"'), true);
 
   const planReport = await prompts.get("plan_dev_report")!({
     client: "Client",

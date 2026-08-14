@@ -12,7 +12,7 @@ It is designed for agents that need to understand, change, review, or document a
 
 ## What it provides
 
-- A menu-first workflow that guides agents through reading, ingestion, code evidence, document generation, and administration.
+- Eight domain-oriented tools with validated actions and machine-readable next steps.
 - Task-aware hybrid retrieval with lexical, graph, passage, and optional semantic evidence.
 - Progressive widening with explicit coverage signals and `GAP`/unknown reporting.
 - Complete source ingestion through bounded segments, a coverage ledger, and durable Evidence IR.
@@ -98,29 +98,28 @@ Client configuration wrappers and file locations differ, but the `command`, `arg
 
 ## Agent workflow
 
-Every MCP 2.0 task starts with:
+KnowledgeRail exposes eight stable tools. Agents choose a domain directly and use its `mode` or `action`; no menu, profile, session scope, or legacy alias is required.
 
-```text
-knowledge_menu {}
-```
-
-The menu returns five areas:
-
-| Area | Purpose |
+| Tool | Operations |
 | --- | --- |
-| `read` | Understand, implement, modify, debug, or review using bounded context. |
-| `ingest` | Normalize and integrate sources or development reports with provenance. |
-| `code` | Search symbols/references or maintain the code evidence index. |
-| `document` | Create, review, or export a deliverable. |
-| `admin` | Initialize, migrate, lint, or perform a targeted wiki operation. |
+| `knowledge_context` | Task context plus diagnostic `search` and `graph` modes. |
+| `knowledge_page` | Read, write, edit, move, delete, and append the durable log. |
+| `knowledge_files` | List, read, and normalize controlled source files. |
+| `knowledge_ingest` | Start, advance, apply, inspect, and finalize evidence-backed ingestion; prepare reports and recovery state. |
+| `knowledge_code` | Maintain and query deterministic code evidence. |
+| `knowledge_document_context` | Plan a typed document and compile section-specific evidence. |
+| `knowledge_document` | Write, review, and export deliverables. |
+| `knowledge_admin` | Initialize, lint, and migrate KnowledgeRail data. |
 
-Call `knowledge_menu` again with the selected area, choose one returned operation, execute only the next action, and report its observed outcome back to the menu. This keeps the workflow discoverable without profiles or hidden client configuration.
+Every successful operation returns a machine-readable `state` and either one `nextAction` or `null`. `nextAction` identifies the next tool, action, required arguments, and safe suggested arguments. Clients that only render text also receive a concise `Next:` line.
 
-A normal context request is:
+The normative design, compatibility boundaries, and measurable acceptance gates are recorded in [MILESTONE_AGENT_NATIVE_TOOL_SURFACE.md](MILESTONE_AGENT_NATIVE_TOOL_SURFACE.md).
+
+A normal context request starts directly with:
 
 ```text
-knowledge_menu {"area":"read","operation":"understand"}
 knowledge_context {
+  "mode":"task",
   "intent":"understand",
   "objective":"Explain how lease renewal and expiry work",
   "response_detail":"compact",
@@ -128,17 +127,19 @@ knowledge_context {
 }
 ```
 
-On MCP `2026-07-28`, `knowledge_context` returns selected `knowledge-rail://` resource links. The client should materialize only the passages it needs with `resources/read`, then report `coverageSufficient` and `evidenceGaps` back to `knowledge_menu`.
+On MCP `2026-07-28`, `knowledge_context` returns selected `knowledge-rail://` resource links. The client materializes only the passages it needs with `resources/read`; clients that do not expose resource reads can use `knowledge_page action="read"` with the exact URI. When evidence was omitted only because of the budget, `nextAction` provides the next bounded widening request. Semantic, stale, or unresolved gaps are returned without a futile widening loop and must remain explicit unknowns.
+
+The consolidated catalog is deliberately action-oriented, but validation remains action-specific. For example, `knowledge_page action="edit"` is rejected without `path`, `old_string`, and `new_string`; ingestion cannot finalize before complete coverage; document export re-runs the contract review.
 
 ### Why context has a token budget
 
-The budget bounds evidence sent to the model; it does not declare omitted knowledge irrelevant. If coverage is insufficient because of the budget, the guided read workflow widens from `2,000` to `4,000`, `8,000`, and at most `12,000` heuristic tokens. If evidence is still missing, the result must expose a gap rather than invent an answer.
+The budget bounds evidence sent to the model; it does not declare omitted knowledge irrelevant. If coverage is insufficient because of the budget, the guided read workflow widens from `2,000` to `4,000`, `8,000`, and at most `12,000` heuristic tokens. Widening stops as soon as no evidence is budget-omitted; any remaining semantic or freshness gap is exposed rather than guessed.
 
 `response_detail="compact"` is recommended for normal agent use. `full` keeps the complete historical TaskContext payload for diagnostics and integrations that need it.
 
 ## Project data
 
-`knowledge_init` creates this structure inside the selected project. The roots are intentionally stable: `wiki/` is canonical agent memory; `docs/` is the document plane for sources, normalized copies, durable evidence state, and deliverables.
+`knowledge_admin action="init"` creates this structure inside the selected project. The roots are intentionally stable: `wiki/` is canonical agent memory; `docs/` is the document plane for sources, normalized copies, durable evidence state, and deliverables.
 
 ```text
 project/
@@ -165,7 +166,7 @@ These directories may contain private project information. Decide deliberately w
 
 ## Document memory and deliverables
 
-Document generation starts with `knowledge_menu {"area":"document","operation":"create"}`. The guided flow calls `knowledge_plan_document`, compiles a separate bounded evidence pack for every section, saves the draft, and runs a typed review. `knowledge_export_docx` re-reviews the current Markdown and refuses export while any contract blocker remains.
+Document generation starts with `knowledge_document_context action="plan"`. Follow its `nextAction` to compile a separate bounded evidence pack for every section, then use `knowledge_document action="write"` and `action="review"`. `action="export"` re-reviews the current Markdown and refuses export while any contract blocker remains.
 
 Built-in contracts cover functional specifications, architecture documents, project briefs, onboarding guides, API references, ADRs, runbooks, test plans, incident reports, and release notes. `custom` remains available for a document with an explicit structure. Each contract defines purpose, default language and audience, required sections, minimum useful content, and type-specific checks; callers can override language and client-facing status without disabling structural validation.
 
@@ -205,12 +206,12 @@ For Mermaid rendering, `KNOWLEDGE_RAIL_MERMAID_NO_SANDBOX=true` is intended only
 | MCP SDK | `@modelcontextprotocol/server` `2.x` |
 | Modern protocol | `2026-07-28` |
 | Local transport | `stdio` |
-| Legacy protocol adapter | Served for existing 2025-era clients |
+| Legacy wire adapter | Served for existing 2025-era clients with the same eight public tool names |
 | Modern selective reads | MCP `resources/read` |
 | Remote Streamable HTTP | Not implemented |
 | Serverless multi-tenant storage | Not implemented |
 
-Modern product-level tools use the `knowledge_*` prefix. The `wiki_*` prefix is reserved for low-level operations that directly inspect or mutate canonical `wiki/` pages. The legacy protocol adapter retains historical tool names for existing 2025-era clients without adding aliases to the modern catalog.
+All public tools use the `knowledge_*` prefix in both protocol eras. Historical `wiki_*` tools and `knowledge_menu` are not advertised. The legacy adapter is transport/workspace compatibility only: it does not restore the old tool catalog. Conservative migration of existing wiki data remains supported independently of protocol compatibility.
 
 ## Development and verification
 

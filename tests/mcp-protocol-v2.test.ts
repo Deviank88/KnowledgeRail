@@ -225,11 +225,12 @@ test("2026-07-28 stdio leg uses resource links without legacy Roots negotiation"
     assert.equal(list.ttlMs, STATIC_CATALOG_TTL_MS);
     assert.equal(list.cacheScope, "private");
     const tools = list.tools as Array<{ name: string }>;
-    assert.equal(tools.length, 24);
-    assert.equal(tools.some((tool) => tool.name === "knowledge_init"), true);
+    assert.equal(tools.length, 8);
+    assert.equal(tools.some((tool) => tool.name === "knowledge_admin"), true);
     assert.equal(tools.some((tool) => tool.name === "knowledge_context"), true);
-    assert.equal(tools.some((tool) => tool.name === "knowledge_code_evidence"), true);
-    assert.equal(tools.some((tool) => tool.name === "knowledge_menu"), true);
+    assert.equal(tools.some((tool) => tool.name === "knowledge_code"), true);
+    assert.equal(tools.some((tool) => tool.name === "knowledge_ingest"), true);
+    assert.equal(tools.some((tool) => tool.name === "knowledge_menu"), false);
     assert.equal(tools.some((tool) => tool.name === "wiki_menu"), false);
     assert.equal(tools.some((tool) => tool.name === "wiki_read_resource"), false);
     assert.deepEqual(eras, ["modern"]);
@@ -240,8 +241,8 @@ test("2026-07-28 stdio leg uses resource links without legacy Roots negotiation"
       id: "modern-init-tool",
       method: "tools/call",
       params: {
-        name: "knowledge_init",
-        arguments: { force: false },
+        name: "knowledge_admin",
+        arguments: { action: "init", force: false },
         _meta: modernEnvelope(),
       },
     }));
@@ -256,6 +257,7 @@ test("2026-07-28 stdio leg uses resource links without legacy Roots negotiation"
       params: {
         name: "knowledge_context",
         arguments: {
+          mode: "task",
           intent: "review",
           objective: "Review approval audit traceability",
           query: "user role timestamp motivation immutable audit",
@@ -307,7 +309,7 @@ test("2026-07-28 stdio leg uses resource links without legacy Roots negotiation"
       id: "modern-code-rebuild",
       method: "tools/call",
       params: {
-        name: "knowledge_code_evidence",
+        name: "knowledge_code",
         arguments: { action: "rebuild" },
         _meta: modernEnvelope(),
       },
@@ -318,7 +320,7 @@ test("2026-07-28 stdio leg uses resource links without legacy Roots negotiation"
       id: "modern-code-search",
       method: "tools/call",
       params: {
-        name: "knowledge_code_evidence",
+        name: "knowledge_code",
         arguments: { action: "symbol", symbol: "submitOrder" },
         _meta: modernEnvelope(),
       },
@@ -344,7 +346,7 @@ test("2026-07-28 stdio leg uses resource links without legacy Roots negotiation"
       id: "modern-code-fallback",
       method: "tools/call",
       params: {
-        name: "knowledge_code_evidence",
+        name: "knowledge_code",
         arguments: {
           action: "record_fallback",
           query: "submitOrder legacy integration",
@@ -365,8 +367,8 @@ test("2026-07-28 stdio leg uses resource links without legacy Roots negotiation"
       id: "modern-recovery-status",
       method: "tools/call",
       params: {
-        name: "knowledge_evidence_ir",
-        arguments: { action: "recovery_status" },
+        name: "knowledge_ingest",
+        arguments: { action: "status" },
         _meta: modernEnvelope(),
       },
     }));
@@ -378,7 +380,7 @@ test("2026-07-28 stdio leg uses resource links without legacy Roots negotiation"
   }
 });
 
-test("legacy stdio leg preserves Roots precedence and keeps explicit evidence read tool", async () => {
+test("legacy stdio leg preserves Roots precedence while keeping the same eight domain tools", async () => {
   const originalRoot = getWikiRoot();
   const fallbackRoot = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-mcp-fallback-"));
   const legacyRoot = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-mcp-legacy-"));
@@ -419,8 +421,9 @@ test("legacy stdio leg preserves Roots precedence and keeps explicit evidence re
     }));
     assert.equal(Array.isArray(legacyList.tools), true);
     const legacyTools = legacyList.tools as Array<{ name: string }>;
-    assert.equal(legacyTools.length, 25);
-    assert.equal(legacyTools.some((tool) => tool.name === "wiki_read_resource"), true);
+    assert.equal(legacyTools.length, 8);
+    assert.equal(legacyTools.some((tool) => tool.name === "wiki_read_resource"), false);
+    assert.equal(legacyTools.some((tool) => tool.name === "knowledge_admin"), true);
     assert.equal("resultType" in legacyList, false);
     assert.equal("ttlMs" in legacyList, false);
     assert.equal("cacheScope" in legacyList, false);
@@ -430,8 +433,8 @@ test("legacy stdio leg preserves Roots precedence and keeps explicit evidence re
       id: "legacy-wiki-init",
       method: "tools/call",
       params: {
-        name: "wiki_init",
-        arguments: { force: false },
+        name: "knowledge_admin",
+        arguments: { action: "init", force: false },
       },
     }));
     const text = textContent(result);
@@ -446,60 +449,13 @@ test("legacy stdio leg preserves Roots precedence and keeps explicit evidence re
   }
 });
 
-test("workflow menu guides read tasks without changing server configuration", async () => {
+test("domain tools guide read tasks without a menu round trip", async () => {
   const originalRoot = getWikiRoot();
   const readRoot = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-mcp-menu-"));
   setWikiRoot(readRoot);
   const harness = await createHarness();
 
   try {
-    const menu = resultOf(await harness.request({
-      jsonrpc: "2.0",
-      id: "root-menu",
-      method: "tools/call",
-      params: {
-        name: "knowledge_menu",
-        arguments: {},
-        _meta: modernEnvelope(),
-      },
-    }));
-    assert.match(textContent(menu), /read —/);
-    assert.match(textContent(menu), /ingest —/);
-    assert.match(textContent(menu), /document —/);
-    assert.deepEqual(
-      (menu.structuredContent as { next?: unknown }).next,
-      { tool: "knowledge_menu", arguments: { area: "<chosen area>" } }
-    );
-
-    const readMenu = resultOf(await harness.request({
-      jsonrpc: "2.0",
-      id: "read-menu",
-      method: "tools/call",
-      params: {
-        name: "knowledge_menu",
-        arguments: { area: "read" },
-        _meta: modernEnvelope(),
-      },
-    }));
-    assert.match(textContent(readMenu), /review —/);
-    assert.deepEqual(
-      (readMenu.structuredContent as { next?: unknown }).next,
-      { tool: "knowledge_menu", arguments: { area: "read", operation: "<chosen operation id>" } }
-    );
-
-    const guide = resultOf(await harness.request({
-      jsonrpc: "2.0",
-      id: "read-guide",
-      method: "tools/call",
-      params: {
-        name: "knowledge_menu",
-        arguments: { area: "read", operation: "review" },
-        _meta: modernEnvelope(),
-      },
-    }));
-    assert.match(textContent(guide), /next: compile_context: knowledge_context/);
-    assert.match(textContent(guide), /"response_detail": "compact"/);
-
     await writeContextFixture(readRoot);
     const context = resultOf(await harness.request({
       jsonrpc: "2.0",
@@ -508,6 +464,7 @@ test("workflow menu guides read tasks without changing server configuration", as
       params: {
         name: "knowledge_context",
         arguments: {
+          mode: "task",
           intent: "review",
           objective: "Review approval audit traceability",
           query: "user role timestamp motivation immutable audit",
@@ -522,7 +479,9 @@ test("workflow menu guides read tasks without changing server configuration", as
     assert.equal(structured.version, 2);
     assert.equal(Array.isArray(structured.evidence), true);
     assert.equal(Array.isArray(structured.gaps), true);
-    assert.equal("currentState" in structured, false, "menu-guided compact reads must omit verbose compatibility views");
+    assert.equal("currentState" in structured, false, "compact reads must omit verbose compatibility views");
+    assert.equal(typeof structured.state, "string");
+    assert.equal("nextAction" in structured, true);
     assert.equal(
       (context.content as Array<Record<string, unknown>>).some((item) => item.type === "resource_link"),
       true

@@ -257,11 +257,11 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
 
   server.registerTool("wiki_read_page", {
             description:
-              `Bounded path/URI fallback. MCP 2.0 reasoning uses resources/read on ${toolName("context", era)} passage links.`,
+              "Internal bounded path/URI page read; MCP 2.0 agents should prefer resources/read for selected passage links.",
             inputSchema: z.object({
               path: z.string().optional().describe("Wiki path; exclusive with resource_uri."),
               resource_uri: z.string().startsWith("knowledge-rail://page/").optional()
-                .describe(`Exact ${toolName("context", era)} URI; exclusive with path.`),
+                .describe("Exact knowledge_context URI; exclusive with path."),
               max_chars: z.number().int().min(1).max(50_000).default(6_000)
                 .describe("Output cap; default 6000."),
             }),
@@ -421,7 +421,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               return textResult("Voce di log aggiunta.");
             });
 
-  server.registerTool("wiki_search", { description: `Low-level lexical lookup for diagnostics/compatibility. Normal task retrieval starts with ${toolName("menu", era)} area=read and ${toolName("context", era)}.`, inputSchema: z.object({
+  server.registerTool("wiki_search", { description: "Internal lexical diagnostic used by knowledge_context mode=search.", inputSchema: z.object({
               query: z.string().optional(),
               max_results: z.number().int().positive().optional().default(10),
               page_types: z.array(z.string()).optional(),
@@ -447,7 +447,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               return textResult(lines.join("\n\n"));
             });
 
-  server.registerTool("wiki_graph_query", { description: `Low-level graph diagnostic or traceability matrix. Normal reasoning uses ${toolName("context", era)}, whose bounded retrieval and widening already include graph evidence.`, inputSchema: z.object({
+  server.registerTool("wiki_graph_query", { description: "Internal graph diagnostic used by knowledge_context mode=graph.", inputSchema: z.object({
               query: z.string().optional().default(""),
               max_nodes: z.number().int().positive().optional().default(12),
               max_depth: z.number().int().min(0).optional().default(1),
