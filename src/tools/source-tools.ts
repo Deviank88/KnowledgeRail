@@ -57,7 +57,7 @@ function coverageLines(metrics: {
 }
 
 export function registerSourceTools(server: McpServer, era: ProtocolEra = "modern"): void {
-  server.registerTool(toolName("files", era), { description: `List/read controlled docs/ files; use ${toolName("context", era)} for knowledge retrieval.`, inputSchema: z.object({
+  server.registerTool(toolName("files", era), { description: "Internal docs file operation.", inputSchema: z.object({
               action: z.enum(["list", "read"]).optional().default("list"),
               category: z.enum(CATEGORY_ENUM).optional(),
               pattern: z.string().optional().default("**/*"),
@@ -152,7 +152,7 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                 [
                   "# Bozze ingestione richiesta",
                   "",
-                  "> Applicare ogni bozza con `wiki_write_page` (index.md si aggiorna da solo), poi registrare l'operazione con `wiki_append_log`.",
+                  "> Applicare ogni bozza con `knowledge_page action=write`, poi registrare l'operazione con `action=append_log`.",
                   "",
                   ...prepared.drafts.map((draft) => draftBlock(draft.path, draft.content)),
                 ].join("\n")
@@ -207,7 +207,7 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                   }
                   if (["integrated", "duplicate", "contradicted"].includes(status)) {
                     return errorResult(
-                      `Gli stati integrated, duplicate e contradicted sono derivati esclusivamente da Evidence IR. Usare ${toolName("evidenceIr", era)} per record, link e synthesize; la coverage verrà riconciliata automaticamente.`
+                      "Gli stati integrated, duplicate e contradicted sono derivati esclusivamente da knowledge_ingest action=apply; la coverage verrà riconciliata automaticamente."
                     );
                   }
                   const result = await sourceRecordSegment({
@@ -280,7 +280,7 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                   "",
                   `> Segmento: \`${unit.segment.id}\` (${unit.segment.start}-${unit.segment.end}, ${unit.segment.kind})`,
                   `> Coda unresolved: ${unit.queuedSegmentIds.length} segmenti (incluso quello corrente).`,
-                  `> Estrarre claim con provenance usando \`${toolName("evidenceIr", era)} action=record\`, poi eseguire \`link\` e \`synthesize\`. Non scrivere direttamente una pagina da questo segmento.`,
+                  "> Estrarre claim con provenance e usare `knowledge_ingest action=apply`; record, link, validazione e synthesis sono orchestrati internamente.",
                   "",
                   "```source",
                   unit.content,

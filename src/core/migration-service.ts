@@ -358,8 +358,8 @@ export function migrateSchemaText(schema: string): string {
   // Retained as an explicit proposal helper. Migration never applies this text
   // automatically because SCHEMA.md is canonical project knowledge.
   return schema
-    .replace(/`wiki_traceability_report`/g, "`wiki_graph_query view=traceability`")
-    .replace(/`wiki_list_pages`/g, "`wiki_search` senza query")
+    .replace(/`wiki_traceability_report`/g, "`knowledge_context mode=graph view=traceability`")
+    .replace(/`wiki_list_pages`/g, "`knowledge_context mode=search` senza query")
     .replace(/`wiki_prepare_knowledge_updates`/g, "prompt `prepare_knowledge_update`")
     .replace(/`wiki_list_files`/g, "`knowledge_files action=list`")
     .replace(/`wiki_read_file`/g, "`knowledge_files action=read`")

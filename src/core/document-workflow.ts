@@ -326,7 +326,7 @@ export async function buildDocumentPlan(
               `- **Writer assegnato:** specialista della sezione "${section.title}".`,
               `- **Evidence obbligatoria:** ${evidencePlan.require.join(", ") || "nessuna"}.`,
               `- **Evidence preferita:** ${evidencePlan.prefer.join(", ") || "nessuna"}.`,
-              `- **Context pack:** chiamare \`knowledge_section_context\` con \`document_type="${options.documentType}"\`, \`section_title="${section.title}"\`, \`query="${query}"\`, \`retrieval_profile="coverage"\`.`,
+              `- **Context pack:** chiamare \`knowledge_document_context action="section"\` con \`document_type="${options.documentType}"\`, \`section_title="${section.title}"\`, \`query="${query}"\`, \`retrieval_profile="coverage"\`.`,
               "- **Output atteso:** markdown pronto per assemblaggio, senza placeholder, con evidenze concrete e lacune esplicite.",
             ].join("\n");
           })
@@ -360,11 +360,11 @@ export async function buildDocumentPlan(
     `- Il template è un evidence plan: ogni sezione dichiara evidence obbligatoria e preferita.`,
     `- Il context pack deve contenere la matrice required/found/missing/source coverage/contradictions.`,
     `- Se lo stato della matrice è \`GAP\`, riportare il gap senza completarlo con inferenze non supportate.`,
-    `- Per contesti lunghi usare \`knowledge_section_context\` con query mirate e budget esplicito.`,
+    `- Per contesti lunghi usare \`knowledge_document_context action="section"\` con query mirate e budget esplicito.`,
     `- Ogni writer deve ricevere solo le pagine rilevanti per la propria sezione, con budget esplicito di caratteri.`,
     `- Se mancano evidenze, il writer deve scrivere una lacuna tracciabile invece di inventare.`,
-    `- Espandere con \`wiki_read_page\` le pagine pertinenti segnalate come escluse dal budget e verificare requisiti/decisioni tra sezioni.`,
-    `- Per evidence di codice usare prima \`knowledge_code_evidence\`; una scansione raw è solo fallback esplicito e deve essere registrata.`,
+    `- Espandere con \`knowledge_page action="read"\` le pagine pertinenti segnalate come escluse dal budget e verificare requisiti/decisioni tra sezioni.`,
+    `- Per evidence di codice usare prima \`knowledge_code\`; una scansione raw è solo fallback esplicito e deve essere registrata.`,
     `- Usare Mermaid solo quando il diagramma chiarisce flussi, architetture, dati o sequenze; mai ASCII art.`,
     ``,
     `## Sezioni da assegnare ai writer`,
@@ -376,7 +376,7 @@ export async function buildDocumentPlan(
     `- Nessun placeholder come \`[Descrivere...]\` o \`{{PROJECT_NAME}}\` rimane nel documento finale.`,
     `- Tabelle, requisiti, criteri di accettazione e rischi sono concreti e verificabili.`,
     `- Le informazioni dubbie sono marcate come lacune o assunzioni, non presentate come fatti.`,
-    `- Prima della consegna chiamare \`knowledge_review_document\` sul file salvato.`,
+    `- Prima della consegna chiamare \`knowledge_document action="review"\` sul file salvato.`,
     `- Se la review trova lacune o inesattezze, usare il prompt \`prepare_knowledge_update\` e aggiornare la wiki prima di rigenerare il documento.`,
     ``,
     templateBlock,
@@ -720,12 +720,12 @@ export function formatSectionContext(
   if (result.omittedPaths && result.omittedPaths.length > 0) {
     lines.push("## Pagine pertinenti non incluse nel budget", "");
     for (const path of result.omittedPaths) lines.push(`- ${path}`);
-    lines.push("", "Usare `wiki_read_page` o un nuovo context pack con `page_paths` per espanderle.", "");
+    lines.push("", "Usare `knowledge_page action=read` o un nuovo context pack con `page_paths` per espanderle.", "");
   }
 
   const output = lines.join("\n");
   if (!maxOutputChars || Buffer.byteLength(output, "utf8") <= maxOutputChars) return output;
-  const marker = "\n\n_[Output troncato al budget complessivo; espandere le pagine indicate con wiki_read_page.]_";
+  const marker = "\n\n_[Output troncato al budget complessivo; espandere le pagine indicate con knowledge_page action=read.]_";
   const contentByteBudget = Math.max(0, maxOutputChars - Buffer.byteLength(marker, "utf8"));
   let usedBytes = 0;
   let bounded = "";
@@ -986,7 +986,7 @@ export function formatWikiUpdatePlan(result: DocumentReviewResult): string {
   ];
 
   if (actionable.length === 0) {
-    lines.push("Nessun aggiornamento wiki obbligatorio rilevato. Se emergono dubbi durante la revisione umana, usare comunque `wiki_search` e la lettura diretta del codice di progetto prima di modificare il documento finale.");
+    lines.push("Nessun aggiornamento wiki obbligatorio rilevato. Se emergono dubbi durante la revisione umana, usare comunque `knowledge_context mode=search` e la lettura mirata del codice prima di modificare il documento finale.");
     return lines.join("\n");
   }
 
@@ -996,12 +996,12 @@ export function formatWikiUpdatePlan(result: DocumentReviewResult): string {
     const query = actionQueryForFinding(finding);
     const pageType = suggestedPageTypeForFinding(finding);
     lines.push(`### Azione ${index + 1} — ${finding.code}`);
-    lines.push(`- **Ricerca wiki:** chiamare \`wiki_search\` con query \`${query}\`.`);
-    lines.push("- **Lettura:** chiamare `wiki_read_page` sulle pagine rilevanti trovate.");
-    lines.push("- **Verifica codice:** se la wiki non basta, usare prima `knowledge_code_evidence`; una scansione raw è solo fallback esplicito e va registrata.");
+    lines.push(`- **Ricerca wiki:** chiamare \`knowledge_context mode="search"\` con query \`${query}\`.`);
+    lines.push("- **Lettura:** chiamare `knowledge_page action=read` sulle pagine rilevanti trovate.");
+    lines.push("- **Verifica codice:** se la wiki non basta, usare prima `knowledge_code`; una scansione raw è solo fallback esplicito e va registrata.");
     lines.push(`- **Preparazione aggiornamento:** usare il prompt \`prepare_knowledge_update\` con \`page_type="${pageType}"\`, finding e contesto wiki/codice.`);
-    lines.push("- **Applicazione:** usare `wiki_write_page` (index.md si aggiorna da solo), poi `wiki_append_log`.");
-    lines.push("- **Rigenerazione:** richiamare `knowledge_section_context` e aggiornare la sezione del documento.");
+    lines.push("- **Applicazione:** usare `knowledge_page action=write` (index.md si aggiorna da solo), poi `action=append_log`.");
+    lines.push("- **Rigenerazione:** richiamare `knowledge_document_context action=section` e aggiornare la sezione del documento.");
     lines.push("");
   });
 
@@ -1045,17 +1045,17 @@ export function formatReviewResult(
   lines.push("## Checklist revisione automatizzabile");
   lines.push("- Risolvere tutti i finding BLOCKER prima della consegna.");
   lines.push("- Sostituire ogni placeholder con contenuto reale o rimuovere la sezione se non applicabile.");
-  lines.push("- Integrare le sezioni deboli usando `knowledge_section_context` con query mirate.");
+  lines.push("- Integrare le sezioni deboli usando `knowledge_document_context action=section` con query mirate.");
   lines.push("- Convertire diagrammi ASCII in blocchi `mermaid` validi quando rappresentano processi o architetture.");
   lines.push("- Se il finding indica lacune o inesattezze, aggiornare prima la wiki e solo dopo rigenerare il documento.");
-  lines.push("- Salvare la versione revisionata solo con `knowledge_write_document` dopo aver applicato le patch.");
+  lines.push("- Salvare la versione revisionata solo con `knowledge_document action=write` dopo aver applicato le patch.");
   if (options.includeWikiUpdatePlan ?? true) {
     lines.push("");
     lines.push(formatWikiUpdatePlan(result));
   }
   lines.push("");
   lines.push("## Prompt patch consigliato");
-  lines.push("Usa i finding sopra come backlog. Prima aggiorna la wiki per lacune verificabili usando wiki_search, wiki_read_page, il prompt prepare_knowledge_update e wiki_write_page. Solo dopo produci la versione revisionata del documento.");
+  lines.push("Usa i finding sopra come backlog. Prima aggiorna la wiki per lacune verificabili usando knowledge_context mode=search, knowledge_page action=read, il prompt prepare_knowledge_update e knowledge_page action=write. Solo dopo produci la versione revisionata del documento.");
 
   return lines.join("\n");
 }
@@ -1089,10 +1089,10 @@ export function prepareKnowledgeUpdateDraft(options: KnowledgeUpdateOptions): {
     options.finding.trim(),
     "",
     "## Sintesi verificata",
-    "Integrare qui la sintesi finale dopo aver confrontato contesto wiki e codice. Non lasciare questa sezione vuota prima di applicare con `wiki_write_page`.",
+    "Integrare qui la sintesi finale dopo aver confrontato contesto wiki e codice. Non lasciare questa sezione vuota prima di applicare con `knowledge_page action=write`.",
     "",
     "## Evidenze dalla wiki",
-    options.wikiContext?.trim() || "Da completare con `wiki_search` e `wiki_read_page`.",
+    options.wikiContext?.trim() || "Da completare con `knowledge_context mode=search` e `knowledge_page action=read`.",
     "",
     "## Evidenze dal codice",
     options.codeContext?.trim() || "Da completare leggendo direttamente il codice di progetto se la wiki non è sufficiente.",

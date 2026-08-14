@@ -66,7 +66,7 @@ function draftBlock(pagePath: string, content: string): string {
 
 export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "modern"): void {
   server.registerTool(toolName("evidenceIr", era), {
-    description: `Evidence state machine selected by ${toolName("menu", era)} ingest/code: record -> link -> plan_synthesis -> synthesize; status inspects IR. Recovery actions record/resolve/status durable knowledge debt.`,
+    description: "Internal Evidence IR and knowledge-recovery operation.",
     inputSchema: z.object({
       action: z.enum([
         "record",

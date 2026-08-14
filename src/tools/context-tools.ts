@@ -118,15 +118,12 @@ export function registerContextTools(
   era: "legacy" | "modern" = "modern"
 ): void {
   const modern = era === "modern";
-  const menuName = toolName("menu", era);
   const contextName = toolName("context", era);
   server.registerTool(
     contextName,
     {
       title: "Compile task-aware wiki context",
-      description: modern
-        ? `Primary read path from ${menuName}: bounded task context, explicit unknowns and resource links. Prefer compact.`
-        : `Primary read path from ${menuName}; read selected evidence with wiki_read_resource.`,
+      description: "Internal bounded task-context operation with explicit unknowns and provenance.",
       inputSchema: z.object({
         intent: z.enum(["understand", "implement", "modify", "debug", "review", "document"]),
         objective: z.string().min(1),

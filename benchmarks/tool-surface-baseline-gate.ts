@@ -1,104 +1,75 @@
 import * as fs from "node:fs/promises";
-import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { evaluateToolSurface } from "./tool-surface-eval.js";
 
-interface ToolSurfaceBaseline {
-  baselineModernCatalogBytes: number;
-  maximumModernCatalogBytes: number;
+interface Baseline {
   expectedToolCount: number;
-  expectedAreaCount: number;
-  minimumOperationCount: number;
-  minimumWorkflowToolCoverage: number;
-  maximumInvalidTransitions: number;
-  maximumGuidanceHeuristicTokens: number;
-  maximumOperationChoices: number;
-  minimumInitialChoiceReductionPercent: number;
-  minimumGuidedChoiceReductionPercent: number;
-  minimumGoldenTraceCount: number;
-  minimumGoldenTraceAccuracy: number;
-  minimumBranchingOutcomeCheckpoints: number;
-  minimumCompactContextReductionPercent: number;
+  maximumModernCatalogBytes: number;
+  maximumHeuristicCatalogTokens: number;
+  minimumToolCountReductionPercent: number;
+  minimumCatalogByteReductionPercent: number;
+  minimumRoutingGoldenCount: number;
+  minimumCatalogAffordanceAccuracy: number;
+  minimumInvalidCallCount: number;
+  minimumInvalidCallRejectionRate: number;
+  minimumWorkflowTraceCount: number;
+  minimumWorkflowCompletionRate: number;
   requiredToolNames: string[];
+  forbiddenToolNames: string[];
 }
 
 async function main(): Promise<void> {
-  const baseline = JSON.parse(await fs.readFile(
-    path.join(process.cwd(), "benchmarks", "fixtures", "tool-surface-baseline-v4.json"),
-    "utf8"
-  )) as ToolSurfaceBaseline;
-  const report = await evaluateToolSurface(baseline.baselineModernCatalogBytes);
+  const baselineUrl = new URL("./fixtures/tool-surface-baseline-v4.json", import.meta.url);
+  const baseline = JSON.parse(await fs.readFile(fileURLToPath(baselineUrl), "utf8")) as Baseline;
+  const report = await evaluateToolSurface();
   const failures: string[] = [];
 
+  if (report.toolCount !== baseline.expectedToolCount) failures.push(`tool count ${report.toolCount} != ${baseline.expectedToolCount}`);
   if (report.modernCatalogBytes > baseline.maximumModernCatalogBytes) {
-    failures.push(`catalog ${report.modernCatalogBytes} > ${baseline.maximumModernCatalogBytes} bytes`);
+    failures.push(`catalog bytes ${report.modernCatalogBytes} > ${baseline.maximumModernCatalogBytes}`);
   }
-  if (report.toolCount !== baseline.expectedToolCount) {
-    failures.push(`tool count ${report.toolCount} != ${baseline.expectedToolCount}`);
+  if (report.heuristicCatalogTokens > baseline.maximumHeuristicCatalogTokens) {
+    failures.push(`catalog tokens ${report.heuristicCatalogTokens} > ${baseline.maximumHeuristicCatalogTokens}`);
   }
-  if (report.menuAreaCount !== baseline.expectedAreaCount) {
-    failures.push(`menu area count ${report.menuAreaCount} != ${baseline.expectedAreaCount}`);
+  if (report.toolCountReductionPercent < baseline.minimumToolCountReductionPercent) {
+    failures.push(`tool reduction ${report.toolCountReductionPercent} < ${baseline.minimumToolCountReductionPercent}`);
   }
-  if (report.operationCount < baseline.minimumOperationCount) {
-    failures.push(`operation count ${report.operationCount} < ${baseline.minimumOperationCount}`);
+  if (report.catalogByteReductionPercent < baseline.minimumCatalogByteReductionPercent) {
+    failures.push(`catalog reduction ${report.catalogByteReductionPercent} < ${baseline.minimumCatalogByteReductionPercent}`);
   }
-  if (report.workflowToolCoverage < baseline.minimumWorkflowToolCoverage) {
-    failures.push(`workflow tool coverage ${report.workflowToolCoverage} < ${baseline.minimumWorkflowToolCoverage}`);
+  if (report.routingGoldenCount < baseline.minimumRoutingGoldenCount) {
+    failures.push(`routing goldens ${report.routingGoldenCount} < ${baseline.minimumRoutingGoldenCount}`);
   }
-  if (report.invalidTransitions > baseline.maximumInvalidTransitions) {
-    failures.push(`invalid transitions ${report.invalidTransitions} > ${baseline.maximumInvalidTransitions}`);
+  if (report.catalogAffordanceAccuracy < baseline.minimumCatalogAffordanceAccuracy) {
+    failures.push(`catalog affordance accuracy ${report.catalogAffordanceAccuracy} < ${baseline.minimumCatalogAffordanceAccuracy}`);
   }
-  if (report.maximumGuidanceHeuristicTokens > baseline.maximumGuidanceHeuristicTokens) {
-    failures.push(
-      `guidance tokens ${report.maximumGuidanceHeuristicTokens} > ${baseline.maximumGuidanceHeuristicTokens}`
-    );
+  if (report.invalidCallCount < baseline.minimumInvalidCallCount) {
+    failures.push(`invalid call cases ${report.invalidCallCount} < ${baseline.minimumInvalidCallCount}`);
   }
-  if (report.maximumOperationChoices > baseline.maximumOperationChoices) {
-    failures.push(`maximum operation choices ${report.maximumOperationChoices} > ${baseline.maximumOperationChoices}`);
+  if (report.invalidCallRejectionRate < baseline.minimumInvalidCallRejectionRate) {
+    failures.push(`invalid call rejection ${report.invalidCallRejectionRate} < ${baseline.minimumInvalidCallRejectionRate}`);
   }
-  if (report.initialChoiceReductionPercent < baseline.minimumInitialChoiceReductionPercent) {
-    failures.push(
-      `initial choice reduction ${report.initialChoiceReductionPercent} < ${baseline.minimumInitialChoiceReductionPercent}`
-    );
+  if (report.workflowTraceCount < baseline.minimumWorkflowTraceCount) {
+    failures.push(`workflow traces ${report.workflowTraceCount} < ${baseline.minimumWorkflowTraceCount}`);
   }
-  if (report.guidedChoiceReductionPercent < baseline.minimumGuidedChoiceReductionPercent) {
-    failures.push(
-      `guided choice reduction ${report.guidedChoiceReductionPercent} < ${baseline.minimumGuidedChoiceReductionPercent}`
-    );
+  if (report.workflowCompletionRate < baseline.minimumWorkflowCompletionRate) {
+    failures.push(`workflow completion ${report.workflowCompletionRate} < ${baseline.minimumWorkflowCompletionRate}`);
   }
-  if (report.goldenTraceCount < baseline.minimumGoldenTraceCount) {
-    failures.push(`golden trace count ${report.goldenTraceCount} < ${baseline.minimumGoldenTraceCount}`);
-  }
-  if (report.goldenTraceAccuracy < baseline.minimumGoldenTraceAccuracy) {
-    failures.push(`golden trace accuracy ${report.goldenTraceAccuracy} < ${baseline.minimumGoldenTraceAccuracy}`);
-  }
-  if (report.branchingOutcomeCheckpointCount < baseline.minimumBranchingOutcomeCheckpoints) {
-    failures.push(
-      `branching outcome checkpoints ${report.branchingOutcomeCheckpointCount} < ` +
-      baseline.minimumBranchingOutcomeCheckpoints
-    );
-  }
-  if (report.compactContextReductionPercent < baseline.minimumCompactContextReductionPercent) {
-    failures.push(
-      `compact context reduction ${report.compactContextReductionPercent} < ` +
-      baseline.minimumCompactContextReductionPercent
-    );
-  }
-  if (!report.compactContextEvidenceParity) failures.push("compact context changed selected evidence pointers");
-  if (!report.compactContextGapParity) failures.push("compact context changed knowledge gaps");
-  if (report.maximumNextActionCount !== 1) failures.push("guided steps must return exactly one next action");
-  if (!report.officialInstructionsAdvertised) failures.push("server instructions must direct agents to knowledge_menu");
+  if (!report.menuRemoved) failures.push("knowledge_menu remains in the public catalog");
+  if (!report.legacyAliasesRemoved) failures.push("a wiki_* alias remains in the public catalog");
+  if (!report.officialInstructionsAdvertised) failures.push("server instructions do not advertise direct domain tools and nextAction");
+  if (!report.compactContextEvidenceParity) failures.push("compact context changed selected evidence");
+  if (!report.compactContextGapParity) failures.push("compact context changed reported gaps");
+  if (!report.defaultContextIsCompact) failures.push("knowledge_context does not default to compact output");
   for (const required of baseline.requiredToolNames) {
     if (!report.toolNames.includes(required)) failures.push(`required tool missing: ${required}`);
   }
-  if (!report.toolNames.includes("knowledge_menu")) failures.push("knowledge_menu missing");
-  if (report.toolNames.includes("wiki_menu")) failures.push("legacy wiki_menu leaked into modern catalog");
-  if (!report.menuReadOnly) failures.push("knowledge_menu must be read-only");
-  if (report.contextOutputSchemaAdvertised) {
-    failures.push("knowledge_context must not duplicate its variable full/compact payload in the static catalog");
+  for (const forbidden of baseline.forbiddenToolNames) {
+    if (report.toolNames.includes(forbidden)) failures.push(`forbidden tool advertised: ${forbidden}`);
   }
 
   if (failures.length > 0) {
-    throw new Error(`MCP tool-surface gate failed:\n- ${failures.join("\n- ")}\n\n${JSON.stringify(report, null, 2)}`);
+    throw new Error(`Agent-native tool-surface gate failed:\n- ${failures.join("\n- ")}\n\n${JSON.stringify(report, null, 2)}`);
   }
   process.stdout.write(`${JSON.stringify({ gate: "pass", ...report }, null, 2)}\n`);
 }

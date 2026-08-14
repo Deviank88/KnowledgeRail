@@ -168,9 +168,9 @@ export function buildDevReportPlan(options: DevReportPlanOptions): string {
     "## Istruzioni operative",
     "- Scrivi il development report in `docs/reports/` usando esattamente il template sotto.",
     "- Aggiorna eventuali changelog in `docs/changelogs/`.",
-    "- Poi chiama `knowledge_prepare_request_ingestion` sul file prodotto: valida il report e genera le bozze wiki.",
+    "- Poi chiama `knowledge_ingest action=report` sul file prodotto: valida il report e genera le bozze wiki.",
     "- Se la validazione segnala BLOCKER, integra il report e richiama lo stesso tool.",
-    "- Applica le bozze generate con `wiki_write_page`.",
+    "- Applica le bozze generate con `knowledge_page action=write`.",
     "",
     "```markdown",
     template,
@@ -519,7 +519,7 @@ export function formatReportValidation(result: ReportValidationResult, filename:
     lines.push("- Compilare tutte le sezioni obbligatorie del template MCP.");
     lines.push("- Dichiarare esplicitamente `Nessuna modifica` nelle aree non impattate.");
     lines.push("- Aggiungere ambiente, casi ed esito nella sezione Test.");
-    lines.push("- Richiamare di nuovo `knowledge_prepare_request_ingestion` dopo le integrazioni.");
+    lines.push("- Richiamare di nuovo `knowledge_ingest action=report` dopo le integrazioni.");
   }
   return lines.join("\n");
 }

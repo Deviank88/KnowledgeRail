@@ -8,7 +8,7 @@ import {
 } from "../core/document-workflow.js";
 import { buildDevReportPlan } from "../core/report-workflow.js";
 import { wikiDir } from "../core/paths.js";
-import { toolReferencesForEra, type ProtocolEra } from "../mcp/tool-names.js";
+import type { ProtocolEra } from "../mcp/tool-names.js";
 
 type PromptResult = {
   messages: Array<{ role: "user"; content: { type: "text"; text: string } }>;
@@ -19,6 +19,7 @@ function promptText(text: string): PromptResult {
 }
 
 export function registerWikiPrompts(server: McpServer, era: ProtocolEra = "modern"): void {
+  void era;
   server.registerPrompt(
     "plan_document",
     {
@@ -36,12 +37,12 @@ export function registerWikiPrompts(server: McpServer, era: ProtocolEra = "moder
     },
     async ({ document_type, project_name, objective, audience }) =>
       promptText(
-        toolReferencesForEra(await buildDocumentPlan(wikiDir(), {
+        await buildDocumentPlan(wikiDir(), {
           documentType: document_type,
           projectName: project_name,
           objective,
           audience,
-        }), era)
+        })
       )
   );
 
@@ -94,13 +95,13 @@ export function registerWikiPrompts(server: McpServer, era: ProtocolEra = "moder
         codeContext: code_context,
         sources: sources?.split(",").map((source) => source.trim()).filter(Boolean),
       });
-      return promptText(toolReferencesForEra([
+      return promptText([
         `Percorso suggerito: ${draft.path}`,
-        "Applica la bozza con wiki_write_page e registra la decisione con wiki_append_log.",
+        "Applica la bozza con knowledge_page action=write e registra la decisione con action=append_log.",
         "```markdown",
         draft.content,
         "```",
-      ].join("\n"), era));
+      ].join("\n"));
     }
   );
 }

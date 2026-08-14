@@ -43,9 +43,9 @@ export const DEFAULT_SCHEMA_MD = `# Wiki Schema and Conventions
 > This file defines the structure, workflows, and quality standards for this wiki.
 > Read it at the start of every session. Update it when conventions change.
 
-> MCP navigation: start every operation with \`knowledge_menu\` without arguments, choose
-> an area and operation, execute only the returned next tool/action, then call
-> \`knowledge_menu\` again with \`completed_step_id\` and any requested \`outcome\`.
+> MCP navigation: choose one of the eight \`knowledge_*\` domain tools directly and follow
+> the machine-readable \`nextAction\` returned by each operation. Normal project work starts
+> with \`knowledge_context mode="task"\` and a concrete objective.
 
 ---
 
@@ -189,14 +189,14 @@ Standard markdown links for external URLs:
 
 ## Ingest Workflow
 
-1. Chiama \`knowledge_menu area="ingest"\` e scegli \`source\`, \`normalized_source\` o \`development_report\`.
-2. Esegui esclusivamente il prossimo tool/action restituito dal menu.
-3. Dopo ogni step richiama il menu con \`area\`, \`operation\` e \`completed_step_id\`.
-4. Quando richiesto, comunica l'outcome osservato: per esempio \`more_items\`, \`no_more_items\`, \`coverage_sufficient\` o \`coverage_insufficient\`.
-5. Per le fonti, il ciclo obbligatorio è segmentazione → Evidence IR record → link → plan_synthesis → synthesize; non scrivere pagine direttamente dal segmento.
-6. La fonte può essere finalizzata soltanto quando il menu raggiunge \`finalize_source\` dopo coverage completa.
+1. Normalizza la fonte, se necessario, con \`knowledge_files action="normalize"\`.
+2. Avvia \`knowledge_ingest action="start"\` sul file normalizzato e segui il \`nextAction\` restituito.
+3. Il ciclo guidato è \`next → apply\`: \`apply\` registra, collega, valida e sintetizza Evidence IR prima di aggiornare pagine canoniche.
+4. Un segmento privo di claim utili può essere classificato soltanto con stato ammesso e motivazione esplicita.
+5. Usa \`knowledge_ingest action="status"\` per verificare coverage e gap.
+6. La fonte può essere finalizzata soltanto quando lo stato propone \`action="finalize"\` dopo coverage completa.
 
-\`index.md\` viene rigenerato automaticamente a ogni scrittura/modifica/eliminazione di pagina; registra le operazioni significative con \`wiki_append_log\`.
+\`index.md\` viene rigenerato automaticamente a ogni mutation di pagina; registra le operazioni significative con \`knowledge_page action="append_log"\`.
 
 ---
 
@@ -204,18 +204,18 @@ Standard markdown links for external URLs:
 
 When answering a question using the wiki:
 
-1. Chiama \`knowledge_menu area="read"\` e scegli l'operation che corrisponde all'intent: \`understand\`, \`implement\`, \`modify\`, \`debug\` o \`review\`.
-2. Chiama \`knowledge_context\` con gli argomenti suggeriti dal menu, incluso \`response_detail="compact"\`.
+1. Chiama \`knowledge_context mode="task"\` con l'intent appropriato e un obiettivo concreto; la risposta compact è predefinita.
+2. Usa \`mode="search"\` o \`mode="graph"\` soltanto per diagnostica mirata, non come catena obbligatoria.
 3. Materializza soltanto i resource link pertinenti.
-4. Richiama il menu con \`completed_step_id="read_selected_resources"\`, l'outcome osservato e copia \`coverage_sufficient\` + \`evidence_gaps\` dall'ultimo \`knowledge_context\`.
-5. Se serve widening, usa il nuovo budget suggerito; non concatenare manualmente search, graph e page dump.
-6. Se la knowledge resta insufficiente al budget massimo, usa outcome \`gaps_declared\` e dichiara GAP/unknown senza allucinare.
+4. Se la risposta contiene un \`nextAction\` di widening, eseguilo con il budget suggerito.
+5. Non concatenare manualmente search, graph e page dump.
+6. Se la knowledge resta insufficiente e non viene suggerito altro widening, dichiara gli \`evidenceGaps\` come GAP/unknown senza allucinare.
 
 ---
 
 ## Lint Checklist
 
-Run \`wiki_lint\` periodically and fix:
+Run \`knowledge_admin action="lint"\` periodically and fix:
 
 - **Orphan pages**: Pages with no inbound \`[[links]]\` — connect them to an overview or the index.
 - **Missing pages**: \`[[links]]\` referencing non-existent pages — create the page or remove the link.
@@ -243,17 +243,16 @@ Run \`wiki_lint\` periodically and fix:
 
 Usa questo workflow editoriale per produrre documenti strutturati (spec funzionali, architetture, ecc.) dalla conoscenza accumulata nella wiki senza perdere contenuti in contesti lunghi:
 
-1. **Apri il workflow**: chiama \`knowledge_menu area="document" operation="create"\`; dopo ogni step richiama il menu con il relativo \`completed_step_id\` e l'eventuale outcome.
-2. **Pianifica come redattore**: chiama \`knowledge_plan_document\` con \`document_type\`, opzionalmente \`project_name\`, \`objective\` e \`audience\`. Il tool restituisce contratto, sezioni, checklist e strategia di copertura.
-3. **Prepara context pack mirati**: Per ogni sezione, chiama \`knowledge_section_context\` con \`section_title\`, query mirata, eventuali \`page_paths\`, filtri \`page_types\` e budget di caratteri.
-4. **Verifica codice quando la wiki non basta**: Se una sezione è poco chiara o incompleta, usa prima l'indice deterministico con \`knowledge_code_evidence\` e materializza solo le risorse \`code://\` pertinenti. Una scansione raw del repository è esclusivamente un fallback esplicito da registrare, non il percorso normale. Il codice serve per aggiornare la wiki, non per esporre percorsi interni nel documento client-facing.
-5. **Aggiorna la wiki prima del documento**: Per lacune o inesattezze, usa il prompt \`prepare_knowledge_update\`, applica la bozza con \`wiki_write_page\`, poi \`wiki_append_log\`. Dopo l'aggiornamento, rigenera il context pack.
-6. **Assegna i writer**: Ogni writer scrive una sezione usando solo il proprio context pack aggiornato. Deve segnalare lacune invece di inventare, rispettare lingua e audience del contratto e rimuovere ogni placeholder.
-7. **Assembla come redattore**: Unisci le sezioni in un documento coerente, elimina duplicazioni, uniforma terminologia e tono. Inserisci diagrammi \`mermaid\` solo quando chiariscono flussi, architetture, dati o sequenze; non usare ASCII art.
-8. **Salva la bozza**: Chiama \`knowledge_write_document\` con \`filename\`, \`title\`, \`document_type\` e il \`content\` completo. Il risultato espone immediatamente blocker e stato del contratto.
-9. **Revisiona**: Chiama \`knowledge_review_document\` sul file salvato. Lingua e audience hanno default specifici per tipo, ma possono essere sovrascritti esplicitamente. Risolvi tutti i blocker.
-10. **Recupera lacune post-review**: usa \`knowledge_menu area="read"\` o \`area="code"\` per il recovery appropriato, aggiorna la wiki e rigenera la sezione.
-11. **Esporta e registra**: \`knowledge_export_docx\` rifiuta il contenuto non conforme; dopo l'export usa \`knowledge_files\` su \`deliverables\` e \`wiki_append_log\`.
+1. **Pianifica come redattore**: chiama \`knowledge_document_context action="plan"\` con \`document_type\`, opzionalmente \`project_name\`, \`objective\` e \`audience\`. Il tool restituisce contratto, sezioni, checklist e strategia di copertura.
+2. **Prepara context pack mirati**: Per ogni sezione, chiama \`knowledge_document_context action="section"\` con \`section_title\`, query mirata, eventuali \`page_paths\`, filtri \`page_types\` e budget.
+3. **Verifica codice quando la wiki non basta**: usa \`knowledge_code\` e materializza solo le risorse \`code://\` pertinenti. Una scansione raw è esclusivamente un fallback esplicito da registrare.
+4. **Aggiorna la wiki prima del documento**: Per lacune o inesattezze, usa il prompt \`prepare_knowledge_update\`, applica la bozza con \`knowledge_page action="write"\`, poi \`action="append_log"\`. Dopo l'aggiornamento, rigenera il context pack.
+5. **Assegna i writer**: Ogni writer scrive una sezione usando solo il proprio context pack aggiornato e segnala lacune invece di inventare.
+6. **Assembla come redattore**: Unisci le sezioni, elimina duplicazioni e inserisci Mermaid solo quando chiarisce il contenuto.
+7. **Salva la bozza**: Chiama \`knowledge_document action="write"\` con filename, titolo, tipo e contenuto completo.
+8. **Revisiona**: segui il \`nextAction\` verso \`knowledge_document action="review"\` e risolvi tutti i blocker.
+9. **Recupera lacune post-review**: usa \`knowledge_context\` o \`knowledge_code\`, aggiorna la wiki e rigenera la sezione.
+10. **Esporta e registra**: \`knowledge_document action="export"\` rifiuta contenuti non conformi; poi usa \`knowledge_files\` e \`knowledge_page action="append_log"\`.
 
 ### Tipi di documento
 

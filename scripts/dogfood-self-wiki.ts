@@ -12,7 +12,7 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { buildServer } from "../src/mcp/server.js";
 
 const MODERN_PROTOCOL_VERSION = "2026-07-28";
-const EXPECTED_MODERN_TOOL_COUNT = 24;
+const EXPECTED_MODERN_TOOL_COUNT = 8;
 
 type RpcId = string | number;
 type ToolResult = Record<string, unknown> & {
@@ -222,8 +222,8 @@ function selfWikiPages(): SelfWikiPage[] {
         "",
         "```mermaid",
         "flowchart LR",
-        "  A[Agente MCP 2.0] --> B[knowledge_menu]",
-        "  B --> C[Tool tipizzato]",
+        "  A[Agente MCP 2.0] --> B[8 tool di dominio]",
+        "  B --> C[nextAction strutturato]",
         "  C --> D[Markdown canonico]",
         "  D --> E[BM25 + grafo + ANN]",
         "  E --> F[knowledge_context compatto]",
@@ -233,13 +233,13 @@ function selfWikiPages(): SelfWikiPage[] {
         "## Mappa della conoscenza",
         "",
         `- [[MCP 2.0 Runtime e negoziazione moderna]] descrive bootstrap, protocollo e workspace.`,
-        `- [[Superficie tool MCP]] documenta menu, tool, prompt e risorse.`,
+        `- [[Superficie tool MCP]] documenta tool di dominio, prompt e risorse.`,
         `- [[Retrieval ibrido e Task Context]] descrive il percorso di lettura accuracy-safe.`,
         `- [[Source Coverage ed Evidence IR]] descrive l'ingestione completa e la provenance.`,
         `- [[Code Evidence Index]] descrive l'evidence strutturale dal repository.`,
         `- [[Pipeline documentale e Mermaid]] descrive deliverable Markdown e DOCX.`,
         `- [[Modello persistente della conoscenza]] distingue dati canonici e derivati.`,
-        `- [[Guida menu-first per agenti]] registra la decisione di navigazione.`,
+        `- [[Guida domain-first per agenti]] registra la decisione di navigazione.`,
         `- [[Provider OCR e semantic retrieval]] documenta le integrazioni opzionali.`,
         `- [[Requisiti di produzione]] definisce i gate operativi.`,
         `- [[Rischi e limiti operativi]] rende espliciti i limiti residui.`,
@@ -265,7 +265,7 @@ function selfWikiPages(): SelfWikiPage[] {
         "",
         "## Compatibilità isolata",
         "",
-        "L'adapter legacy può ancora essere servito a client precedenti, ma viene configurato soltanto quando la factory riceve era=legacy. Solo quel ramo abilita Roots e il tool wiki_read_resource. Il percorso moderno non registra quel tool e legge knowledge-rail:// e code:// tramite resources/read.",
+        "L'adapter di trasporto legacy può ancora essere servito a client precedenti e abilita Roots soltanto quando la factory riceve era=legacy. Entrambe le ere espongono gli stessi otto tool di dominio; il percorso moderno legge knowledge-rail:// e code:// tramite resources/read.",
         "",
         "## Evidenza di codice",
         "",
@@ -279,21 +279,21 @@ function selfWikiPages(): SelfWikiPage[] {
       tags: ["mcp-2", "tools", "resources"],
       authority: "validated_report",
       body: [
-        `Vedi [[${OVERVIEW_TITLE}]], [[Guida menu-first per agenti]] e [[MCP 2.0 Runtime e negoziazione moderna]].`,
+        `Vedi [[${OVERVIEW_TITLE}]], [[Guida domain-first per agenti]] e [[MCP 2.0 Runtime e negoziazione moderna]].`,
         "",
         "## Cataloghi moderni",
         "",
-        "La sessione moderna espone 24 tool, tre prompt, due risorse statiche e due template di risorsa. knowledge_menu è l'ingresso raccomandato; i tool knowledge_* gestiscono i flussi di prodotto e le primitive wiki_* operano direttamente sulla memoria canonica.",
+        "La sessione moderna espone otto tool di dominio, tre prompt, due risorse statiche e due template di risorsa. Non esiste un menu separato: ogni risultato restituisce stato e nextAction, mentre gli handler operativi di dettaglio restano interni.",
         "",
-        "## Aree menu",
+        "## Tool di dominio",
         "",
-        "| Area | Responsabilità |",
+        "| Tool | Responsabilità |",
         "|---|---|",
-        "| read | Task Context, widening e materializzazione selettiva |",
-        "| ingest | Normalizzazione, coverage ed Evidence IR |",
-        "| code | Indice codice, simboli e riferimenti |",
-        "| document | Context pack, review ed export |",
-        "| admin | Inizializzazione e mutation strutturali mirate |",
+        "| knowledge_context | Task Context, search, grafo e widening |",
+        "| knowledge_page / knowledge_files | Memoria canonica e fonti controllate |",
+        "| knowledge_ingest / knowledge_code | Evidence IR e codice |",
+        "| knowledge_document_context / knowledge_document | Context pack, review ed export |",
+        "| knowledge_admin | Inizializzazione, lint e migrazione |",
         "",
         "## Risorse",
         "",
@@ -377,7 +377,7 @@ function selfWikiPages(): SelfWikiPage[] {
         "",
         "## Context per sezione",
         "",
-        "knowledge_section_context usa lo stesso compiler accuracy-safe e produce evidence plan, matrice di coverage, provenance e GAP per una singola sezione. knowledge_plan_document seleziona prima un contratto tipizzato; il writer materializza soltanto l'evidence selezionata.",
+        "knowledge_document_context action=section usa lo stesso compiler accuracy-safe e produce evidence plan, matrice di coverage, provenance e GAP per una singola sezione. action=plan seleziona prima un contratto tipizzato; il writer materializza soltanto l'evidence selezionata.",
         "",
         "## Review ed export",
         "",
@@ -411,25 +411,25 @@ function selfWikiPages(): SelfWikiPage[] {
       ],
     },
     {
-      path: "decisions/Menu_First_Agent_Guidance.md",
-      title: "Guida menu-first per agenti",
+      path: "decisions/Domain_First_Agent_Guidance.md",
+      title: "Guida domain-first per agenti",
       type: "decision",
-      tags: ["agent-guidance", "menu", "mcp-2"],
+      tags: ["agent-guidance", "domain-tools", "mcp-2"],
       authority: "validated_report",
       body: [
         `Vedi [[${OVERVIEW_TITLE}]] e [[Superficie tool MCP]].`,
         "",
         "## Decisione",
         "",
-        "Ogni task KnowledgeRail deve iniziare da knowledge_menu. Il primo livello sceglie l'area, il secondo l'operazione e lo stato operativo restituisce una sola prossima azione, template argomenti, condizione di completamento, outcome ammessi e guardrail.",
+        "Ogni task KnowledgeRail sceglie direttamente uno degli otto tool di dominio. Il discriminatore mode/action seleziona l'operazione e ogni risultato restituisce stato, una sola nextAction, argomenti richiesti e suggerimenti.",
         "",
         "## Motivazione",
         "",
-        "Non vengono usati tool-profile, scope per sessione o refresh dinamico del catalogo. Questi meccanismi richiederebbero configurazione esterna e non sono supportati uniformemente dagli host. Il menu rimane read-only e i tool tipizzati eseguono le mutation.",
+        "Non vengono usati menu, tool-profile, scope per sessione o refresh dinamico del catalogo. La guida è progressiva e result-driven: l'agente vede subito il dominio corretto e riceve il passo successivo soltanto dopo l'esito reale.",
         "",
         "## Conseguenze",
         "",
-        "L'adapter legacy continua a vedere i nomi storici, mentre la sessione MCP 2.0 usa superfici knowledge_* senza alias duplicati. La guida è deterministica ma non è un enforcement server-side: la qualità del routing iniziale in linguaggio naturale resta dipendente dal modello e richiede eval provider-specifiche.",
+        "Le ere legacy e MCP 2.0 vedono gli stessi otto nomi knowledge_* senza alias duplicati. Gli schemi bloccano chiamate incomplete e le transizioni critiche sono validate server-side; il routing iniziale in linguaggio naturale richiede comunque eval su modelli reali.",
       ],
     },
     {
@@ -489,11 +489,11 @@ function selfWikiPages(): SelfWikiPage[] {
       tags: ["risks", "production", "limits"],
       authority: "validated_report",
       body: [
-        `Vedi [[${OVERVIEW_TITLE}]], [[Requisiti di produzione]] e [[Guida menu-first per agenti]].`,
+        `Vedi [[${OVERVIEW_TITLE}]], [[Requisiti di produzione]] e [[Guida domain-first per agenti]].`,
         "",
         "## Rischi residui",
         "",
-        "- Il menu rende il percorso meccanicamente seguibile ma non garantisce che ogni modello classifichi correttamente una richiesta naturale; servono A/B su modelli reali.",
+        "- Gli otto domini e nextAction riducono le scelte ma non garantiscono che ogni modello classifichi correttamente una richiesta naturale; servono A/B su modelli reali.",
         "- Il token estimator UTF-8 bytes / 3 è riproducibile ma non coincide necessariamente con il tokenizer del provider.",
         "- L'adapter legacy è ancora incluso per compatibilità: un host vecchio può negoziarlo, mentre questo dogfood lo vieta esplicitamente.",
         "- Mermaid dipende dall'avvio di Chromium; container e policy sandbox possono richiedere configurazione aggiuntiva.",
@@ -592,10 +592,10 @@ function reportMarkdown(metrics: Record<string, unknown>): string {
     "",
     "```mermaid",
     "flowchart TD",
-    "  A[server/discover moderno] --> B[knowledge_menu]",
-    "  B --> C[code evidence rebuild e query]",
-    "  C --> D[wiki_write_page]",
-    "  D --> E[wiki_lint]",
+    "  A[server/discover moderno] --> B[8 tool di dominio]",
+    "  B --> C[knowledge_code rebuild e query]",
+    "  C --> D[knowledge_page write]",
+    "  D --> E[knowledge_admin lint]",
     "  E --> F[knowledge_context compact]",
     "  F --> G[resources/read]",
     "  G --> H[review ed export DOCX]",
@@ -635,14 +635,17 @@ async function main(): Promise<void> {
   const harness = await createHarness();
   try {
     const discover = await harness.request("server/discover");
-    assert.match(String(discover.instructions ?? ""), /knowledge_menu/);
+    assert.match(String(discover.instructions ?? ""), /knowledge_context mode=task/);
+    assert.match(String(discover.instructions ?? ""), /nextAction/);
     assert.deepEqual(harness.eras, ["modern"], "The server factory must only instantiate the modern era.");
 
     const listed = await harness.request("tools/list");
     const tools = listed.tools as Array<{ name?: string }>;
     const toolNames = tools.map((tool) => tool.name).filter((name): name is string => Boolean(name));
     assert.equal(toolNames.length, EXPECTED_MODERN_TOOL_COUNT);
-    assert.equal(toolNames.includes("knowledge_menu"), true);
+    assert.equal(toolNames.includes("knowledge_menu"), false);
+    assert.equal(toolNames.includes("knowledge_context"), true);
+    assert.equal(toolNames.includes("knowledge_ingest"), true);
     assert.equal(toolNames.includes("wiki_menu"), false);
     assert.equal(toolNames.includes("wiki_read_resource"), false, "Legacy read tool leaked into MCP 2.0.");
 
@@ -653,53 +656,19 @@ async function main(): Promise<void> {
     assert.equal((resources.resources as unknown[]).length, 2);
     assert.equal((resourceTemplates.resourceTemplates as unknown[]).length, 2);
 
-    const rootMenu = await harness.callTool("knowledge_menu");
-    assert.equal((rootMenu.structuredContent?.areas as unknown[]).length, 5);
+    const initialized = await harness.callTool("knowledge_admin", { action: "init", force: false });
+    assert.equal((initialized.structuredContent?.nextAction as { tool?: string }).tool, "knowledge_context");
+    await harness.callTool("knowledge_admin", { action: "lint" });
 
-    const adminMenu = await harness.callTool("knowledge_menu", { area: "admin" });
-    assert.ok((adminMenu.structuredContent?.operations as unknown[]).length >= 1);
-    const initializeGuide = await harness.callTool("knowledge_menu", {
-      area: "admin",
-      operation: "initialize",
-    });
-    assert.equal((initializeGuide.structuredContent?.next as { tool?: string }).tool, "knowledge_init");
-    await harness.callTool("knowledge_init", { force: false });
-
-    const initialLintGuide = await harness.callTool("knowledge_menu", {
-      area: "admin",
-      operation: "initialize",
-      completed_step_id: "admin_initialize",
-    });
-    assert.equal((initialLintGuide.structuredContent?.next as { tool?: string }).tool, "wiki_lint");
-    await harness.callTool("wiki_lint");
-
-    await harness.callTool("knowledge_menu", { area: "code" });
-    const rebuildGuide = await harness.callTool("knowledge_menu", {
-      area: "code",
-      operation: "rebuild_index",
-    });
-    assert.deepEqual(
-      (rebuildGuide.structuredContent?.next as { tool?: string; action?: string }),
-      {
-        id: "rebuild_code_index",
-        tool: "knowledge_code_evidence",
-        action: "rebuild",
-        suggestedArguments: { action: "rebuild" },
-      }
-    );
-    const rebuilt = await harness.callTool("knowledge_code_evidence", { action: "rebuild" }, 120_000);
+    const rebuilt = await harness.callTool("knowledge_code", { action: "rebuild" }, 120_000);
+    assert.equal((rebuilt.structuredContent?.nextAction as { action?: string }).action, "status");
     const update = rebuilt.structuredContent?.update as {
       scannedFiles: number;
       fragmentCount: number;
     };
     assert.ok(update.scannedFiles > 0);
     assert.ok(update.fragmentCount > 0);
-    await harness.callTool("knowledge_menu", {
-      area: "code",
-      operation: "rebuild_index",
-      completed_step_id: "rebuild_code_index",
-    });
-    const codeStatus = await harness.callTool("knowledge_code_evidence", { action: "status" });
+    const codeStatus = await harness.callTool("knowledge_code", { action: "status" });
     const status = codeStatus.structuredContent?.status as {
       indexedFiles: number;
       indexedFragments: number;
@@ -708,7 +677,7 @@ async function main(): Promise<void> {
     assert.equal(status.recordedGrepFallbacks, 0);
 
     const codeQueries = [
-      "MCP server workflow menu protocol modern",
+      "MCP server domain tools nextAction protocol modern",
       "hybrid retrieval progressive widening task context",
       "source coverage Evidence IR synthesis",
       "code evidence index resource reader",
@@ -717,7 +686,7 @@ async function main(): Promise<void> {
     ];
     const codeResourceUris = new Set<string>();
     for (const query of codeQueries) {
-      const found = await harness.callTool("knowledge_code_evidence", {
+      const found = await harness.callTool("knowledge_code", {
         action: "search",
         query,
         max_results: 8,
@@ -751,22 +720,21 @@ async function main(): Promise<void> {
       contextResourceReads: 0,
     });
     const pages = [...selfWikiPages(), initialTestPage];
-    await harness.callTool("knowledge_menu", { area: "admin", operation: "create_page" });
     for (const page of pages) {
-      await harness.callTool("wiki_write_page", {
+      await harness.callTool("knowledge_page", {
+        action: "write",
         path: page.path,
         content: pageMarkdown(page, date),
       });
     }
 
-    const preliminaryLint = await harness.callTool("wiki_lint");
+    const preliminaryLint = await harness.callTool("knowledge_admin", { action: "lint" });
     const preliminaryLintText = textContent(preliminaryLint);
     const preliminaryLintClean = preliminaryLintText.includes("Nessun problema trovato");
     assert.equal(preliminaryLintClean, true, preliminaryLintText);
 
-    await harness.callTool("knowledge_menu", { area: "read" });
-    await harness.callTool("knowledge_menu", { area: "read", operation: "review" });
     const contextArgs = {
+      mode: "task",
       intent: "review",
       objective: "Valutare la readiness produttiva MCP 2.0 di KnowledgeRail",
       query: "MCP 2.0 produzione protocollo moderno test rischi requisiti sicurezza workflow",
@@ -779,15 +747,18 @@ async function main(): Promise<void> {
       evidence?: unknown[];
       gaps?: Array<Record<string, unknown>>;
       retrieval?: { coverageSufficient?: boolean; evidenceGaps?: string[] };
+      nextAction?: {
+        tool?: string;
+        suggestedArguments?: { heuristic_token_budget?: number };
+      } | null;
     };
     const contextBudgets = [2_000];
-    const wideningBudgets = [4_000, 8_000, 12_000];
     const materializedWikiUris = new Set<string>();
     let contextResourceReads = 0;
     let contextCoverageSufficient = false;
     let blockingContextGaps: Array<Record<string, unknown>> = [];
 
-    for (let wideningAttempt = 0; ; wideningAttempt++) {
+    for (;;) {
       const wikiResourceUris = resourceLinks(context);
       assert.ok(wikiResourceUris.length > 0);
       for (const uri of wikiResourceUris.slice(0, 3)) {
@@ -812,18 +783,13 @@ async function main(): Promise<void> {
       contextCoverageSufficient =
         contextStructured.retrieval?.coverageSufficient === true &&
         observedEvidenceGaps.length === 0;
-      await harness.callTool("knowledge_menu", {
-        area: "read",
-        operation: "review",
-        completed_step_id: "read_selected_resources",
-        outcome: contextCoverageSufficient ? "coverage_sufficient" : "coverage_insufficient",
-        coverage_sufficient: contextCoverageSufficient,
-        evidence_gaps: observedEvidenceGaps,
-      });
-
       if (contextCoverageSufficient) break;
-      const nextBudget = wideningBudgets[wideningAttempt];
-      assert.ok(nextBudget, `Task Context remained incomplete at ${contextBudgets.at(-1)} tokens.`);
+      assert.equal(contextStructured.nextAction?.tool, "knowledge_context");
+      const nextBudget = contextStructured.nextAction?.suggestedArguments?.heuristic_token_budget;
+      assert.ok(
+        nextBudget && nextBudget > contextBudgets.at(-1)! && nextBudget <= 12_000,
+        `Task Context returned no valid bounded widening after ${contextBudgets.at(-1)} tokens.`
+      );
       contextBudgets.push(nextBudget);
       context = await harness.callTool("knowledge_context", {
         ...contextArgs,
@@ -849,12 +815,13 @@ async function main(): Promise<void> {
       contextBudgets,
       contextResourceReads,
     });
-    await harness.callTool("wiki_write_page", {
+    await harness.callTool("knowledge_page", {
+      action: "write",
       path: finalTestPage.path,
       content: pageMarkdown(finalTestPage, date),
     });
 
-    const finalLint = await harness.callTool("wiki_lint");
+    const finalLint = await harness.callTool("knowledge_admin", { action: "lint" });
     const finalLintText = textContent(finalLint);
     const lintClean = finalLintText.includes("Nessun problema trovato");
     assert.equal(lintClean, true, finalLintText);
@@ -890,14 +857,15 @@ async function main(): Promise<void> {
       durationMs: Number((performance.now() - startedAt).toFixed(2)),
     };
 
-    await harness.callTool("knowledge_menu", { area: "document", operation: "create" });
-    await harness.callTool("knowledge_plan_document", {
+    await harness.callTool("knowledge_document_context", {
+      action: "plan",
       document_type: "custom",
       project_name: "KnowledgeRail",
       objective: "Registrare il dogfood MCP 2.0",
       audience: "maintainer",
     });
-    await harness.callTool("knowledge_section_context", {
+    await harness.callTool("knowledge_document_context", {
+      action: "section",
       section_title: "Readiness produttiva MCP 2.0",
       document_type: "custom",
       query: "protocollo moderno requisiti test rischi produzione",
@@ -909,14 +877,16 @@ async function main(): Promise<void> {
       max_pages: 8,
       heuristic_token_budget: 4_000,
     });
-    await harness.callTool("knowledge_write_document", {
+    await harness.callTool("knowledge_document", {
+      action: "write",
       filename: "knowledge-rail_mcp2_dogfood_report.md",
       title: "Report di dogfood MCP 2.0 — KnowledgeRail",
       document_type: "custom",
       content: reportMarkdown(metrics),
       overwrite: true,
     });
-    const review = await harness.callTool("knowledge_review_document", {
+    const review = await harness.callTool("knowledge_document", {
+      action: "review",
       filename: "knowledge-rail_mcp2_dogfood_report.md",
       document_type: "custom",
       language: "italiano",
@@ -926,7 +896,8 @@ async function main(): Promise<void> {
     const reviewText = textContent(review);
     assert.match(reviewText, /^- \*\*INFO NESSUN_BLOCCANTE:/m);
     assert.doesNotMatch(reviewText, /^- \*\*(?:BLOCKER|WARNING) /m);
-    const exported = await harness.callTool("knowledge_export_docx", {
+    const exported = await harness.callTool("knowledge_document", {
+      action: "export",
       filename: "knowledge-rail_mcp2_dogfood_report",
       document_type: "custom",
       client: "KnowledgeRail maintainers",

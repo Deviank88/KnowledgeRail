@@ -76,8 +76,8 @@ test("migration supports v1/v2 detection, dry-run and idempotent v4 repair", asy
   assert.equal(await detectWikiVersion(root), 4);
   const migratedSchema = await fs.readFile(path.join(root, "SCHEMA.md"), "utf-8");
   assert.equal(migratedSchema, originalSchema, "migration must not rewrite canonical project conventions");
-  assert.equal(migrateSchemaText(originalSchema).includes("`wiki_search` senza query"), true);
-  assert.equal(migrateSchemaText(originalSchema).includes("`wiki_graph_query view=traceability`"), true);
+  assert.equal(migrateSchemaText(originalSchema).includes("`knowledge_context mode=search` senza query"), true);
+  assert.equal(migrateSchemaText(originalSchema).includes("`knowledge_context mode=graph view=traceability`"), true);
   const repair = await applyWikiMigration(root, { backup: true });
   assert.equal(repair.plan.detectedVersion, 4);
   await fs.access(path.join(root, ".knowledge-rail", "state.json"));

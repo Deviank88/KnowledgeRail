@@ -1,7 +1,24 @@
 export type ProtocolEra = "legacy" | "modern";
 
+/** The complete public catalog in both protocol eras. */
+export const AGENT_TOOL_NAMES = {
+  context: "knowledge_context",
+  page: "knowledge_page",
+  files: "knowledge_files",
+  ingest: "knowledge_ingest",
+  code: "knowledge_code",
+  documentContext: "knowledge_document_context",
+  document: "knowledge_document",
+  admin: "knowledge_admin",
+} as const;
+
+export type AgentToolName = (typeof AGENT_TOOL_NAMES)[keyof typeof AGENT_TOOL_NAMES];
+
+/**
+ * Private operation identifiers retained only by the in-process adapter that
+ * reuses proven handlers. None of these identifiers are registered publicly.
+ */
 export const TOOL_NAMES = {
-  menu: { modern: "knowledge_menu", legacy: "wiki_menu" },
   context: { modern: "knowledge_context", legacy: "wiki_context" },
   files: { modern: "knowledge_files", legacy: "wiki_files" },
   normalizeSource: { modern: "knowledge_normalize_source", legacy: "wiki_normalize_source" },
@@ -34,21 +51,7 @@ export const TOOL_NAMES = {
 } as const;
 
 export type ToolKey = keyof typeof TOOL_NAMES;
-export type ModernToolName = (typeof TOOL_NAMES)[ToolKey]["modern"];
 
 export function toolName(key: ToolKey, era: ProtocolEra = "modern"): string {
   return TOOL_NAMES[key][era];
-}
-
-export function toolNameForEra(name: ModernToolName, era: ProtocolEra): string {
-  const entry = Object.values(TOOL_NAMES).find((candidate) => candidate.modern === name);
-  return entry ? entry[era] : name;
-}
-
-export function toolReferencesForEra(text: string, era: ProtocolEra): string {
-  if (era === "modern") return text;
-  return Object.values(TOOL_NAMES).reduce(
-    (result, names) => result.replaceAll(names.modern, names.legacy),
-    text
-  );
 }
