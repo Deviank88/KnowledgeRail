@@ -1,4 +1,8 @@
-# KnowledgeRail
+<p align="center">
+  <img src="assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
+</p>
+
+<h1 align="center">KnowledgeRail</h1>
 
 KnowledgeRail is a local-first MCP server that turns project documentation and source code into durable, evidence-backed context for AI agents.
 
