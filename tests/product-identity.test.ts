@@ -4,6 +4,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { wikiPageUri } from "../src/context/resource-uri.js";
+import { PRODUCT_VERSION } from "../src/product.js";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -18,6 +19,7 @@ test("product, npm and MCP Registry identities remain aligned", async () => {
   const registryPackage = packages[0]!;
 
   assert.equal(packageJson.name, "knowledge-rail");
+  assert.equal(packageJson.version, PRODUCT_VERSION);
   assert.equal(packageJson.mcpName, "io.github.deviank88/knowledge-rail");
   assert.equal(registryJson.title, "KnowledgeRail");
   assert.equal(registryJson.name, packageJson.mcpName);
@@ -26,6 +28,21 @@ test("product, npm and MCP Registry identities remain aligned", async () => {
   assert.equal(registryPackage.version, packageJson.version);
   assert.deepEqual(registryPackage.transport, { type: "stdio" });
   assert.match(wikiPageUri("requirements/REQ_1.md"), /^knowledge-rail:\/\/page\//);
+});
+
+test("public documentation distinguishes local self-hosting from future remote service", async () => {
+  const [readme, selfHosting, security] = await Promise.all([
+    readFile(path.join(repositoryRoot, "README.md"), "utf8"),
+    readFile(path.join(repositoryRoot, "SELF_HOSTING.md"), "utf8"),
+    readFile(path.join(repositoryRoot, "SECURITY.md"), "utf8"),
+  ]);
+  assert.match(readme, /operates no hosted service/i);
+  assert.match(readme, /Claude Desktop/i);
+  assert.match(readme, /Windows/);
+  assert.match(readme, /macOS/);
+  assert.match(readme, /Linux/);
+  assert.match(selfHosting, /rejects non-loopback/i);
+  assert.match(security, /opaque workspace binding/i);
 });
 
 test("public attribution credits the conceptual origin without redefining the product", async () => {

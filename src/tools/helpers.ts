@@ -4,6 +4,7 @@ import { invalidateManifestEntries } from "../core/manifest-service.js";
 import { wikiDir } from "../core/paths.js";
 import { updateRetrievalPaths } from "../core/retrieval-index.js";
 import { rebuildIndex } from "../core/wiki-index-service.js";
+import { WorkspaceAuthorizationError } from "../core/paths.js";
 
 export interface ToolResult {
   [key: string]: unknown;
@@ -25,6 +26,22 @@ export function structuredTextResult(
 
 export function errorResult(error: unknown): ToolResult {
   const text = error instanceof Error ? error.message : String(error);
+  if (error instanceof WorkspaceAuthorizationError) {
+    return {
+      content: [{ type: "text", text }],
+      isError: true,
+      structuredContent: {
+        state: "blocked",
+        reason: "workspace_binding_required",
+        nextAction: {
+          tool: "knowledge_workspace",
+          action: "list",
+          requiredArguments: ["action"],
+          suggestedArguments: { action: "list" },
+        },
+      },
+    };
+  }
   return { content: [{ type: "text", text }], isError: true };
 }
 

@@ -15,6 +15,9 @@ import { registerAgentTools } from "../tools/agent-tools.js";
 import { registerWikiPrompts } from "../tools/prompts.js";
 import { registerWikiResources } from "../tools/resources.js";
 import { type ProtocolEra } from "./tool-names.js";
+import { registerWorkspaceTool } from "../tools/workspace-tool.js";
+import type { WorkspaceBindingManager } from "../workspaces/bindings.js";
+import { PRODUCT_VERSION } from "../product.js";
 
 const STATIC_CATALOG_TTL_MS = 5 * 60 * 1_000;
 
@@ -32,6 +35,12 @@ export function mcpAgentInstructions(era: ProtocolEra): string {
 }
 
 export const MCP_AGENT_INSTRUCTIONS = mcpAgentInstructions("modern");
+
+export interface ServerBuildOptions {
+  profile?:
+    | { kind: "bound" }
+    | { kind: "catalog"; bindings: WorkspaceBindingManager; principalId: string };
+}
 
 function configureLegacyWorkspace(server: McpServer): void {
   let refreshQueue: Promise<void> = Promise.resolve();
@@ -80,15 +89,19 @@ function configureLegacyWorkspace(server: McpServer): void {
 }
 
 export function buildServer(
-  context: McpRequestContext = { era: "modern" }
+  context: McpRequestContext = { era: "modern" },
+  options: ServerBuildOptions = {}
 ): McpServer {
+  const profile = options.profile ?? { kind: "bound" as const };
   const server = new McpServer(
     {
       name: "knowledge-rail",
-      version: "1.0.0",
+      version: PRODUCT_VERSION,
     },
     {
-      instructions: mcpAgentInstructions(context.era),
+      instructions: profile.kind === "catalog"
+        ? "This is a context-free desktop chat. First call knowledge_workspace list, ask the user which workspace to use, then select it with explicit confirmation. Keep the returned opaque workspace_binding only in this conversation and include it in every domain call. Never invent an ID or filesystem path. Prefer a new chat when changing customer workspace."
+        : mcpAgentInstructions(context.era),
       // These catalogs are registration metadata and do not depend on wiki
       // contents. Modern clients may safely reuse them, reducing repeated
       // schema/context transfer. Mutable knowledge reads deliberately remain
@@ -103,11 +116,15 @@ export function buildServer(
     }
   );
 
-  registerAgentTools(server, context.era);
-  registerWikiPrompts(server, context.era);
-  registerWikiResources(server);
+  registerAgentTools(server, context.era, { includeWorkspaceBinding: profile.kind === "catalog" });
+  registerWikiPrompts(server, context.era, { includeWorkspaceBinding: profile.kind === "catalog" });
+  registerWikiResources(server, { includeWorkspaceBinding: profile.kind === "catalog" });
 
-  if (context.era === "legacy") {
+  if (profile.kind === "catalog") {
+    registerWorkspaceTool(server, profile.bindings, profile.principalId);
+  }
+
+  if (context.era === "legacy" && profile.kind === "bound") {
     configureLegacyWorkspace(server);
   }
 

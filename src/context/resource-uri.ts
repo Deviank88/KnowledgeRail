@@ -67,7 +67,9 @@ export function parseWikiResourceUri(uri: string): WikiResourceRef {
   const passageId = url.searchParams.get("passage") ?? undefined;
 
   for (const key of url.searchParams.keys()) {
-    if (key !== "passage") throw new Error(`Unsupported wiki resource URI parameter: ${key}`);
+    if (key !== "passage" && key !== "workspace_binding") {
+      throw new Error(`Unsupported wiki resource URI parameter: ${key}`);
+    }
   }
   if (passageId !== undefined && !isWikiPassageId(passageId)) {
     throw new Error(`Invalid passage id in wiki resource URI: ${passageId}`);

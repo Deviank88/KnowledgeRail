@@ -18,8 +18,13 @@ function parseCodeResourceUri(uri: string): { path: string; fragmentId: string }
   if (parsed.protocol !== "code:" || parsed.hostname !== "repo") {
     throw new Error(`Code evidence resources must use code://repo/: ${uri}`);
   }
-  if (!parsed.hash || parsed.search) {
-    throw new Error("Code evidence resource URI must contain one symbol fragment and no query string.");
+  for (const key of parsed.searchParams.keys()) {
+    if (key !== "workspace_binding") {
+      throw new Error(`Unsupported code evidence resource URI parameter: ${key}`);
+    }
+  }
+  if (!parsed.hash) {
+    throw new Error("Code evidence resource URI must contain one symbol fragment.");
   }
   let path: string;
   let fragmentId: string;

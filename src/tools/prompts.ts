@@ -18,22 +18,56 @@ function promptText(text: string): PromptResult {
   return { messages: [{ role: "user", content: { type: "text", text } }] };
 }
 
-export function registerWikiPrompts(server: McpServer, era: ProtocolEra = "modern"): void {
+const PlanDocumentPromptSchema = z.object({
+  document_type: z.enum(DOCUMENT_TYPES).describe(DOCUMENT_TYPES.join(" | ")),
+  project_name: z.string().optional(),
+  objective: z.string().optional(),
+  audience: z.string().optional(),
+});
+
+const DevReportPromptSchema = z.object({
+  client: z.string(),
+  project: z.string(),
+  request_id: z.string(),
+  objective: z.string(),
+});
+
+const KnowledgeUpdatePromptSchema = z.object({
+  finding: z.string(),
+  target_page_path: z.string().optional(),
+  page_type: z.enum(WIKI_PAGE_TYPES).optional(),
+  title: z.string().optional(),
+  knowledge_context: z.string().optional(),
+  code_context: z.string().optional(),
+  sources: z.string().optional().describe("Fonti separate da virgola"),
+});
+
+export function registerWikiPrompts(
+  server: McpServer,
+  era: ProtocolEra = "modern",
+  options: { includeWorkspaceBinding?: boolean } = {}
+): void {
   void era;
+  const bindingField = {
+    workspace_binding: z.string().min(20).optional()
+      .describe("Opaque binding returned by knowledge_workspace; desktop/catalog profile only."),
+  };
+  const schemas = options.includeWorkspaceBinding ? {
+    document: PlanDocumentPromptSchema.safeExtend(bindingField),
+    report: DevReportPromptSchema.safeExtend(bindingField),
+    update: KnowledgeUpdatePromptSchema.safeExtend(bindingField),
+  } : {
+    document: PlanDocumentPromptSchema,
+    report: DevReportPromptSchema,
+    update: KnowledgeUpdatePromptSchema,
+  };
   server.registerPrompt(
     "plan_document",
     {
       title: "Piano editoriale documento",
       description:
         "Genera il piano editoriale (sezioni, writer, context pack, checklist) per un documento in docs/deliverables.",
-      argsSchema: z.object({
-              document_type: z
-                .enum(DOCUMENT_TYPES)
-                .describe(DOCUMENT_TYPES.join(" | ")),
-              project_name: z.string().optional(),
-              objective: z.string().optional(),
-              audience: z.string().optional(),
-            }),
+      argsSchema: schemas.document,
     },
     async ({ document_type, project_name, objective, audience }) =>
       promptText(
@@ -52,12 +86,7 @@ export function registerWikiPrompts(server: McpServer, era: ProtocolEra = "moder
       title: "Template development report",
       description:
         "Restituisce il template obbligatorio del development report da compilare prima dell'ingestione wiki.",
-      argsSchema: z.object({
-              client: z.string(),
-              project: z.string(),
-              request_id: z.string(),
-              objective: z.string(),
-            }),
+      argsSchema: schemas.report,
     },
     ({ client, project, request_id, objective }) =>
       promptText(
@@ -75,15 +104,7 @@ export function registerWikiPrompts(server: McpServer, era: ProtocolEra = "moder
     {
       title: "Prepara aggiornamento wiki",
       description: "Genera una bozza wiki valida da una lacuna e dalle evidenze disponibili.",
-      argsSchema: z.object({
-              finding: z.string(),
-              target_page_path: z.string().optional(),
-              page_type: z.enum(WIKI_PAGE_TYPES).optional(),
-              title: z.string().optional(),
-              knowledge_context: z.string().optional(),
-              code_context: z.string().optional(),
-              sources: z.string().optional().describe("Fonti separate da virgola"),
-            }),
+      argsSchema: schemas.update,
     },
     ({ finding, target_page_path, page_type, title, knowledge_context, code_context, sources }) => {
       const draft = prepareKnowledgeUpdateDraft({

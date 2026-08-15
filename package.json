@@ -21,6 +21,9 @@
   ],
   "files": [
     "ACKNOWLEDGEMENTS.md",
+    "SELF_HOSTING.md",
+    "SECURITY.md",
+    "assets/knowledge-rail-logo.png",
     "dist",
     "server.json"
   ],
@@ -35,6 +38,7 @@
     "check": "tsc --noEmit",
     "test": "node scripts/run-tests.mjs",
     "verify": "npm run check && npm test",
+    "package:smoke": "node scripts/package-smoke.mjs",
     "audit:runtime": "npm audit --omit=dev --audit-level=high",
     "bench": "tsx benchmarks/search-bench.ts",
     "bench:scale": "tsx benchmarks/search-bench.ts",
@@ -68,6 +72,7 @@
     "eval:documents:gate": "tsx benchmarks/document-contract-baseline-gate.ts",
     "eval:tool-surface": "tsx benchmarks/tool-surface-eval.ts",
     "eval:tool-surface:gate": "tsx benchmarks/tool-surface-baseline-gate.ts",
+    "eval:gates": "node scripts/run-quality-gates.mjs",
     "dogfood:self-wiki": "node --import tsx scripts/dogfood-self-wiki.ts",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
@@ -78,6 +83,8 @@
   },
   "dependencies": {
     "@mermaid-js/mermaid-cli": "^11.16.0",
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@modelcontextprotocol/node": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "docx": "^8.5.0",
     "fast-glob": "^3.3.3",

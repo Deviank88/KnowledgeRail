@@ -374,7 +374,14 @@ function withGuidance(
 ): OperationResult {
   if (!isCallToolResult(result)) return result;
   const content: ContentBlock[] = [...result.content];
-  const effectiveNext = result.isError ? null : nextAction;
+  const previous: Record<string, unknown> = result.structuredContent && typeof result.structuredContent === "object" &&
+      !Array.isArray(result.structuredContent)
+    ? result.structuredContent as Record<string, unknown>
+    : {};
+  const errorNext = previous.nextAction && typeof previous.nextAction === "object"
+    ? previous.nextAction as NextAction
+    : null;
+  const effectiveNext = result.isError ? errorNext : nextAction;
   const guidanceLines: string[] = [];
   if (!result.isError && effectiveNext) {
     guidanceLines.push(
@@ -389,10 +396,6 @@ function withGuidance(
       text: guidanceLines.join("\n"),
     });
   }
-  const previous = result.structuredContent && typeof result.structuredContent === "object" &&
-      !Array.isArray(result.structuredContent)
-    ? result.structuredContent
-    : {};
   const resultText = content
     .filter((item): item is Extract<ContentBlock, { type: "text" }> => item.type === "text")
     .map((item) => item.text)
@@ -480,14 +483,47 @@ function omit<T extends Record<string, unknown>>(value: T, keys: readonly string
   return Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)));
 }
 
-export function registerAgentTools(server: McpServer, era: ProtocolEra = "modern"): void {
+export function registerAgentTools(
+  server: McpServer,
+  era: ProtocolEra = "modern",
+  options: { includeWorkspaceBinding?: boolean } = {}
+): void {
   const operations = createOperationRegistry(era);
   const call = (key: ToolKey, args: unknown, context: ServerContext) =>
-    operations.call(key, args, context);
+    operations.call(
+      key,
+      args && typeof args === "object" && !Array.isArray(args)
+        ? omit(args as Record<string, unknown>, ["workspace_binding"])
+        : args,
+      context
+    );
+  const bindingField = {
+    workspace_binding: z.string().min(20).optional()
+      .describe("Opaque binding returned by knowledge_workspace; desktop/catalog profile only."),
+  };
+  const schemas = options.includeWorkspaceBinding ? {
+    context: ContextSchema.safeExtend(bindingField),
+    page: PageSchema.safeExtend(bindingField),
+    files: FilesSchema.safeExtend(bindingField),
+    ingest: IngestSchema.safeExtend(bindingField),
+    code: CodeSchema.safeExtend(bindingField),
+    documentContext: DocumentContextSchema.safeExtend(bindingField),
+    document: DocumentSchema.safeExtend(bindingField),
+    admin: AdminSchema.safeExtend(bindingField),
+  } : {
+    context: ContextSchema,
+    page: PageSchema,
+    files: FilesSchema,
+    ingest: IngestSchema,
+    code: CodeSchema,
+    documentContext: DocumentContextSchema,
+    document: DocumentSchema,
+    admin: AdminSchema,
+  };
 
   server.registerTool(AGENT_TOOL_NAMES.context, {
     description: "Project evidence and gaps; page list/search; relation graph.",
-    inputSchema: ContextSchema,
+    inputSchema: schemas.context,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (args, context) => {
@@ -553,7 +589,7 @@ export function registerAgentTools(server: McpServer, era: ProtocolEra = "modern
 
   server.registerTool(AGENT_TOOL_NAMES.page, {
     description: "Canonical page CRUD and durable log.",
-    inputSchema: PageSchema,
+    inputSchema: schemas.page,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
   }, async (args, context) => {
@@ -578,7 +614,7 @@ export function registerAgentTools(server: McpServer, era: ProtocolEra = "modern
 
   server.registerTool(AGENT_TOOL_NAMES.files, {
     description: "Controlled source files: list, read or normalize to Markdown.",
-    inputSchema: FilesSchema,
+    inputSchema: schemas.files,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
   }, async (args, context) => {
@@ -610,7 +646,7 @@ export function registerAgentTools(server: McpServer, era: ProtocolEra = "modern
 
   server.registerTool(AGENT_TOOL_NAMES.ingest, {
     description: "Source ingestion: claims, coverage, recovery and report drafts.",
-    inputSchema: IngestSchema,
+    inputSchema: schemas.ingest,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
   }, async (args, context) => {
@@ -728,7 +764,7 @@ export function registerAgentTools(server: McpServer, era: ProtocolEra = "modern
 
   server.registerTool(AGENT_TOOL_NAMES.code, {
     description: "Code index, symbols, callers and raw fallback.",
-    inputSchema: CodeSchema,
+    inputSchema: schemas.code,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
   }, async (args, context) => {
@@ -764,7 +800,7 @@ export function registerAgentTools(server: McpServer, era: ProtocolEra = "modern
 
   server.registerTool(AGENT_TOOL_NAMES.documentContext, {
     description: "Plan a typed document or gather section evidence.",
-    inputSchema: DocumentContextSchema,
+    inputSchema: schemas.documentContext,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (args, context) => {
@@ -787,7 +823,7 @@ export function registerAgentTools(server: McpServer, era: ProtocolEra = "modern
 
   server.registerTool(AGENT_TOOL_NAMES.document, {
     description: "Write, review or export a typed deliverable.",
-    inputSchema: DocumentSchema,
+    inputSchema: schemas.document,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
   }, async (args, context) => {
@@ -835,7 +871,7 @@ export function registerAgentTools(server: McpServer, era: ProtocolEra = "modern
 
   server.registerTool(AGENT_TOOL_NAMES.admin, {
     description: "Initialize, lint or migrate storage.",
-    inputSchema: AdminSchema,
+    inputSchema: schemas.admin,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
   }, async (args, context) => {

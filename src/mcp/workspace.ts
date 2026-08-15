@@ -1,7 +1,14 @@
 import * as nodePath from "node:path";
 import { setWikiRoot, uriToPath } from "../core/paths.js";
+import { discoverWorkspaceFromCwd } from "./workspace-discovery.js";
 
-export type WorkspaceSource = "explicit" | "legacy_roots" | "env" | "cwd";
+export type WorkspaceSource =
+  | "explicit"
+  | "legacy_roots"
+  | "env"
+  | "knowledge_rail_marker"
+  | "project_marker"
+  | "cwd";
 
 export interface WorkspaceResolution {
   root: string;
@@ -17,6 +24,8 @@ export interface WorkspaceResolverOptions {
   envRoot?: string | null;
   /** Override for tests. Defaults to process.cwd(). */
   cwd?: string;
+  /** Enable safe upward project discovery instead of the v3 cwd fallback. */
+  automaticDiscovery?: boolean;
 }
 
 export interface LegacyRootsCapableServer {
@@ -59,10 +68,11 @@ export async function resolveWorkspace(
   const envRoot = normalizedRoot(configuredEnv);
   if (envRoot) return { root: envRoot, source: "env" };
 
-  return {
-    root: nodePath.resolve(options.cwd ?? process.cwd()),
-    source: "cwd",
-  };
+  if (options.automaticDiscovery) {
+    return discoverWorkspaceFromCwd(options.cwd ?? process.cwd());
+  }
+
+  return { root: nodePath.resolve(options.cwd ?? process.cwd()), source: "cwd" };
 }
 
 export function activateWorkspace(resolution: WorkspaceResolution): WorkspaceResolution {

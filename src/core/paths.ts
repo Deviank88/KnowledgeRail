@@ -1,5 +1,6 @@
 import * as nodePath from "node:path";
 import { fileURLToPath } from "node:url";
+import { getActiveWorkspaceContext } from "./workspace-context.js";
 
 let currentWikiRoot: string = process.cwd();
 let wikiRootReady = true;
@@ -8,6 +9,13 @@ export class WikiWorkspacePendingError extends Error {
   constructor() {
     super("Wiki workspace resolution is still in progress. Retry the operation after workspace negotiation completes.");
     this.name = "WikiWorkspacePendingError";
+  }
+}
+
+export class WorkspaceAuthorizationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkspaceAuthorizationError";
   }
 }
 
@@ -24,6 +32,15 @@ export function markWikiRootPending(): void {
 }
 
 export function getWikiRoot(): string {
+  const requestWorkspace = getActiveWorkspaceContext();
+  if (requestWorkspace) {
+    if (!requestWorkspace.authorized) {
+      throw new WorkspaceAuthorizationError(
+        requestWorkspace.authorizationError ?? "Workspace access is not authorized."
+      );
+    }
+    return requestWorkspace.paths.projectRoot;
+  }
   if (!wikiRootReady) throw new WikiWorkspacePendingError();
   return currentWikiRoot;
 }

@@ -8,7 +8,7 @@ KnowledgeRail is a local-first MCP server that turns project documentation and s
 
 It is designed for agents that need to understand, change, review, or document a codebase without loading the whole repository into the model context. Retrieval is bounded, provenance is preserved, missing evidence is reported explicitly, and difficult queries widen progressively instead of silently losing relevant information.
 
-> **Current status:** initial public release `1.0.0`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. The supported transport is local `stdio`; a remote/serverless deployment is not implemented yet. See [SERVERLESS.md](SERVERLESS.md).
+> **Current status:** release candidate `1.0.0`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
 
 ## What it provides
 
@@ -20,6 +20,9 @@ It is designed for agents that need to understand, change, review, or document a
 - Incremental graph, retrieval, and semantic indexes stored beside the project wiki.
 - Contract-driven Markdown deliverables and gated DOCX export with Mermaid diagrams.
 - Conservative migration of existing v1/v2/v3 wikis.
+- Automatic per-process workspace binding for IDEs and terminal agents.
+- A local HTTP gateway that keeps concurrent clients and projects isolated per request.
+- A desktop-chat workspace catalog with opaque, expiring per-chat bindings.
 
 KnowledgeRail does not call an LLM itself. The connected MCP client chooses and calls the tools. OCR and embeddings are optional external providers configured by the user.
 
@@ -31,7 +34,19 @@ KnowledgeRail does not call an LLM itself. The connected MCP client chooses and 
 
 Mermaid CLI and its compatible Chromium runtime are installed with the package. A separate global Mermaid installation is not required.
 
-## Install and run
+## Quick start with npx
+
+Run this from any directory inside the project you opened in VS Code, Cursor, a terminal, or another context-aware coding client:
+
+```bash
+npx -y knowledge-rail@<exact-version>
+```
+
+No project path is needed in the persistent MCP configuration. KnowledgeRail discovers the opened project independently for each process, so project X and project Y can be used at the same time by different agent sessions.
+
+The npm package is not considered available until the maintainers publish the reviewed release. Until then, use the source-checkout commands below. Pin an exact version in persistent configurations after publication; reserve `@latest` for one-time trials.
+
+## Install and run from source
 
 ### From source
 
@@ -42,37 +57,23 @@ npm ci
 npm run build
 ```
 
-Start it from the project whose knowledge you want to manage:
+Start it from any directory inside the project whose knowledge you want to manage:
 
 ```bash
 cd /path/to/your-project
 node /absolute/path/to/KnowledgeRail/dist/index.js
 ```
 
-### From npm
+## IDE, Cursor and terminal configuration
 
-After the first public package release:
-
-```bash
-npm install --global knowledge-rail
-cd /path/to/your-project
-knowledge-rail
-```
-
-The npm package is not considered available until it is published by the maintainers. Installing from source is the supported pre-release path.
-
-## MCP client configuration
-
-Use the standard `stdio` server shape supported by your MCP client:
+Use the standard `stdio` server shape once. Do not hard-code one repository:
 
 ```json
 {
   "mcpServers": {
     "knowledge-rail": {
-      "command": "knowledge-rail",
-      "env": {
-        "WIKI_ROOT": "/absolute/path/to/your-project"
-      }
+      "command": "npx",
+      "args": ["-y", "knowledge-rail@<exact-version>"]
     }
   }
 }
@@ -85,16 +86,74 @@ For a source checkout, replace `knowledge-rail` with Node and the compiled entry
   "mcpServers": {
     "knowledge-rail": {
       "command": "node",
-      "args": ["/absolute/path/to/KnowledgeRail/dist/index.js"],
-      "env": {
-        "WIKI_ROOT": "/absolute/path/to/your-project"
-      }
+      "args": ["/absolute/path/to/KnowledgeRail/dist/index.js"]
     }
   }
 }
 ```
 
-Client configuration wrappers and file locations differ, but the `command`, `args`, and `env` values are portable. Use absolute paths on every operating system. When `WIKI_ROOT` is omitted, KnowledgeRail uses the server process working directory. Legacy MCP clients may provide Roots; modern `2026-07-28` sessions do not need them.
+The workspace is resolved separately for every launched server with this precedence: explicit `--root`; one unambiguous legacy MCP Root; `WIKI_ROOT` for compatibility; the nearest existing KnowledgeRail marker; the nearest project/VCS marker; finally a safe non-empty cwd. Filesystem roots, the user home, package caches, and known desktop-application directories fail closed. `--root <absolute-path>` remains an operator troubleshooting override, not normal configuration.
+
+When a client has multiple open roots, its integration must launch KnowledgeRail with the active project as cwd (or expose one unambiguous legacy Root). KnowledgeRail never chooses the first root silently and never sends an IDE user through the desktop workspace selector.
+
+## Claude Desktop and other context-free desktop chats
+
+A desktop chat does not open a filesystem folder, so it cannot safely infer a project from its process cwd. Configure the local adapter once:
+
+```json
+{
+  "mcpServers": {
+    "knowledge-rail": {
+      "command": "npx",
+      "args": ["-y", "knowledge-rail@<exact-version>", "desktop"]
+    }
+  }
+}
+```
+
+For a source checkout, use `node /absolute/path/to/KnowledgeRail/dist/index.js desktop`. The adapter discovers or starts the protected loopback gateway automatically and exposes `knowledge_workspace` in addition to the eight domain tools.
+
+In a new chat, ask KnowledgeRail to list workspaces, choose one entry, and confirm `read` or `write` access. The returned opaque binding belongs to that conversation and must accompany its later domain calls. Two chats can select different customers/projects concurrently. Start a new chat when changing customer workspace: filesystem access is isolated, but information already present in conversation history cannot be removed by the server.
+
+Projects opened successfully by an IDE/terminal are added to the local catalog automatically without changing their clean eight-tool workflow. Operators can also manage catalog metadata locally:
+
+```bash
+npx -y knowledge-rail@<exact-version> workspace list
+npx -y knowledge-rail@<exact-version> workspace register
+npx -y knowledge-rail@<exact-version> workspace register /absolute/project/path
+npx -y knowledge-rail@<exact-version> workspace unregister ws_example
+```
+
+Registration never copies, uploads, scans the disk, or deletes project files. `workspace register` without a path discovers only upward from cwd.
+
+## Local self-hosted HTTP gateway
+
+Start one gateway for many concurrent local clients and workspaces:
+
+```bash
+npx -y knowledge-rail@<exact-version> --transport http
+```
+
+The default endpoint is `http://127.0.0.1:3333/mcp`; liveness only is available at `/healthz`. MCP requests require the random credential stored in the OS-protected per-user KnowledgeRail state directory. The desktop adapter reads it automatically, so it never belongs in project configuration or a repository.
+
+The gateway does not have a current root. Every filesystem-capable request must resolve a valid opaque binding before the first path access. Bindings are scoped, expiring, revocable, and invalidated on gateway restart. Resource links are workspace-qualified and revalidated when read.
+
+The shipped gateway deliberately rejects non-loopback binding. It is local self-hosting, not public OAuth or hostile-user multi-tenancy. `claude.ai` and Claude remote custom connectors cannot use a localhost endpoint because those connections originate from the provider cloud; Claude Desktop local MCP uses the `desktop` adapter above.
+
+| Client context | Entry point | Workspace behavior | Tool catalog |
+| --- | --- | --- | --- |
+| VS Code, Cursor, terminal agent | default `stdio` | automatic from the opened project, per process | 8 domain tools |
+| Claude Desktop/local desktop chat | `desktop` | user chooses an approved catalog entry per chat | `knowledge_workspace` + 8 domain tools |
+| Generic trusted local HTTP client | `--transport http` | binding supplied on every filesystem-capable request | `knowledge_workspace` + 8 domain tools |
+
+Platform state locations are `%LOCALAPPDATA%\KnowledgeRail` on Windows, `~/Library/Application Support/KnowledgeRail` on macOS, and `${XDG_STATE_HOME:-~/.local/state}/knowledge-rail` on Linux. Set `KNOWLEDGE_RAIL_STATE_DIR` only for controlled testing or an intentional custom local installation. Docker/devcontainers and WSL have separate filesystems and therefore separate catalogs unless their state and project mounts are explicitly shared.
+
+### Operating-system notes
+
+- **Windows:** if an MCP host does not resolve npm command shims, use `"command": "npx.cmd"`; escape backslashes in JSON paths (`C:\\Tools\\KnowledgeRail\\dist\\index.js`). PowerShell operator commands use the same CLI arguments shown above. Drive-letter case and junction/real paths are canonicalized before binding.
+- **macOS:** the first Chromium/Mermaid use may be subject to normal Gatekeeper/browser permissions. The state directory is inside `Library/Application Support`, not the opened repository.
+- **Linux:** `XDG_STATE_HOME` is honored. Headless CI/container environments may need `KNOWLEDGE_RAIL_MERMAID_NO_SANDBOX=true`, but ordinary workstations should retain Chromium sandboxing.
+- **WSL and containers:** run the MCP process in the same filesystem environment as the project. A Windows Claude Desktop process and a WSL-only localhost/state directory are distinct unless an explicit bridge is configured.
 
 ## Agent workflow
 
@@ -237,12 +296,15 @@ For Mermaid rendering, `KNOWLEDGE_RAIL_MERMAID_NO_SANDBOX=true` is intended only
 
 | Capability | Status |
 | --- | --- |
-| MCP SDK | `@modelcontextprotocol/server` `2.x` |
+| MCP SDK | official `@modelcontextprotocol/server`, `client`, and `node` `2.x` packages |
 | Modern protocol | `2026-07-28` |
-| Local transport | `stdio` |
+| IDE/terminal transport | local `stdio`, automatic project root, exact eight-tool bound profile |
+| Local HTTP transport | self-hosted loopback gateway, stateless per-request workspace resolution |
+| Desktop chat | local `stdio`-to-HTTP adapter with user-selected opaque per-chat binding |
 | Legacy wire adapter | Served for existing 2025-era clients with the same eight public tool names |
 | Modern selective reads | MCP `resources/read` |
-| Remote Streamable HTTP | Not implemented |
+| Public/hosted Streamable HTTP | Not implemented; the shipped gateway rejects non-loopback binding |
+| Claude remote connectors to localhost | Not supported; use Claude Desktop local MCP |
 | Serverless multi-tenant storage | Not implemented |
 
 All public tools use the `knowledge_*` prefix in both protocol eras. Historical `wiki_*` tools and `knowledge_menu` are not advertised. The legacy adapter is transport/workspace compatibility only: it does not restore the old tool catalog. Conservative migration of existing wiki data remains supported independently of protocol compatibility.
@@ -253,9 +315,16 @@ All public tools use the `knowledge_*` prefix in both protocol eras. Historical 
 npm ci
 npm run verify
 npm run audit:runtime
+npm run package:smoke
 ```
 
 Run all deterministic retrieval and quality gates:
+
+```bash
+npm run eval:gates
+```
+
+The aggregate command runs these unchanged individual gates:
 
 ```bash
 npm run eval:retrieval:gate
@@ -273,7 +342,7 @@ npm run eval:documents:gate
 npm run eval:tool-surface:gate
 ```
 
-The benchmark fixtures and acceptance rules are documented in [benchmarks/README.md](benchmarks/README.md). CI verifies Node.js 22 and 24, all regression gates, benchmark smoke tests, and the runtime dependency audit.
+The benchmark fixtures and acceptance rules are documented in [benchmarks/README.md](benchmarks/README.md). CI verifies Node.js 22 and 24, all regression gates, benchmark smoke tests, the runtime dependency audit, and installed-tarball smokes on Ubuntu, macOS, and Windows.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request and [SECURITY.md](SECURITY.md) for vulnerability reporting.
 
