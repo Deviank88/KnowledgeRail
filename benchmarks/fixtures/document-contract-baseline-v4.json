@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "expectedDocumentTypes": [
+    "functional_spec",
+    "architecture_doc",
+    "project_brief",
+    "onboarding_guide",
+    "api_reference",
+    "adr",
+    "runbook",
+    "test_plan",
+    "incident_report",
+    "release_notes",
+    "custom"
+  ],
+  "minimumContractRegistryCoverage": 1,
+  "minimumTemplateCoverage": 1,
+  "minimumPersonaCoverage": 1,
+  "minimumValidDocumentAcceptanceRate": 1,
+  "minimumInvalidDocumentRejectionRate": 1,
+  "minimumExportReadinessAccuracy": 1
+}

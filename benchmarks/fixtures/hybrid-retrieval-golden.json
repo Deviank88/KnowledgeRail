@@ -1,0 +1,448 @@
+{
+  "version": 1,
+  "k": 10,
+  "boundedBudget": {
+    "lexicalPoolSize": 40,
+    "seedCount": 8,
+    "graphMaxNodes": 30,
+    "graphMaxDepth": 3,
+    "graphBeamWidth": 20,
+    "graphMaxVisitedNodes": 60
+  },
+  "pages": [
+    {
+      "path": "requirements/REQ_771.md",
+      "title": "REQ-771 gateway quota",
+      "type": "requirement",
+      "tags": ["gateway", "quota"],
+      "sources": ["specs/gateway-quota.md"],
+      "body": "# REQ-771\n\nTenant ALPHA-42 may issue exactly 240 signed requests per minute.\n\n## Rejection contract\n\nThe gateway returns HTTP 429 with Retry-After when the quota is exhausted."
+    },
+    {
+      "path": "decisions/OAuthRotation.md",
+      "title": "OAuth signing key rotation",
+      "type": "decision",
+      "tags": ["oauth", "security"],
+      "sources": ["adr/014-oauth-rotation.md"],
+      "body": "# Decision\n\nOAuth signing keys rotate every thirty days while the previous public key remains available for a seven-day verification overlap."
+    },
+    {
+      "path": "requirements/REQ_900.md",
+      "title": "Cobalt retry budget",
+      "type": "requirement",
+      "requestId": "REQ-900",
+      "tags": ["cobalt", "reliability"],
+      "sources": ["specs/cobalt-retry.md"],
+      "body": "# Cobalt threshold\n\nThe frost gateway allows four delivery attempts before escalation."
+    },
+    {
+      "path": "implementations/ArchiveWorker.md",
+      "title": "Archive batch worker",
+      "type": "implementation",
+      "requestId": "REQ-900",
+      "tags": ["archive", "worker"],
+      "sources": ["code/archive-worker.ts"],
+      "body": "# Runtime behavior\n\nThe lunar queue daemon persists the terminal envelope before handing it to cold storage."
+    },
+    {
+      "path": "requests/REQ_901.md",
+      "title": "Falcon ledger reconciliation",
+      "type": "request",
+      "requestId": "REQ-901",
+      "tags": ["falcon", "ledger"],
+      "sources": ["requests/REQ-901.md"],
+      "body": "# Request\n\nFalcon ledger reconciliation must preserve the settlement checksum."
+    },
+    {
+      "path": "tests/BlueCanary.md",
+      "title": "Blue canary verification",
+      "type": "test_result",
+      "requestId": "REQ-901",
+      "tags": ["canary", "verification"],
+      "sources": ["tests/blue-canary.spec.ts"],
+      "body": "# Verification\n\nThe blue canary proves that the sealed digest survives replay."
+    },
+    {
+      "path": "concepts/TwoHopSeed.md",
+      "title": "Quartz failover topology",
+      "type": "concept",
+      "tags": ["quartz", "topology"],
+      "sources": ["architecture/quartz.md"],
+      "body": "# Topology\n\nQuartz failover begins at the ingress relay. See [[TwoHopBridge.md]]."
+    },
+    {
+      "path": "concepts/TwoHopBridge.md",
+      "title": "Ingress relay map",
+      "type": "concept",
+      "tags": ["relay"],
+      "sources": ["architecture/relay-map.md"],
+      "body": "# Relay map\n\nThe ingress relay delegates continuity rules to [[TwoHopTarget.md]]."
+    },
+    {
+      "path": "concepts/TwoHopTarget.md",
+      "title": "Standby isolation rule",
+      "type": "decision",
+      "tags": ["standby", "isolation"],
+      "sources": ["adr/standby-isolation.md"],
+      "body": "# Isolation rule\n\nThe standby channel must remain isolated until the primary lease expires."
+    },
+    {
+      "path": "concepts/ThreeHopSeed.md",
+      "title": "Saffron recovery chain",
+      "type": "concept",
+      "tags": ["saffron", "recovery"],
+      "sources": ["architecture/saffron.md"],
+      "body": "# Recovery chain\n\nSaffron recovery starts at the edge broker. See [[ThreeHopBridgeA.md]]."
+    },
+    {
+      "path": "concepts/ThreeHopBridgeA.md",
+      "title": "Edge broker handoff",
+      "type": "concept",
+      "tags": ["broker"],
+      "sources": ["architecture/edge-broker.md"],
+      "body": "# Handoff\n\nThe edge broker forwards control to [[ThreeHopBridgeB.md]]."
+    },
+    {
+      "path": "concepts/ThreeHopBridgeB.md",
+      "title": "Recovery controller handoff",
+      "type": "concept",
+      "tags": ["controller"],
+      "sources": ["architecture/recovery-controller.md"],
+      "body": "# Controller\n\nThe controller applies the terminal rule in [[ThreeHopTarget.md]]."
+    },
+    {
+      "path": "concepts/ThreeHopTarget.md",
+      "title": "Epoch publication invariant",
+      "type": "requirement",
+      "tags": ["invariant"],
+      "sources": ["specs/epoch-publication.md"],
+      "body": "# Terminal invariant\n\nA recovered partition may publish only after its epoch has been revalidated."
+    },
+    {
+      "path": "concepts/HubSeed.md",
+      "title": "Obsidian dependency catalog",
+      "type": "concept",
+      "tags": ["obsidian", "catalog"],
+      "sources": ["architecture/obsidian.md"],
+      "body": "# Catalog\n\nThe Obsidian dependency catalog is rooted at [[Hub.md]]."
+    },
+    {
+      "path": "concepts/Hub.md",
+      "title": "Shared platform hub",
+      "type": "concept",
+      "tags": ["platform", "hub"],
+      "sources": ["architecture/platform-hub.md"],
+      "body": "# Platform hub\n\nShared platform references: [[HubTarget.md]], [[noise/HubNoise00.md]], [[noise/HubNoise01.md]], [[noise/HubNoise02.md]], [[noise/HubNoise03.md]], [[noise/HubNoise04.md]], [[noise/HubNoise05.md]], [[noise/HubNoise06.md]], [[noise/HubNoise07.md]], [[noise/HubNoise08.md]], [[noise/HubNoise09.md]], [[noise/HubNoise10.md]], [[noise/HubNoise11.md]]."
+    },
+    {
+      "path": "concepts/HubTarget.md",
+      "title": "Public tier loading rule",
+      "type": "requirement",
+      "tags": ["adapter", "tier"],
+      "sources": ["specs/public-tier-loading.md"],
+      "body": "# Loading invariant\n\nThe restricted adapter must never be loaded in the public execution tier."
+    },
+    {
+      "path": "concepts/MercuryPayments.md",
+      "title": "Mercury merchant settlement",
+      "type": "concept",
+      "tags": ["mercury", "payments"],
+      "sources": ["domain/merchant-settlement.md"],
+      "body": "# Merchant settlement\n\nMercury capture batches settle card funds to the merchant account at 02:00 UTC."
+    },
+    {
+      "path": "concepts/MercuryPlanet.md",
+      "title": "Mercury planetary telemetry",
+      "type": "concept",
+      "tags": ["mercury", "astronomy"],
+      "sources": ["research/planetary-telemetry.md"],
+      "body": "# Planetary telemetry\n\nMercury orbital sensors report solar wind and surface temperature."
+    },
+    {
+      "path": "requirements/Retention365.md",
+      "title": "Atlas production retention",
+      "type": "requirement",
+      "requestId": "REQ-920",
+      "tags": ["atlas", "retention"],
+      "sources": ["specs/atlas-retention.md"],
+      "body": "# Retention requirement\n\nAtlas production audit evidence must be retained for 365 days."
+    },
+    {
+      "path": "decisions/Retention90.md",
+      "title": "Legacy archive window",
+      "type": "decision",
+      "requestId": "REQ-920",
+      "tags": ["legacy", "window"],
+      "sources": ["adr/legacy-window.md"],
+      "body": "# Conflicting decision\n\nThe earlier decision records an archive window of only 90 days and is not marked superseded."
+    },
+    {
+      "path": "analysis/MultiPassage.md",
+      "title": "Credential operations handbook",
+      "type": "analysis",
+      "tags": ["credentials", "operations"],
+      "sources": ["runbooks/credential-operations.md"],
+      "body": "# Enrollment\n\nOperators enroll devices through the standard console.\n\n## Inventory\n\nAsset inventory is reconciled every night.\n\n## Rotation\n\nRoutine credentials rotate each quarter.\n\n## Monitoring\n\nDashboards report issuance volume.\n\n## Escalation\n\nSupport tickets use the normal priority matrix.\n\n## Emergency revocation\n\nA violet credential compromise must be revoked in under seven minutes.\n\n## Archive\n\nClosed records move to the audit archive."
+    },
+    {
+      "path": "requirements/ShipmentRule.md",
+      "title": "Omega shipment release",
+      "type": "requirement",
+      "requestId": "REQ-930",
+      "tags": ["omega", "shipment"],
+      "sources": ["specs/shipment-release.md"],
+      "body": "# Shipment requirement\n\nOmega shipments require customs clearance evidence before release."
+    },
+    {
+      "path": "decisions/ShipmentDecision.md",
+      "title": "Compliance receipt ownership",
+      "type": "decision",
+      "requestId": "REQ-930",
+      "tags": ["compliance", "ownership"],
+      "sources": ["adr/receipt-ownership.md"],
+      "body": "# Ownership decision\n\nThe compliance service owns the immutable receipt."
+    },
+    {
+      "path": "tests/ShipmentTest.md",
+      "title": "Receipt absence verification",
+      "type": "test_result",
+      "requestId": "REQ-930",
+      "tags": ["integration", "negative"],
+      "sources": ["tests/receipt-absence.spec.ts"],
+      "body": "# Negative verification\n\nThe integration check blocks dispatch when the receipt is absent."
+    },
+    {
+      "path": "requirements/TraceRequirement.md",
+      "title": "Pine traceability requirement",
+      "type": "requirement",
+      "requestId": "REQ-940",
+      "tags": ["pine", "traceability"],
+      "sources": ["specs/pine-traceability.md"],
+      "body": "# Requirement evidence\n\nPine exports must preserve the originating transaction identifier."
+    },
+    {
+      "path": "decisions/TraceDecision.md",
+      "title": "Correlation key decision",
+      "type": "decision",
+      "requestId": "REQ-940",
+      "tags": ["correlation", "decision"],
+      "sources": ["adr/correlation-key.md"],
+      "body": "# Decision evidence\n\nThe canonical correlation key is copied unchanged rather than regenerated."
+    },
+    {
+      "path": "implementations/TraceImplementation.md",
+      "title": "Emitter correlation propagation",
+      "type": "implementation",
+      "requestId": "REQ-940",
+      "tags": ["emitter", "implementation"],
+      "sources": ["code/envelope-emitter.ts"],
+      "body": "# Implementation evidence\n\nThe emitter writes the canonical correlation key into every output envelope."
+    },
+    {
+      "path": "tests/TraceTest.md",
+      "title": "Envelope correlation regression",
+      "type": "test_result",
+      "requestId": "REQ-940",
+      "tags": ["envelope", "regression"],
+      "sources": ["tests/envelope-correlation.spec.ts"],
+      "body": "# Test evidence\n\nThe regression check compares the input correlation key with the emitted envelope."
+    },
+    {
+      "path": "implementations/CurrentCircuit.md",
+      "title": "Copper circuit breaker",
+      "type": "implementation",
+      "requestId": "REQ-950",
+      "tags": ["copper", "circuit-breaker"],
+      "sources": ["code/circuit-breaker.ts"],
+      "body": "# Current behavior\n\nThe Copper circuit opens after eight consecutive timeout failures."
+    },
+    {
+      "path": "analysis/CircuitIncident.md",
+      "title": "Recovery flood incident",
+      "type": "analysis",
+      "requestId": "REQ-950",
+      "tags": ["incident", "recovery"],
+      "sources": ["incidents/2025-recovery-flood.md"],
+      "body": "# Historical incident\n\nA recovery flood showed that half-open probes must remain limited to one concurrent request."
+    },
+    {
+      "path": "requirements/CallbackAuth.md",
+      "title": "Signed callback facet",
+      "type": "requirement",
+      "requestId": "REQ-960",
+      "tags": ["callback", "authentication"],
+      "sources": ["specs/callback-security.md"],
+      "body": "# Authentication facet\n\nEvery partner callback must carry a valid detached signature."
+    },
+    {
+      "path": "requirements/CallbackRetention.md",
+      "title": "Callback audit retention facet",
+      "type": "requirement",
+      "requestId": "REQ-960",
+      "tags": ["callback", "retention"],
+      "sources": ["specs/callback-audit.md"],
+      "body": "# Retention facet\n\nCallback audit payloads are deleted after seven years."
+    }
+  ],
+  "generatedPages": [
+    {
+      "count": 12,
+      "pathPattern": "concepts/noise/HubNoise{index}.md",
+      "titlePattern": "Platform hub noise {index}",
+      "type": "concept",
+      "tags": ["platform", "noise"],
+      "sources": ["architecture/platform-noise.md"],
+      "bodyPattern": "# Unrelated platform note\n\nAuxiliary service number {index} publishes routine health telemetry."
+    }
+  ],
+  "queries": [
+    {
+      "id": "exact-identifier",
+      "case": "exact identifier lookup",
+      "query": "REQ-771 ALPHA-42 240 HTTP 429 Retry-After",
+      "anchorPaths": ["requirements/REQ_771.md"],
+      "relevant": [
+        {"id": "ev-exact", "path": "requirements/REQ_771.md", "heading": "REQ-771", "match": "Tenant ALPHA-42", "grade": 3, "source": "specs/gateway-quota.md"}
+      ]
+    },
+    {
+      "id": "lexical-relevance",
+      "case": "normal semantic/lexical relevance",
+      "query": "OAuth signing key rotation verification overlap",
+      "anchorPaths": ["decisions/OAuthRotation.md"],
+      "relevant": [
+        {"id": "ev-lexical", "path": "decisions/OAuthRotation.md", "heading": "Decision", "match": "seven-day verification overlap", "grade": 3, "source": "adr/014-oauth-rotation.md"}
+      ]
+    },
+    {
+      "id": "graph-only",
+      "case": "graph-only relevant page",
+      "query": "Cobalt frost gateway four delivery attempts escalation",
+      "critical": true,
+      "anchorPaths": ["requirements/REQ_900.md"],
+      "relevant": [
+        {"id": "ev-graph-seed", "path": "requirements/REQ_900.md", "heading": "Cobalt threshold", "match": "four delivery attempts", "grade": 3, "source": "specs/cobalt-retry.md"},
+        {"id": "ev-graph-only", "path": "implementations/ArchiveWorker.md", "heading": "Runtime behavior", "match": "lunar queue daemon", "grade": 2, "source": "code/archive-worker.ts", "graphOnly": true, "hop": 1}
+      ]
+    },
+    {
+      "id": "same-request-sibling",
+      "case": "same-request sibling without lexical overlap",
+      "query": "Falcon ledger reconciliation settlement checksum",
+      "critical": true,
+      "anchorPaths": ["requests/REQ_901.md"],
+      "relevant": [
+        {"id": "ev-sibling-seed", "path": "requests/REQ_901.md", "heading": "Request", "match": "settlement checksum", "grade": 3, "source": "requests/REQ-901.md"},
+        {"id": "ev-sibling", "path": "tests/BlueCanary.md", "heading": "Verification", "match": "blue canary", "grade": 2, "source": "tests/blue-canary.spec.ts", "graphOnly": true, "hop": 1}
+      ]
+    },
+    {
+      "id": "two-hop-evidence",
+      "case": "two-hop relevant evidence",
+      "query": "Quartz failover topology initiation",
+      "critical": true,
+      "anchorPaths": ["concepts/TwoHopSeed.md"],
+      "relevant": [
+        {"id": "ev-two-hop-seed", "path": "concepts/TwoHopSeed.md", "heading": "Topology", "match": "Quartz failover", "grade": 3, "source": "architecture/quartz.md"},
+        {"id": "ev-two-hop-target", "path": "concepts/TwoHopTarget.md", "heading": "Isolation rule", "match": "standby channel must remain isolated", "grade": 2, "source": "adr/standby-isolation.md", "graphOnly": true, "hop": 2}
+      ]
+    },
+    {
+      "id": "three-hop-evidence",
+      "case": "controlled three-hop relevant evidence",
+      "query": "Saffron recovery chain initiation",
+      "critical": true,
+      "anchorPaths": ["concepts/ThreeHopSeed.md"],
+      "relevant": [
+        {"id": "ev-three-hop-seed", "path": "concepts/ThreeHopSeed.md", "heading": "Recovery chain", "match": "Saffron recovery", "grade": 3, "source": "architecture/saffron.md"},
+        {"id": "ev-three-hop-target", "path": "concepts/ThreeHopTarget.md", "heading": "Terminal invariant", "match": "epoch has been revalidated", "grade": 2, "source": "specs/epoch-publication.md", "graphOnly": true, "hop": 3}
+      ]
+    },
+    {
+      "id": "high-degree-hub",
+      "case": "high-degree hub",
+      "query": "Obsidian dependency catalog root",
+      "critical": true,
+      "anchorPaths": ["concepts/HubSeed.md"],
+      "relevant": [
+        {"id": "ev-hub-seed", "path": "concepts/HubSeed.md", "heading": "Catalog", "match": "Obsidian dependency catalog", "grade": 3, "source": "architecture/obsidian.md"},
+        {"id": "ev-hub-target", "path": "concepts/HubTarget.md", "heading": "Loading invariant", "match": "restricted adapter must never", "grade": 2, "source": "specs/public-tier-loading.md", "graphOnly": true, "hop": 2}
+      ]
+    },
+    {
+      "id": "ambiguous-entity",
+      "case": "ambiguous entity",
+      "query": "Mercury merchant capture settlement card funds",
+      "anchorPaths": ["concepts/MercuryPayments.md"],
+      "relevant": [
+        {"id": "ev-mercury-payments", "path": "concepts/MercuryPayments.md", "heading": "Merchant settlement", "match": "settle card funds", "grade": 3, "source": "domain/merchant-settlement.md"}
+      ]
+    },
+    {
+      "id": "contradictory-evidence",
+      "case": "contradictory evidence",
+      "query": "Atlas production audit evidence retention 365",
+      "critical": true,
+      "anchorPaths": ["requirements/Retention365.md"],
+      "relevant": [
+        {"id": "ev-retention-current", "path": "requirements/Retention365.md", "heading": "Retention requirement", "match": "retained for 365 days", "grade": 3, "source": "specs/atlas-retention.md"},
+        {"id": "ev-retention-conflict", "path": "decisions/Retention90.md", "heading": "Conflicting decision", "match": "only 90 days", "grade": 3, "source": "adr/legacy-window.md", "graphOnly": true, "hop": 1}
+      ]
+    },
+    {
+      "id": "relevant-deep-passage",
+      "case": "relevant passage in page with many irrelevant passages",
+      "query": "violet credential compromise revoked under seven minutes",
+      "anchorPaths": ["analysis/MultiPassage.md"],
+      "relevant": [
+        {"id": "ev-deep-passage", "path": "analysis/MultiPassage.md", "heading": "Emergency revocation", "match": "revoked in under seven minutes", "grade": 3, "source": "runbooks/credential-operations.md"}
+      ]
+    },
+    {
+      "id": "multiple-sources",
+      "case": "multiple sources required",
+      "query": "Omega shipment customs clearance evidence release",
+      "critical": true,
+      "anchorPaths": ["requirements/ShipmentRule.md"],
+      "relevant": [
+        {"id": "ev-source-requirement", "path": "requirements/ShipmentRule.md", "heading": "Shipment requirement", "match": "customs clearance evidence", "grade": 3, "source": "specs/shipment-release.md"},
+        {"id": "ev-source-decision", "path": "decisions/ShipmentDecision.md", "heading": "Ownership decision", "match": "immutable receipt", "grade": 2, "source": "adr/receipt-ownership.md", "graphOnly": true, "hop": 1},
+        {"id": "ev-source-test", "path": "tests/ShipmentTest.md", "heading": "Negative verification", "match": "blocks dispatch", "grade": 2, "source": "tests/receipt-absence.spec.ts", "graphOnly": true, "hop": 1}
+      ]
+    },
+    {
+      "id": "traceability-chain",
+      "case": "requirement decision implementation and test",
+      "query": "Pine exports originating transaction identifier requirement",
+      "critical": true,
+      "anchorPaths": ["requirements/TraceRequirement.md"],
+      "relevant": [
+        {"id": "ev-trace-requirement", "path": "requirements/TraceRequirement.md", "heading": "Requirement evidence", "match": "originating transaction identifier", "grade": 3, "source": "specs/pine-traceability.md"},
+        {"id": "ev-trace-decision", "path": "decisions/TraceDecision.md", "heading": "Decision evidence", "match": "copied unchanged", "grade": 2, "source": "adr/correlation-key.md", "graphOnly": true, "hop": 1},
+        {"id": "ev-trace-implementation", "path": "implementations/TraceImplementation.md", "heading": "Implementation evidence", "match": "every output envelope", "grade": 2, "source": "code/envelope-emitter.ts", "graphOnly": true, "hop": 1},
+        {"id": "ev-trace-test", "path": "tests/TraceTest.md", "heading": "Test evidence", "match": "input correlation key", "grade": 2, "source": "tests/envelope-correlation.spec.ts", "graphOnly": true, "hop": 1}
+      ]
+    },
+    {
+      "id": "historical-incident",
+      "case": "historical incident changes current behavior interpretation",
+      "query": "Copper circuit opens eight timeout failures current behavior",
+      "critical": true,
+      "anchorPaths": ["implementations/CurrentCircuit.md"],
+      "relevant": [
+        {"id": "ev-current-circuit", "path": "implementations/CurrentCircuit.md", "heading": "Current behavior", "match": "eight consecutive timeout", "grade": 3, "source": "code/circuit-breaker.ts"},
+        {"id": "ev-circuit-incident", "path": "analysis/CircuitIncident.md", "heading": "Historical incident", "match": "half-open probes", "grade": 3, "source": "incidents/2025-recovery-flood.md", "graphOnly": true, "hop": 1}
+      ]
+    },
+    {
+      "id": "independent-facets",
+      "case": "two independent query facets",
+      "query": "partner callback detached signature delete audit payloads seven years",
+      "anchorPaths": ["requirements/CallbackAuth.md", "requirements/CallbackRetention.md"],
+      "relevant": [
+        {"id": "ev-auth-facet", "path": "requirements/CallbackAuth.md", "heading": "Authentication facet", "match": "valid detached signature", "grade": 3, "source": "specs/callback-security.md"},
+        {"id": "ev-retention-facet", "path": "requirements/CallbackRetention.md", "heading": "Retention facet", "match": "deleted after seven years", "grade": 3, "source": "specs/callback-audit.md"}
+      ]
+    }
+  ]
+}

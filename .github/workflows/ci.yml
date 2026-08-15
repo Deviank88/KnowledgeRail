@@ -1,0 +1,158 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify-node-${{ matrix.node }}
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck and tests
+        env:
+          # GitHub-hosted Ubuntu runners block Chromium's user-namespace sandbox via AppArmor.
+          # The runner is already isolated; production keeps Chromium's sandbox enabled by default.
+          KNOWLEDGE_RAIL_MERMAID_NO_SANDBOX: "true"
+        run: npm run verify
+
+  retrieval-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Golden retrieval regression gate
+        run: npm run eval:retrieval:gate
+
+      - name: Hybrid oracle accuracy gate
+        run: npm run eval:hybrid:gate
+
+      - name: Recall-safe progressive widening gate
+        run: npm run eval:widening:gate
+
+      - name: Source coverage compiler gate
+        run: npm run eval:source-coverage:gate
+
+      - name: Evidence IR and linker gate
+        run: npm run eval:evidence-ir:gate
+
+      - name: Code evidence retrieval gate
+        run: npm run eval:code-evidence:gate
+
+      - name: Knowledge recovery self-healing gate
+        run: npm run eval:recovery:gate
+
+      - name: Task-aware context compiler gate
+        run: npm run eval:task-context:gate
+
+      - name: Semantic passage retrieval and ANN gate
+        run: npm run eval:semantic:gate
+
+      - name: Legacy project migration preservation gate
+        run: npm run eval:migration:gate
+
+      - name: Editorial Intelligence document quality gate
+        run: npm run eval:editorial:gate
+
+      - name: Typed document contract gate
+        run: npm run eval:documents:gate
+
+      - name: MCP tool-surface and agent guidance gate
+        run: npm run eval:tool-surface:gate
+
+  benchmark-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Scaling benchmark smoke test
+        run: npm run bench:scale -- --scales=250 --iterations=3
+
+      - name: MCP protocol benchmark smoke test
+        env:
+          MCP_BENCH_ITERATIONS: 10
+          MCP_BUILD_ITERATIONS: 100
+        run: npm run bench:mcp
+
+      - name: Progressive disclosure benchmark smoke test
+        env:
+          CONTEXT_BENCH_PAGES: 250
+          CONTEXT_BENCH_ITERATIONS: 5
+          CONTEXT_BENCH_MAX_EVIDENCE: 8
+          CONTEXT_BENCH_READ_EVIDENCE: 3
+          CONTEXT_BENCH_TOKEN_BUDGET: 2000
+        run: npm run bench:context
+
+      - name: Graph runtime locality benchmark
+        env:
+          GRAPH_RUNTIME_BENCH_SCALES: 1000,10000
+          GRAPH_RUNTIME_QUERY_ITERATIONS: 25
+          GRAPH_RUNTIME_MUTATION_ITERATIONS: 5
+        run: npm run bench:graph-runtime
+
+  security-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Production vulnerability gate
+        run: npm run audit:runtime

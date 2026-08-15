@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "fixtureVersion": 1,
+  "fixtureSha256": "def51dd61f938d4d8aae9fa8b54652007da03c1143c7d324e8bbc4db9c06b341",
+  "sourceCount": 3,
+  "claimCount": 4,
+  "orderedClaimIds": [
+    "claim-4b75d3f2989867a1f5559ff65651cb73",
+    "claim-db6b9bc48bdeaa026fb724e66028ac4b",
+    "claim-f0fada5839548257782b1bdd07fdb68e",
+    "claim-f69f69393abcd24e31288e1c9225267d"
+  ],
+  "synthesizedPagePaths": [
+    "requirements/AtlasAuditRetention.md"
+  ],
+  "duplicateClaimCount": 1,
+  "contradictionCount": 1
+}

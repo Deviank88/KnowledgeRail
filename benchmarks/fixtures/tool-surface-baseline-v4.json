@@ -1,0 +1,42 @@
+{
+  "benchmarkSchemaVersion": 3,
+  "previousToolCount": 24,
+  "previousToolsArrayBytes": 19926,
+  "previousToolsListResultBytes": 26080,
+  "previousRoutingCallsPerWorkflow": 3,
+  "currentRoutingCallsPerWorkflow": 0,
+  "expectedToolCount": 8,
+  "maximumModernCatalogBytes": 14000,
+  "maximumHeuristicCatalogTokens": 4700,
+  "minimumToolCountReductionPercent": 66,
+  "minimumCatalogByteReductionPercent": 25,
+  "minimumToolsListResultByteReductionPercent": 25,
+  "minimumRoutingGoldenCount": 31,
+  "minimumCatalogAffordanceAccuracy": 0.94,
+  "minimumInvalidCallCount": 5,
+  "minimumInvalidCallRejectionRate": 1,
+  "minimumWorkflowTraceCount": 5,
+  "minimumWorkflowCompletionRate": 1,
+  "minimumRoutingRoundTripsSaved": 15,
+  "minimumRoutingRoundTripReductionPercent": 100,
+  "requiredToolNames": [
+    "knowledge_context",
+    "knowledge_page",
+    "knowledge_files",
+    "knowledge_ingest",
+    "knowledge_code",
+    "knowledge_document_context",
+    "knowledge_document",
+    "knowledge_admin"
+  ],
+  "forbiddenToolNames": [
+    "knowledge_menu",
+    "wiki_menu",
+    "wiki_search",
+    "wiki_graph_query",
+    "wiki_read_page",
+    "wiki_write_page",
+    "knowledge_evidence_ir",
+    "knowledge_code_evidence"
+  ]
+}

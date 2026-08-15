@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "description": "Measured v3 golden retrieval baseline captured on CI. Minimums are regression gates, not target quality ceilings.",
+  "pageCount": 13,
+  "queryCount": 11,
+  "profiles": {
+    "precision": {
+      "observed": {
+        "recallAt5": 0.9545,
+        "precisionAt5": 0.3455,
+        "mrr": 1.0,
+        "ndcgAt5": 0.9706,
+        "passageHeadingMatch": 0.8636
+      },
+      "minimum": {
+        "recallAt5": 0.95,
+        "mrr": 0.99,
+        "ndcgAt5": 0.96,
+        "passageHeadingMatch": 0.85
+      }
+    },
+    "balanced": {
+      "observed": {
+        "recallAt5": 0.9545,
+        "precisionAt5": 0.3455,
+        "mrr": 1.0,
+        "ndcgAt5": 0.9706,
+        "passageHeadingMatch": 0.8636
+      },
+      "minimum": {
+        "recallAt5": 0.95,
+        "mrr": 0.99,
+        "ndcgAt5": 0.96,
+        "passageHeadingMatch": 0.85
+      }
+    },
+    "coverage": {
+      "observed": {
+        "recallAt5": 0.9545,
+        "precisionAt5": 0.3455,
+        "mrr": 1.0,
+        "ndcgAt5": 0.9706,
+        "passageHeadingMatch": 0.8636
+      },
+      "minimum": {
+        "recallAt5": 0.95,
+        "mrr": 0.99,
+        "ndcgAt5": 0.96,
+        "passageHeadingMatch": 0.85
+      }
+    }
+  }
+}

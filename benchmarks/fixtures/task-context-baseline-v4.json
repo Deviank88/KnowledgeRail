@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixtureVersion": 1,
+  "fixtureSha256": "08f2656b57eead7f1c22ecff10b78fb889575e873780778ce901c6b5675b57a3",
+  "baseFixtureVersion": 1,
+  "baseFixtureSha256": "658e369ffe59b1a033e5ba11f0549657fcd53f08ca56ab633b3382b6e8bd3e03",
+  "taskIds": [
+    "understand-topology",
+    "implement-traceability",
+    "modify-traceability",
+    "debug-historical-incident",
+    "review-contradiction",
+    "document-multiple-sources"
+  ],
+  "intentCount": 6,
+  "maxEvidence": 10,
+  "heuristicTokenBudget": 4000,
+  "minimumTaskContextEvidenceRecall": 1,
+  "minimumBoundedHybridEvidenceRecall": 1,
+  "minimumHybridParityRecall": 1,
+  "minimumIntentCategoryCoverage": 1,
+  "minimumChangeImpactRecall": 1,
+  "minimumExpectedUnknownReportingRate": 1,
+  "maximumLostRelevantVsOracle": 0,
+  "maximumLostRelevantVsHybrid": 0,
+  "maximumFallbackRate": 0,
+  "maximumFullGraphScanAttempts": 0,
+  "maximumWideningLevel": 2,
+  "maximumVisitedNodes": 80
+}

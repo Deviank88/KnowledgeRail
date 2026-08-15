@@ -1,0 +1,288 @@
+<p align="center">
+  <img src="assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
+</p>
+
+<h1 align="center">KnowledgeRail</h1>
+
+KnowledgeRail is a local-first MCP server that turns project documentation and source code into durable, evidence-backed context for AI agents.
+
+It is designed for agents that need to understand, change, review, or document a codebase without loading the whole repository into the model context. Retrieval is bounded, provenance is preserved, missing evidence is reported explicitly, and difficult queries widen progressively instead of silently losing relevant information.
+
+> **Current status:** initial public release `1.0.0`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. The supported transport is local `stdio`; a remote/serverless deployment is not implemented yet. See [SERVERLESS.md](SERVERLESS.md).
+
+## What it provides
+
+- Eight domain-oriented tools with validated actions and machine-readable next steps.
+- Task-aware hybrid retrieval with lexical, graph, passage, and optional semantic evidence.
+- Progressive widening with explicit coverage signals and `GAP`/unknown reporting.
+- Complete source ingestion through bounded segments, a coverage ledger, and durable Evidence IR.
+- A deterministic TypeScript/JavaScript code index with symbol and reference lookup.
+- Incremental graph, retrieval, and semantic indexes stored beside the project wiki.
+- Contract-driven Markdown deliverables and gated DOCX export with Mermaid diagrams.
+- Conservative migration of existing v1/v2/v3 wikis.
+
+KnowledgeRail does not call an LLM itself. The connected MCP client chooses and calls the tools. OCR and embeddings are optional external providers configured by the user.
+
+## Requirements
+
+- Node.js `22.12.0` or newer
+- npm
+- macOS, Windows, or Linux
+
+Mermaid CLI and its compatible Chromium runtime are installed with the package. A separate global Mermaid installation is not required.
+
+## Install and run
+
+### From source
+
+```bash
+git clone https://github.com/Deviank88/KnowledgeRail.git
+cd KnowledgeRail
+npm ci
+npm run build
+```
+
+Start it from the project whose knowledge you want to manage:
+
+```bash
+cd /path/to/your-project
+node /absolute/path/to/KnowledgeRail/dist/index.js
+```
+
+### From npm
+
+After the first public package release:
+
+```bash
+npm install --global knowledge-rail
+cd /path/to/your-project
+knowledge-rail
+```
+
+The npm package is not considered available until it is published by the maintainers. Installing from source is the supported pre-release path.
+
+## MCP client configuration
+
+Use the standard `stdio` server shape supported by your MCP client:
+
+```json
+{
+  "mcpServers": {
+    "knowledge-rail": {
+      "command": "knowledge-rail",
+      "env": {
+        "WIKI_ROOT": "/absolute/path/to/your-project"
+      }
+    }
+  }
+}
+```
+
+For a source checkout, replace `knowledge-rail` with Node and the compiled entry point:
+
+```json
+{
+  "mcpServers": {
+    "knowledge-rail": {
+      "command": "node",
+      "args": ["/absolute/path/to/KnowledgeRail/dist/index.js"],
+      "env": {
+        "WIKI_ROOT": "/absolute/path/to/your-project"
+      }
+    }
+  }
+}
+```
+
+Client configuration wrappers and file locations differ, but the `command`, `args`, and `env` values are portable. Use absolute paths on every operating system. When `WIKI_ROOT` is omitted, KnowledgeRail uses the server process working directory. Legacy MCP clients may provide Roots; modern `2026-07-28` sessions do not need them.
+
+## Agent workflow
+
+KnowledgeRail exposes eight stable tools. Agents choose a domain directly and use its `mode` or `action`; no menu, profile, session scope, or legacy alias is required.
+
+| Tool | Operations |
+| --- | --- |
+| `knowledge_context` | `task`, bounded page `list`, query-required `search`, and `graph`. |
+| `knowledge_page` | Read, write, edit, move, delete, and append the durable log. |
+| `knowledge_files` | List, read, and normalize controlled source files. |
+| `knowledge_ingest` | `start`, `next`, `apply_claims`, `record_segment`, `source_status`, `evidence_status`, `finalize`, report, and recovery actions. |
+| `knowledge_code` | Maintain and query deterministic code evidence. |
+| `knowledge_document_context` | Plan a typed document and compile section-specific evidence. |
+| `knowledge_document` | Write, review, and export deliverables. |
+| `knowledge_admin` | Initialize, lint, and migrate KnowledgeRail data. |
+
+Every successful operation returns a machine-readable `state` and either one `nextAction` or `null`. `nextAction` identifies the next tool, action, required arguments, and safe suggested arguments. Optional `guidance` and `resultText` complete the shared output envelope. Clients that only render text also receive concise `Next:` and `Guidance:` lines when applicable.
+
+### How it works
+
+KnowledgeRail separates context retrieval, durable memory, source ingestion, code evidence, and document production so an agent can enter at the operation it needs without learning an internal menu or carrying session state:
+
+```text
+task objective
+    ↓
+knowledge_context ──→ ranked evidence links + coverage gaps
+    ↓                              ↓
+resources/read              bounded widening, if needed
+    ↓
+agent reasoning and project work
+    ├──→ knowledge_page / knowledge_code
+    ├──→ knowledge_ingest ──→ Evidence IR ──→ canonical wiki
+    └──→ knowledge_document_context ──→ knowledge_document
+```
+
+For a normal task, the agent calls `knowledge_context mode="task"` with a concrete objective. KnowledgeRail searches the canonical wiki and its derived lexical, graph, passage, code, and optional semantic indexes, ranks the available evidence, and returns a compact context envelope. Large page bodies are exposed as `knowledge-rail://` links instead of being inserted wholesale into the response; the client reads only the selected passages. If the token budget alone excluded relevant evidence, the returned `nextAction` proposes one bounded widening step. Missing, stale, contradictory, or unresolved evidence remains an explicit gap and is never filled by guessing.
+
+Durable knowledge lives as Markdown under `wiki/`. Direct page operations preserve caller-owned content byte-for-byte. Larger source sets use `knowledge_ingest`: normalized sources are processed in bounded segments, claims are recorded in durable Evidence IR, coverage is reconciled, and finalization is blocked until every segment is represented or explicitly classified. Derived retrieval and graph indexes are refreshed from this canonical state rather than replacing it.
+
+Document production is a separate evidence-backed workflow. `knowledge_document_context` first creates a typed plan and a bounded evidence pack for each section. `knowledge_document` then writes and reviews the deliverable against the selected contract; export re-runs that review and is refused while blockers remain. This keeps generated documents traceable to project memory without treating the deliverable itself as canonical memory.
+
+All public actions validate their own required arguments before reading or mutating state. The shared `state`/`nextAction` envelope makes progress explicit, but a suggested next action never grants permission to perform a consequential write: the connected client retains its normal approval policy. Compatibility with older MCP clients changes only the transport adapter, not these eight tool names or their behavior.
+
+A normal context request starts directly with:
+
+```text
+knowledge_context {
+  "mode":"task",
+  "intent":"understand",
+  "objective":"Explain how lease renewal and expiry work",
+  "response_detail":"compact",
+  "heuristic_token_budget":2000
+}
+```
+
+On MCP `2026-07-28`, `knowledge_context` returns selected `knowledge-rail://` resource links. The client materializes only the passages it needs with `resources/read`; clients that do not expose resource reads can use `knowledge_page action="read"` with the exact URI. When evidence was omitted only because of the budget, `nextAction` provides the next bounded widening request. Semantic, stale, or unresolved gaps are returned without a futile widening loop and must remain explicit unknowns.
+
+The consolidated catalog is deliberately action-oriented, but validation remains action-specific. For example, `knowledge_page action="edit"` is rejected without `path`, `old_string`, and `new_string`; ingestion cannot finalize before complete coverage; document export re-runs the contract review.
+
+Caller-owned page, file, and code bodies are never rewritten to modernize historical tool names. If a canonical `SCHEMA.md` still refers to a retired operation, `knowledge_admin action="migrate"` can propose the corresponding current operation for explicit review; reads remain byte-preserving.
+
+A normalized-source loop is explicit and machine-guided:
+
+```text
+start → next → apply_claims or record_segment → next
+      → source_status → finalize
+```
+
+Use `evidence_status` for claims and recovery debt; it is intentionally separate from per-source `source_status`. The old overloaded `apply` and `status` ingestion actions are rejected.
+
+### Why context has a token budget
+
+The budget bounds evidence sent to the model; it does not declare omitted knowledge irrelevant. If coverage is insufficient because of the budget, the guided read workflow widens from `2,000` to `4,000`, `8,000`, and at most `12,000` heuristic tokens. Widening stops as soon as no evidence is budget-omitted; any remaining semantic or freshness gap is exposed rather than guessed.
+
+`response_detail="compact"` is recommended for normal agent use. `full` keeps the complete historical TaskContext payload for diagnostics and integrations that need it.
+
+## Project data
+
+`knowledge_admin action="init"` creates this structure inside the selected project. The roots are intentionally stable: `wiki/` is canonical agent memory; `docs/` is the document plane for sources, normalized copies, durable evidence state, and deliverables.
+
+```text
+project/
+├── wiki/
+│   ├── index.md
+│   ├── log.md
+│   ├── SCHEMA.md
+│   ├── .knowledge-rail/     # derived indexes, manifests and migration state
+│   └── <page-type>/         # created lazily when the first typed page is written
+└── docs/
+    ├── client/
+    ├── transcripts/
+    ├── reports/
+    ├── changelogs/
+    ├── normalized/
+    ├── evidence-ir/         # durable Evidence IR and knowledge-recovery state
+    ├── deliverables/
+    └── assets/
+```
+
+Markdown pages are canonical knowledge. Files below `wiki/.knowledge-rail/` are derived or operational state and can be rebuilt where the corresponding workflow supports it. Source documents remain under `docs/`; normalization never overwrites the original.
+
+These directories may contain private project information. Decide deliberately whether the consuming project should commit them.
+
+## Document memory and deliverables
+
+Document generation starts with `knowledge_document_context action="plan"`. Follow its `nextAction` to compile a separate bounded evidence pack for every section, then use `knowledge_document action="write"` and `action="review"`. `action="export"` re-reviews the current Markdown and refuses export while any contract blocker remains.
+
+Built-in contracts cover functional specifications, architecture documents, project briefs, onboarding guides, API references, ADRs, runbooks, test plans, incident reports, and release notes. `custom` remains available for a document with an explicit structure. Each contract defines purpose, default language and audience, required sections, minimum useful content, and type-specific checks; callers can override language and client-facing status without disabling structural validation.
+
+The generated document is an output of agent memory, not its replacement. Confirmed facts belong in `wiki/`; source artifacts remain in `docs/`; delivery-ready Markdown and DOCX files belong in `docs/deliverables/`.
+
+## Optional OCR and semantic retrieval
+
+Text, Markdown, JSON, YAML, CSV/TSV, XLSX, and PPTX normalization works locally. Images and PDFs require either an Ollama-compatible OCR service or a configured native OCR endpoint.
+
+Common OCR variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `KNOWLEDGE_RAIL_OCR_MODE` | `ollama` (default) or `native`. |
+| `KNOWLEDGE_RAIL_OLLAMA_HOST` | Ollama base URL; defaults to `http://localhost:11434`. |
+| `KNOWLEDGE_RAIL_NATIVE_HOST` | Native OCR base URL; defaults to `http://localhost:5002`. |
+| `KNOWLEDGE_RAIL_OCR_MODEL` | OCR model; defaults to `glm-ocr:latest`. |
+| `KNOWLEDGE_RAIL_OCR_TIMEOUT_MS` | Positive request timeout in milliseconds. |
+| `KNOWLEDGE_RAIL_OCR_RETRIES` | Retry count. |
+
+Semantic retrieval is optional. Without it, deterministic lexical/graph/passage retrieval remains available. To enable an OpenAI-compatible embeddings endpoint, set all three required variables:
+
+```text
+KNOWLEDGE_RAIL_EMBEDDING_BASE_URL=https://provider.example/v1
+KNOWLEDGE_RAIL_EMBEDDING_MODEL=embedding-model
+KNOWLEDGE_RAIL_EMBEDDING_DIMENSIONS=1536
+```
+
+Optional embedding variables are `KNOWLEDGE_RAIL_EMBEDDING_API_KEY`, `KNOWLEDGE_RAIL_EMBEDDING_MODEL_VERSION`, and `KNOWLEDGE_RAIL_EMBEDDING_TIMEOUT_MS`.
+
+For Mermaid rendering, `KNOWLEDGE_RAIL_MERMAID_NO_SANDBOX=true` is intended only for controlled CI/container environments that cannot launch Chromium with its sandbox. Do not enable it by default on a workstation or shared host.
+
+## Compatibility
+
+| Capability | Status |
+| --- | --- |
+| MCP SDK | `@modelcontextprotocol/server` `2.x` |
+| Modern protocol | `2026-07-28` |
+| Local transport | `stdio` |
+| Legacy wire adapter | Served for existing 2025-era clients with the same eight public tool names |
+| Modern selective reads | MCP `resources/read` |
+| Remote Streamable HTTP | Not implemented |
+| Serverless multi-tenant storage | Not implemented |
+
+All public tools use the `knowledge_*` prefix in both protocol eras. Historical `wiki_*` tools and `knowledge_menu` are not advertised. The legacy adapter is transport/workspace compatibility only: it does not restore the old tool catalog. Conservative migration of existing wiki data remains supported independently of protocol compatibility.
+
+## Development and verification
+
+```bash
+npm ci
+npm run verify
+npm run audit:runtime
+```
+
+Run all deterministic retrieval and quality gates:
+
+```bash
+npm run eval:retrieval:gate
+npm run eval:hybrid:gate
+npm run eval:widening:gate
+npm run eval:source-coverage:gate
+npm run eval:evidence-ir:gate
+npm run eval:code-evidence:gate
+npm run eval:recovery:gate
+npm run eval:task-context:gate
+npm run eval:semantic:gate
+npm run eval:migration:gate
+npm run eval:editorial:gate
+npm run eval:documents:gate
+npm run eval:tool-surface:gate
+```
+
+The benchmark fixtures and acceptance rules are documented in [benchmarks/README.md](benchmarks/README.md). CI verifies Node.js 22 and 24, all regression gates, benchmark smoke tests, and the runtime dependency audit.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request and [SECURITY.md](SECURITY.md) for vulnerability reporting.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE). You may use, modify, and distribute the project, including commercially, subject to the license terms and preservation of required notices. The license does not require derivative products to be open source.
+
+## Origins and acknowledgement
+
+KnowledgeRail is an independent project. Its starting point was inspired in part by Andrej Karpathy's [LLM Wiki idea file](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): an LLM maintains durable Markdown knowledge that compounds instead of reconstructing everything from raw sources on every query.
+
+KnowledgeRail has since evolved into a distinct MCP 2.0 agent-memory system with bounded hybrid retrieval, coverage and gap reporting, Evidence IR, deterministic code evidence, migration support, and contract-driven document production. It is not affiliated with or endorsed by Andrej Karpathy. See [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md).

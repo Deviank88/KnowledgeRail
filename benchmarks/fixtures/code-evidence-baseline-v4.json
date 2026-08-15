@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixtureVersion": 1,
+  "fixtureSha256": "5c8e527b80a70ab42ef2e15d37c8aa4b82136f68218b684c027d11fdb995bc28",
+  "fileCount": 5,
+  "normalTaskCount": 10,
+  "minimumCodeEvidenceRecall": 1,
+  "minimumSymbolResolutionAccuracy": 1,
+  "minimumReferenceRecall": 1,
+  "maximumCodeContextBytes": 277,
+  "maximumGrepFallbackRate": 0,
+  "taskNames": [
+    "definition:processOrder",
+    "definition:OrderCoordinator.coordinate",
+    "callers:processOrder",
+    "callers:saveOrder",
+    "implementation-test:processOrder",
+    "route:POST /orders",
+    "config:RETRY_LIMIT",
+    "multi-file:submitted order route persistence retry test",
+    "symbol-rename/update",
+    "file-delete"
+  ]
+}

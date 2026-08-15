@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "source": {
+    "uri": "docs/normalized/recovery-policy.md",
+    "content": "# Recovery policy\n\nA failed Atlas delivery retries four times before entering the dead-letter queue."
+  },
+  "claim": {
+    "text": "A failed Atlas delivery retries four times before entering the dead-letter queue.",
+    "kind": "requirement",
+    "origin": "explicit",
+    "confidence": 1,
+    "target": {
+      "entityKey": "atlas-delivery-retry",
+      "pagePath": "requirements/AtlasDeliveryRetry.md",
+      "pageTitle": "Atlas delivery retry",
+      "pageType": "requirement"
+    }
+  },
+  "discovery": {
+    "discoveredBy": "source_fallback",
+    "reason": "A source fallback used a requirement that was not represented in the canonical wiki."
+  },
+  "firstUsageEvidenceCount": 2,
+  "duplicateUsageEvidenceCount": 1,
+  "representedUsageEvidenceCount": 3
+}
