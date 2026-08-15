@@ -33,3 +33,6 @@ docs/
 .docx-analysis/
 benchmarks/results/
 .puppeteer-cache/
+
+# Local implementation plans (never publish internal milestone specifications)
+milestones/
