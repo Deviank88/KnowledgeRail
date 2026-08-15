@@ -113,7 +113,30 @@ KnowledgeRail exposes eight stable tools. Agents choose a domain directly and us
 
 Every successful operation returns a machine-readable `state` and either one `nextAction` or `null`. `nextAction` identifies the next tool, action, required arguments, and safe suggested arguments. Optional `guidance` and `resultText` complete the shared output envelope. Clients that only render text also receive concise `Next:` and `Guidance:` lines when applicable.
 
-The surface design is recorded in [MILESTONE_AGENT_NATIVE_TOOL_SURFACE.md](MILESTONE_AGENT_NATIVE_TOOL_SURFACE.md); byte preservation, state vocabulary, annotations, and corrective acceptance gates are normative in [MILESTONE_AGENT_CONTRACT_INTEGRITY.md](MILESTONE_AGENT_CONTRACT_INTEGRITY.md).
+### How it works
+
+KnowledgeRail separates context retrieval, durable memory, source ingestion, code evidence, and document production so an agent can enter at the operation it needs without learning an internal menu or carrying session state:
+
+```text
+task objective
+    ↓
+knowledge_context ──→ ranked evidence links + coverage gaps
+    ↓                              ↓
+resources/read              bounded widening, if needed
+    ↓
+agent reasoning and project work
+    ├──→ knowledge_page / knowledge_code
+    ├──→ knowledge_ingest ──→ Evidence IR ──→ canonical wiki
+    └──→ knowledge_document_context ──→ knowledge_document
+```
+
+For a normal task, the agent calls `knowledge_context mode="task"` with a concrete objective. KnowledgeRail searches the canonical wiki and its derived lexical, graph, passage, code, and optional semantic indexes, ranks the available evidence, and returns a compact context envelope. Large page bodies are exposed as `knowledge-rail://` links instead of being inserted wholesale into the response; the client reads only the selected passages. If the token budget alone excluded relevant evidence, the returned `nextAction` proposes one bounded widening step. Missing, stale, contradictory, or unresolved evidence remains an explicit gap and is never filled by guessing.
+
+Durable knowledge lives as Markdown under `wiki/`. Direct page operations preserve caller-owned content byte-for-byte. Larger source sets use `knowledge_ingest`: normalized sources are processed in bounded segments, claims are recorded in durable Evidence IR, coverage is reconciled, and finalization is blocked until every segment is represented or explicitly classified. Derived retrieval and graph indexes are refreshed from this canonical state rather than replacing it.
+
+Document production is a separate evidence-backed workflow. `knowledge_document_context` first creates a typed plan and a bounded evidence pack for each section. `knowledge_document` then writes and reviews the deliverable against the selected contract; export re-runs that review and is refused while blockers remain. This keeps generated documents traceable to project memory without treating the deliverable itself as canonical memory.
+
+All public actions validate their own required arguments before reading or mutating state. The shared `state`/`nextAction` envelope makes progress explicit, but a suggested next action never grants permission to perform a consequential write: the connected client retains its normal approval policy. Compatibility with older MCP clients changes only the transport adapter, not these eight tool names or their behavior.
 
 A normal context request starts directly with:
 
