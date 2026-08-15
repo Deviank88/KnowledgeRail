@@ -23,7 +23,7 @@ import {
   normalizedOutputPath,
 } from "../core/source-normalization-service.js";
 import { readFileSafe } from "../core/utils.js";
-import { errorResult, textResult } from "./helpers.js";
+import { errorResult, structuredTextResult, textResult } from "./helpers.js";
 import { toolName, type ProtocolEra } from "../mcp/tool-names.js";
 
 const CATEGORY_ENUM = [...FILE_CATEGORIES] as [
@@ -185,7 +185,7 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                     content,
                     segmentMaxChars: segment_max_chars ?? unitBudget,
                   });
-                  return textResult([
+                  return structuredTextResult([
                     "# Piano compilazione fonte",
                     "",
                     `- source: ${result.ledger.sourceUri}`,
@@ -198,7 +198,16 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                     result.metrics.unresolvedSegmentCount > 0
                       ? "Usare action=next per processare la prima unità unresolved."
                       : "Nessuna unità in coda.",
-                  ].join("\n"));
+                  ].join("\n"), {
+                    action: "plan",
+                    sourceUri: result.ledger.sourceUri,
+                    sourceHash: result.ledger.sourceHash,
+                    compilerVersion: result.ledger.compilerVersion,
+                    ledgerRef: sourceCoverageLedgerRef(uri),
+                    ledgerState: result.ledger.state,
+                    metrics: result.metrics,
+                    queueEmpty: result.metrics.unresolvedSegmentCount === 0,
+                  });
                 }
 
                 if (action === "record") {
@@ -207,7 +216,7 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                   }
                   if (["integrated", "duplicate", "contradicted"].includes(status)) {
                     return errorResult(
-                      "Gli stati integrated, duplicate e contradicted sono derivati esclusivamente da knowledge_ingest action=apply; la coverage verrà riconciliata automaticamente."
+                      "Gli stati integrated, duplicate e contradicted sono derivati esclusivamente da knowledge_ingest action=apply_claims; la coverage verrà riconciliata automaticamente."
                     );
                   }
                   const result = await sourceRecordSegment({
@@ -222,32 +231,50 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                       reason,
                     },
                   });
-                  return textResult([
+                  return structuredTextResult([
                     `Segmento registrato: ${segment_id} -> ${status}`,
                     `Stato fonte: ${result.ledger.state}`,
                     ...coverageLines(result.metrics),
-                  ].join("\n"));
+                  ].join("\n"), {
+                    action: "record",
+                    segmentId: segment_id,
+                    segmentStatus: status,
+                    ledgerState: result.ledger.state,
+                    metrics: result.metrics,
+                  });
                 }
 
                 if (action === "coverage") {
                   const result = await sourceCoverage({ wikiRoot: wikiDir(), sourceUri: uri, content });
-                  return textResult([
+                  return structuredTextResult([
                     "# Coverage fonte",
                     "",
                     `- source: ${result.ledger.sourceUri}`,
                     `- state: ${result.ledger.state}`,
                     ...coverageLines(result.metrics),
                     `- gaps: ${result.gaps.join(", ") || "none"}`,
-                  ].join("\n"));
+                  ].join("\n"), {
+                    action: "coverage",
+                    sourceUri: result.ledger.sourceUri,
+                    ledgerState: result.ledger.state,
+                    metrics: result.metrics,
+                    gaps: result.gaps,
+                    readyForFinalization: result.gaps.length === 0,
+                  });
                 }
 
                 if (action === "finalize") {
                   const result = await sourceFinalize({ wikiRoot: wikiDir(), sourceUri: uri, content });
-                  return textResult([
+                  return structuredTextResult([
                     "Coverage fonte finalizzata.",
                     `Stato fonte: ${result.ledger.state}`,
                     ...coverageLines(result.metrics),
-                  ].join("\n"));
+                  ].join("\n"), {
+                    action: "finalize",
+                    sourceUri: result.ledger.sourceUri,
+                    ledgerState: result.ledger.state,
+                    metrics: result.metrics,
+                  });
                 }
 
                 if (!(await readSourceCoverageLedger(wikiDir(), uri))) {
@@ -266,26 +293,40 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                 });
                 if (!unit) {
                   const result = await sourceCoverage({ wikiRoot: wikiDir(), sourceUri: uri, content });
-                  return textResult([
+                  return structuredTextResult([
                     "Nessun segmento unresolved in coda.",
                     `Stato fonte: ${result.ledger.state}`,
                     ...coverageLines(result.metrics),
                     result.ledger.state === "fully_covered"
                       ? "Coverage già finalizzata."
                       : "Usare action=finalize per chiudere esplicitamente la coverage.",
-                  ].join("\n"));
+                  ].join("\n"), {
+                    action: "next",
+                    sourceUri: result.ledger.sourceUri,
+                    ledgerState: result.ledger.state,
+                    metrics: result.metrics,
+                    queueEmpty: true,
+                  });
                 }
-                return textResult([
+                return structuredTextResult([
                   "# Unità estrazione Evidence IR",
                   "",
                   `> Segmento: \`${unit.segment.id}\` (${unit.segment.start}-${unit.segment.end}, ${unit.segment.kind})`,
                   `> Coda unresolved: ${unit.queuedSegmentIds.length} segmenti (incluso quello corrente).`,
-                  "> Estrarre claim con provenance e usare `knowledge_ingest action=apply`; record, link, validazione e synthesis sono orchestrati internamente.",
+                  "> Extract claims with provenance and use `knowledge_ingest action=apply_claims`; record, link, validation and synthesis are orchestrated internally.",
                   "",
                   "```source",
                   unit.content,
                   "```",
-                ].join("\n"));
+                ].join("\n"), {
+                  action: "next",
+                  sourceUri: unit.sourceUri,
+                  sourceHash: unit.sourceHash,
+                  segment: unit.segment,
+                  queuedSegmentIds: unit.queuedSegmentIds,
+                  metrics: unit.metrics,
+                  queueEmpty: false,
+                });
               } catch (error: unknown) {
                 return errorResult(error);
               }

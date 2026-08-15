@@ -174,7 +174,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               );
             });
 
-  server.registerTool("wiki_write_page", { description: "Crea o sovrascrive una pagina wiki (path relativo a wiki/, frontmatter YAML obbligatorio). Valida il contenuto, segnala wikilink rotti e titoli duplicati, rigenera index.md.", inputSchema: z.object({
+  server.registerTool(toolName("writePage", era), { description: "Crea o sovrascrive una pagina wiki (path relativo a wiki/, frontmatter YAML obbligatorio). Valida il contenuto, segnala wikilink rotti e titoli duplicati, rigenera index.md.", inputSchema: z.object({
               path: z.string().describe("Path relativo a wiki/ (es. 'concepts/RAG.md')"),
               content: z.string().describe("Contenuto markdown completo, frontmatter incluso"),
             }) }, async ({ path: relPath, content }) => {
@@ -204,7 +204,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               );
             });
 
-  server.registerTool("wiki_edit_page", { description: "Modifica mirata di una pagina wiki: sostituisce old_string con new_string senza riscrivere il file. La pagina risultante viene rivalidata e index.md rigenerato.", inputSchema: z.object({
+  server.registerTool(toolName("editPage", era), { description: "Modifica mirata di una pagina wiki: sostituisce old_string con new_string senza riscrivere il file. La pagina risultante viene rivalidata e index.md rigenerato.", inputSchema: z.object({
               path: z.string().describe("Path relativo a wiki/"),
               old_string: z.string().describe("Testo esatto da sostituire"),
               new_string: z.string().describe("Testo sostitutivo"),
@@ -255,7 +255,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               );
             });
 
-  server.registerTool("wiki_read_page", {
+  server.registerTool(toolName("readPage", era), {
             description:
               "Internal bounded path/URI page read; MCP 2.0 agents should prefer resources/read for selected passage links.",
             inputSchema: z.object({
@@ -285,7 +285,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               }
             });
 
-  server.registerTool("wiki_delete_page", { description: "Elimina una pagina wiki e rigenera index.md.", inputSchema: z.object({
+  server.registerTool(toolName("deletePage", era), { description: "Elimina una pagina wiki e rigenera index.md.", inputSchema: z.object({
               path: z.string().describe("Path relativo a wiki/"),
             }) }, async ({ path: relPath }) => {
               try {
@@ -300,7 +300,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               return textResult(`Eliminata: ${relPath}\n${indexLine}`);
             });
 
-  server.registerTool("wiki_move_page", { description: "Sposta o rinomina una pagina wiki aggiornando [[wikilink]] e link markdown relativi in tutta la wiki. Con dry_run=true mostra solo l'anteprima.", inputSchema: z.object({
+  server.registerTool(toolName("movePage", era), { description: "Sposta o rinomina una pagina wiki aggiornando [[wikilink]] e link markdown relativi in tutta la wiki. Con dry_run=true mostra solo l'anteprima.", inputSchema: z.object({
               old_path: z.string().describe("Path attuale relativo a wiki/"),
               new_path: z.string().describe("Nuovo path relativo a wiki/"),
               dry_run: z.boolean().optional().default(false),
@@ -412,7 +412,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               );
             });
 
-  server.registerTool("wiki_append_log", { description: "Aggiunge una voce timestampata a log.md.", inputSchema: z.object({
+  server.registerTool(toolName("appendLog", era), { description: "Aggiunge una voce timestampata a log.md.", inputSchema: z.object({
               entry: z.string().describe("Testo della voce (markdown)"),
               level: z.enum(["INFO", "WARN", "ACTION", "DECISION"]).optional().default("ACTION"),
             }) }, async ({ entry, level }) => {
@@ -421,7 +421,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               return textResult("Voce di log aggiunta.");
             });
 
-  server.registerTool("wiki_search", { description: "Internal lexical diagnostic used by knowledge_context mode=search.", inputSchema: z.object({
+  server.registerTool(toolName("search", era), { description: "Internal lexical diagnostic used by knowledge_context mode=search.", inputSchema: z.object({
               query: z.string().optional(),
               max_results: z.number().int().positive().optional().default(10),
               page_types: z.array(z.string()).optional(),
@@ -447,7 +447,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               return textResult(lines.join("\n\n"));
             });
 
-  server.registerTool("wiki_graph_query", { description: "Internal graph diagnostic used by knowledge_context mode=graph.", inputSchema: z.object({
+  server.registerTool(toolName("graphQuery", era), { description: "Internal graph diagnostic used by knowledge_context mode=graph.", inputSchema: z.object({
               query: z.string().optional().default(""),
               max_nodes: z.number().int().positive().optional().default(12),
               max_depth: z.number().int().min(0).optional().default(1),
@@ -494,7 +494,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
             );
             });
 
-  server.registerTool("wiki_migrate", { description: "Pianifica, applica o ripristina la migrazione conservativa wiki v1/v2/v3 → v4; plan predefinito.", inputSchema: z.object({
+  server.registerTool(toolName("migrate", era), { description: "Pianifica, applica o ripristina la migrazione conservativa wiki v1/v2/v3 → v4; plan predefinito.", inputSchema: z.object({
               action: z.enum(["plan", "apply", "rollback"]).optional(),
               target_version: z.string().optional().default("4"),
               dry_run: z.boolean().optional(),
@@ -525,7 +525,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               }
             });
 
-  server.registerTool("wiki_lint", { description: "Health check della wiki: frontmatter, pagine orfane, [[wikilink]] mancanti, link markdown rotti, titoli duplicati e file vuoti.", inputSchema: z.object({
+  server.registerTool(toolName("lint", era), { description: "Health check della wiki: frontmatter, pagine orfane, [[wikilink]] mancanti, link markdown rotti, titoli duplicati e file vuoti.", inputSchema: z.object({
               include_orphans: z.boolean().optional().default(true),
               include_missing: z.boolean().optional().default(true),
               include_broken_links: z.boolean().optional().default(true),

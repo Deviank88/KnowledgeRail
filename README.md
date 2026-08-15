@@ -102,18 +102,18 @@ KnowledgeRail exposes eight stable tools. Agents choose a domain directly and us
 
 | Tool | Operations |
 | --- | --- |
-| `knowledge_context` | Task context plus diagnostic `search` and `graph` modes. |
+| `knowledge_context` | `task`, bounded page `list`, query-required `search`, and `graph`. |
 | `knowledge_page` | Read, write, edit, move, delete, and append the durable log. |
 | `knowledge_files` | List, read, and normalize controlled source files. |
-| `knowledge_ingest` | Start, advance, apply, inspect, and finalize evidence-backed ingestion; prepare reports and recovery state. |
+| `knowledge_ingest` | `start`, `next`, `apply_claims`, `record_segment`, `source_status`, `evidence_status`, `finalize`, report, and recovery actions. |
 | `knowledge_code` | Maintain and query deterministic code evidence. |
 | `knowledge_document_context` | Plan a typed document and compile section-specific evidence. |
 | `knowledge_document` | Write, review, and export deliverables. |
 | `knowledge_admin` | Initialize, lint, and migrate KnowledgeRail data. |
 
-Every successful operation returns a machine-readable `state` and either one `nextAction` or `null`. `nextAction` identifies the next tool, action, required arguments, and safe suggested arguments. Clients that only render text also receive a concise `Next:` line.
+Every successful operation returns a machine-readable `state` and either one `nextAction` or `null`. `nextAction` identifies the next tool, action, required arguments, and safe suggested arguments. Optional `guidance` and `resultText` complete the shared output envelope. Clients that only render text also receive concise `Next:` and `Guidance:` lines when applicable.
 
-The normative design, compatibility boundaries, and measurable acceptance gates are recorded in [MILESTONE_AGENT_NATIVE_TOOL_SURFACE.md](MILESTONE_AGENT_NATIVE_TOOL_SURFACE.md).
+The surface design is recorded in [MILESTONE_AGENT_NATIVE_TOOL_SURFACE.md](MILESTONE_AGENT_NATIVE_TOOL_SURFACE.md); byte preservation, state vocabulary, annotations, and corrective acceptance gates are normative in [MILESTONE_AGENT_CONTRACT_INTEGRITY.md](MILESTONE_AGENT_CONTRACT_INTEGRITY.md).
 
 A normal context request starts directly with:
 
@@ -130,6 +130,17 @@ knowledge_context {
 On MCP `2026-07-28`, `knowledge_context` returns selected `knowledge-rail://` resource links. The client materializes only the passages it needs with `resources/read`; clients that do not expose resource reads can use `knowledge_page action="read"` with the exact URI. When evidence was omitted only because of the budget, `nextAction` provides the next bounded widening request. Semantic, stale, or unresolved gaps are returned without a futile widening loop and must remain explicit unknowns.
 
 The consolidated catalog is deliberately action-oriented, but validation remains action-specific. For example, `knowledge_page action="edit"` is rejected without `path`, `old_string`, and `new_string`; ingestion cannot finalize before complete coverage; document export re-runs the contract review.
+
+Caller-owned page, file, and code bodies are never rewritten to modernize historical tool names. If a canonical `SCHEMA.md` still refers to a retired operation, `knowledge_admin action="migrate"` can propose the corresponding current operation for explicit review; reads remain byte-preserving.
+
+A normalized-source loop is explicit and machine-guided:
+
+```text
+start → next → apply_claims or record_segment → next
+      → source_status → finalize
+```
+
+Use `evidence_status` for claims and recovery debt; it is intentionally separate from per-source `source_status`. The old overloaded `apply` and `status` ingestion actions are rejected.
 
 ### Why context has a token budget
 

@@ -321,7 +321,7 @@ test("source ingestion: normalize, prepare drafts, dev report ingestion, traceab
   });
   assert.equal(sourceDraft.isError, undefined);
   assert.equal(sourceDraft.content[0].text.includes("Unità estrazione Evidence IR"), true);
-  assert.equal(sourceDraft.content[0].text.includes("record, link, validazione e synthesis sono orchestrati internamente"), true);
+  assert.equal(sourceDraft.content[0].text.includes("record, link, validation and synthesis are orchestrated internally"), true);
   assert.equal(sourceDraft.content[0].text.includes("Coda unresolved:"), true);
   assert.equal(sourceDraft.content[0].text.includes("```source"), true);
 
@@ -351,7 +351,7 @@ test("source ingestion: normalize, prepare drafts, dev report ingestion, traceab
     page_refs: ["index.md"],
   });
   assert.equal(representedBypass.isError, true);
-  assert.equal(representedBypass.content[0].text.includes("derivati esclusivamente da knowledge_ingest action=apply"), true);
+  assert.equal(representedBypass.content[0].text.includes("derivati esclusivamente da knowledge_ingest action=apply_claims"), true);
 
   const evidenceRecord = await tools.get("knowledge_evidence_ir")!({
     action: "record",

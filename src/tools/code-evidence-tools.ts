@@ -1,5 +1,4 @@
 import type { McpServer, ResourceLink } from "@modelcontextprotocol/server";
-import { z } from "zod";
 import { PersistentCodeEvidenceIndex } from "../core/code-evidence/index.js";
 import { readCodeResource } from "../core/code-evidence/resource-reader.js";
 import {
@@ -11,18 +10,7 @@ import { recordKnowledgeRecoveryUsage } from "../core/knowledge-recovery.js";
 import { getWikiRoot, wikiDir } from "../core/paths.js";
 import { errorResult } from "./helpers.js";
 import { toolName } from "../mcp/tool-names.js";
-
-const ActionSchema = z.enum([
-  "rebuild",
-  "update",
-  "remove",
-  "search",
-  "symbol",
-  "references",
-  "read",
-  "status",
-  "record_fallback",
-]);
+import { CodeEvidenceInputSchema } from "./input-schemas.js";
 
 function linkForHit(hit: CodeEvidenceHit): ResourceLink {
   return {
@@ -68,26 +56,7 @@ export function registerCodeEvidenceTools(
     {
       title: "Index and retrieve code evidence",
       description: "Internal deterministic code-evidence operation.",
-      inputSchema: z.object({
-        action: ActionSchema,
-        path: z.string().min(1).optional(),
-        query: z.string().min(1).max(4_096).optional(),
-        symbol: z.string().min(1).max(512).optional(),
-        symbol_id: z.string().min(1).max(256).optional(),
-        resource_uri: z.string().startsWith("code://repo/").optional(),
-        path_prefixes: z.array(z.string().min(1)).max(20).optional(),
-        kinds: z.array(z.enum(["module", "class", "function", "method", "route", "test", "comment"])).max(7).optional(),
-        max_results: z.number().int().min(1).max(100).default(12),
-        max_chars: z.number().int().min(1).max(50_000).default(6_000),
-        fallback_reason: z.string().min(1).max(1_024).optional(),
-        fallback_result_count: z.number().int().nonnegative().optional(),
-        recovered_evidence: z.array(z.object({
-          evidence_ref: z.string().min(1).max(4_096),
-          source_uri: z.string().min(1).max(4_096),
-          expected_wiki_pages: z.array(z.string().min(1)).max(50).optional(),
-          reason: z.string().min(1).max(1_024).optional(),
-        })).max(100).optional(),
-      }),
+      inputSchema: CodeEvidenceInputSchema,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     },
     async ({

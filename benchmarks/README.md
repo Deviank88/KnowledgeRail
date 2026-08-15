@@ -155,19 +155,24 @@ npm run eval:tool-surface:gate
 ```
 
 The evaluator requires exactly eight domain tools with no menu or historical aliases.
-It measures the serialized `tools/list` response, a reproducible `UTF-8 bytes / 3`
-token proxy, tool/action affordance over 18 natural-language golden requests, and
+It separately measures the serialized `tools` array and the complete `tools/list`
+result. Their matching pre-consolidation baselines are 19,926 and 26,080 UTF-8
+bytes respectively; mixing those units is forbidden. The token proxy is the tools
+array's reproducible `UTF-8 bytes / 3`. The versioned fixture is the only baseline
+and threshold source. The evaluator also measures tool/action affordance over 31
+realistic English and Italian requests, saved menu-routing round trips, and
 server-side rejection of incomplete action arguments. It then executes five real
 workflow traces covering initialization, canonical pages, atomic Evidence IR
 orchestration, document planning/review and code-index maintenance. The same
 transport compares `knowledge_context` full and default-compact responses and
 requires identical evidence pointers and knowledge gaps.
 
-This proves that the advertised MCP protocol is complete and mechanically
-followable without profiles, menu state or hidden client configuration. The
-catalog-affordance score is a deterministic schema-quality signal, not an LLM
-benchmark; provider-specific A/B remains required before attributing results to a
-particular model.
+This verifies that the advertised MCP protocol is mechanically followable without
+profiles, menu state or hidden client configuration. The routing matcher uses a
+small transparent normalization layer for stop words, plurals, and cross-language
+concepts; it is a deterministic schema-quality regression signal, not proof of an
+LLM's behavior. Provider-specific A/B remains required before attributing results
+to a particular model.
 
 ## Scaling baseline
 

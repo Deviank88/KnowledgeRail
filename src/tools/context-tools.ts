@@ -5,23 +5,9 @@ import {
   compileTaskContext,
   type TaskContext,
 } from "../context/task-context-compiler.js";
-import { readWikiResource } from "../context/resource-reader.js";
 import { wikiDir } from "../core/paths.js";
 import { errorResult } from "./helpers.js";
 import { toolName } from "../mcp/tool-names.js";
-
-const ResourceReadMetadataSchema = z.object({
-  uri: z.string(),
-  pageUri: z.string(),
-  path: z.string(),
-  passageId: z.string().optional(),
-  title: z.string(),
-  type: z.string(),
-  heading: z.string().optional(),
-  truncated: z.boolean(),
-  totalCharacters: z.number().int().nonnegative(),
-  returnedCharacters: z.number().int().nonnegative(),
-});
 
 const CONTEXT_SECTION_LABELS: Readonly<Record<
   (typeof TASK_CONTEXT_EVIDENCE_FIELDS)[number],
@@ -41,7 +27,7 @@ const CONTEXT_SECTION_LABELS: Readonly<Record<
   contradictions: "Contradictions",
 };
 
-function compactManifestText(manifest: TaskContext, includeUris: boolean): string {
+function compactManifestText(manifest: TaskContext): string {
   const catalog = new Map(manifest.evidence.map((evidence) => [evidence.uri, evidence] as const));
   const lines = [
     `Task context: ${manifest.evidence.length} evidence, ${manifest.unknowns.length} unknown(s), ` +
@@ -62,7 +48,6 @@ function compactManifestText(manifest: TaskContext, includeUris: boolean): strin
       lines.push(evidence
         ? `- [${evidence.type}] ${evidence.title}${heading}`
         : `- ${evidenceRef.path}`);
-      if (includeUris) lines.push(`  ${evidenceRef.uri}`);
     }
   }
   if (manifest.changeImpact.relations.length > 0) {
@@ -117,7 +102,6 @@ export function registerContextTools(
   // server always passes the negotiated era explicitly.
   era: "legacy" | "modern" = "modern"
 ): void {
-  const modern = era === "modern";
   const contextName = toolName("context", era);
   server.registerTool(
     contextName,
@@ -162,12 +146,10 @@ export function registerContextTools(
           heuristicTokenBudget: heuristic_token_budget,
         });
         return {
-          content: modern
-            ? [
-                { type: "text" as const, text: compactManifestText(manifest, false) },
-                ...evidenceLinks(manifest),
-              ]
-            : [{ type: "text" as const, text: compactManifestText(manifest, true) }],
+          content: [
+            { type: "text" as const, text: compactManifestText(manifest) },
+            ...evidenceLinks(manifest),
+          ],
           structuredContent: response_detail === "compact"
             ? compactStructuredContext(manifest)
             : { ...manifest },
@@ -178,53 +160,4 @@ export function registerContextTools(
     }
   );
 
-  if (modern) return;
-
-  server.registerTool(
-    "wiki_read_resource",
-    {
-      title: "Read referenced wiki evidence",
-      description:
-        "Read one KnowledgeRail page/passage URI returned by wiki_context. Passage URIs materialize only " +
-        "that evidence; page reads are capped unless max_chars is explicitly increased.",
-      inputSchema: z.object({
-        resource_uri: z.string().startsWith("knowledge-rail://page/"),
-        max_chars: z.number().int().min(1).max(50_000).default(6_000),
-      }),
-      outputSchema: ResourceReadMetadataSchema,
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
-    },
-    async ({ resource_uri, max_chars }) => {
-      try {
-        const read = await readWikiResource({
-          wikiRoot: wikiDir(),
-          resourceUri: resource_uri,
-          maxCharacters: max_chars,
-        });
-        const returnedCharacters = [...read.text].length;
-        const metadata = {
-          uri: read.uri,
-          pageUri: read.pageUri,
-          path: read.path,
-          passageId: read.passageId,
-          title: read.title,
-          type: read.type,
-          heading: read.heading,
-          truncated: read.truncated,
-          totalCharacters: read.totalCharacters,
-          returnedCharacters,
-        };
-        const label = read.heading ? `${read.title} — ${read.heading}` : read.title;
-        const truncation = read.truncated
-          ? `\n\n[Truncated: ${returnedCharacters}/${read.totalCharacters} characters returned]`
-          : "";
-        return {
-          content: [{ type: "text" as const, text: `# ${label}\n\n${read.text}${truncation}` }],
-          structuredContent: { ...metadata },
-        };
-      } catch (error: unknown) {
-        return errorResult(error);
-      }
-    }
-  );
 }

@@ -9,10 +9,18 @@ export interface ToolResult {
   [key: string]: unknown;
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
+  structuredContent?: Record<string, unknown>;
 }
 
 export function textResult(text: string): ToolResult {
   return { content: [{ type: "text", text }] };
+}
+
+export function structuredTextResult(
+  text: string,
+  structuredContent: Record<string, unknown>
+): ToolResult {
+  return { content: [{ type: "text", text }], structuredContent };
 }
 
 export function errorResult(error: unknown): ToolResult {

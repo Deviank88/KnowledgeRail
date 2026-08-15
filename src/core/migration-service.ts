@@ -357,14 +357,45 @@ async function incompleteMigrationRuns(wikiRoot: string): Promise<string[]> {
 export function migrateSchemaText(schema: string): string {
   // Retained as an explicit proposal helper. Migration never applies this text
   // automatically because SCHEMA.md is canonical project knowledge.
-  return schema
-    .replace(/`wiki_traceability_report`/g, "`knowledge_context mode=graph view=traceability`")
-    .replace(/`wiki_list_pages`/g, "`knowledge_context mode=search` senza query")
-    .replace(/`wiki_prepare_knowledge_updates`/g, "prompt `prepare_knowledge_update`")
-    .replace(/`wiki_list_files`/g, "`knowledge_files action=list`")
-    .replace(/`wiki_read_file`/g, "`knowledge_files action=read`")
-    .replace(/`wiki_get_schema`/g, "risorsa `wiki://schema`")
-    .replace(/`wiki_read_log`/g, "risorsa `wiki://log`");
+  const references: ReadonlyArray<readonly [string, string]> = [
+    ["wiki_traceability_report", "knowledge_context mode=graph view=traceability"],
+    ["wiki_list_pages", "knowledge_context mode=list"],
+    ["wiki_prepare_knowledge_updates", "prompt prepare_knowledge_update"],
+    ["wiki_list_files", "knowledge_files action=list"],
+    ["wiki_read_file", "knowledge_files action=read"],
+    ["wiki_get_schema", "resource wiki://schema"],
+    ["wiki_read_log", "resource wiki://log"],
+    ["knowledge_normalize_source", "knowledge_files action=normalize"],
+    ["knowledge_prepare_request_ingestion", "knowledge_ingest action=report"],
+    ["knowledge_prepare_source_ingestion", "knowledge_ingest"],
+    ["knowledge_evidence_ir", "knowledge_ingest"],
+    ["knowledge_code_evidence", "knowledge_code"],
+    ["knowledge_plan_document", "knowledge_document_context action=plan"],
+    ["knowledge_section_context", "knowledge_document_context action=section"],
+    ["knowledge_write_document", "knowledge_document action=write"],
+    ["knowledge_review_document", "knowledge_document action=review"],
+    ["knowledge_export_docx", "knowledge_document action=export"],
+    ["knowledge_init", "knowledge_admin action=init"],
+    ["wiki_init", "knowledge_admin action=init"],
+    ["wiki_write_page", "knowledge_page action=write"],
+    ["wiki_edit_page", "knowledge_page action=edit"],
+    ["wiki_read_page", "knowledge_page action=read"],
+    ["wiki_read_resource", "knowledge_page action=read"],
+    ["wiki_delete_page", "knowledge_page action=delete"],
+    ["wiki_move_page", "knowledge_page action=move"],
+    ["wiki_append_log", "knowledge_page action=append_log"],
+    ["wiki_search", "knowledge_context mode=search"],
+    ["wiki_graph_query", "knowledge_context mode=graph"],
+    ["wiki_lint", "knowledge_admin action=lint"],
+    ["wiki_migrate", "knowledge_admin action=migrate"],
+    ["knowledge_menu", "KnowledgeRail domain tools"],
+    ["wiki_menu", "KnowledgeRail domain tools"],
+  ];
+  let migrated = schema;
+  for (const [legacy, replacement] of references) {
+    migrated = migrated.replaceAll(legacy, replacement);
+  }
+  return migrated;
 }
 
 function currentState(migratedFrom: WikiFormatVersion, migratedAt: string): WikiState {

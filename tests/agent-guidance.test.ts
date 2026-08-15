@@ -48,7 +48,8 @@ test("action schemas reject incomplete calls before an operation can mutate stat
 
   assert.equal(page.safeParse({ action: "edit", path: "a.md" }).success, false);
   assert.equal(page.safeParse({ action: "read", path: "a.md", resource_uri: "knowledge-rail://page/a.md" }).success, false);
-  assert.equal(ingest.safeParse({ action: "apply", normalized_filename: "a.md", segment_id: "seg-x" }).success, false);
+  assert.equal(ingest.safeParse({ action: "apply_claims", normalized_filename: "a.md", segment_id: "seg-x" }).success, false);
+  assert.equal(ingest.safeParse({ action: "record_segment", normalized_filename: "a.md", segment_id: "seg-x" }).success, false);
   assert.equal(code.safeParse({ action: "record_fallback", query: "x" }).success, false);
   assert.equal(page.safeParse({ action: "delete", path: "a.md" }).success, true);
 });
@@ -126,6 +127,7 @@ test("tool results provide one machine-readable next action without a menu round
     assert.equal(incomplete.structuredContent?.state, "context_incomplete");
     assert.equal(incomplete.structuredContent?.nextAction, null);
     assert.match(String(incomplete.structuredContent?.guidance), /report those gaps/);
+    assert.match(incomplete.content?.map((item) => item.text ?? "").join("\n") ?? "", /Guidance: .*report those gaps/);
   } finally {
     setWikiRoot(previousRoot);
     await fs.rm(projectRoot, { recursive: true, force: true });
