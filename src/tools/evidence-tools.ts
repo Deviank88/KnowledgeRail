@@ -1,10 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import {
-  EVIDENCE_CLAIM_KINDS,
-  EVIDENCE_CLAIM_ORIGINS,
-  EVIDENCE_RELATION_TYPES,
-} from "../core/ingestion/evidence-claim.js";
 import { resolveEvidenceClaims } from "../core/ingestion/evidence-linker.js";
 import {
   evidenceIrStatus,
@@ -17,38 +12,20 @@ import {
   planEvidenceSynthesis,
 } from "../core/ingestion/evidence-synthesis.js";
 import {
-  KNOWLEDGE_RECOVERY_DISCOVERY_METHODS,
   KNOWLEDGE_RECOVERY_RESOLUTIONS,
   knowledgeRecoveryStatus,
   recordKnowledgeRecoveryUsage,
   resolveKnowledgeRecoveryEvent,
 } from "../core/knowledge-recovery.js";
 import { docsCategoryFilePath, wikiDir } from "../core/paths.js";
-import { WIKI_PAGE_TYPES } from "../core/wiki-validation.js";
 import { readFileSafe } from "../core/utils.js";
-import { errorResult, finalizePageMutation, textResult } from "./helpers.js";
+import { errorResult, finalizePageMutation, structuredTextResult, textResult } from "./helpers.js";
 import { toolName, type ProtocolEra } from "../mcp/tool-names.js";
+import {
+  EvidenceClaimInputSchema,
+  RecoveryEventInputSchema,
+} from "./input-schemas.js";
 
-const CLAIM_KINDS = [...EVIDENCE_CLAIM_KINDS] as [
-  (typeof EVIDENCE_CLAIM_KINDS)[number],
-  ...(typeof EVIDENCE_CLAIM_KINDS)[number][],
-];
-const CLAIM_ORIGINS = [...EVIDENCE_CLAIM_ORIGINS] as [
-  (typeof EVIDENCE_CLAIM_ORIGINS)[number],
-  ...(typeof EVIDENCE_CLAIM_ORIGINS)[number][],
-];
-const RELATION_TYPES = [...EVIDENCE_RELATION_TYPES] as [
-  (typeof EVIDENCE_RELATION_TYPES)[number],
-  ...(typeof EVIDENCE_RELATION_TYPES)[number][],
-];
-const PAGE_TYPES = [...WIKI_PAGE_TYPES] as [
-  (typeof WIKI_PAGE_TYPES)[number],
-  ...(typeof WIKI_PAGE_TYPES)[number][],
-];
-const RECOVERY_DISCOVERY_METHODS = [...KNOWLEDGE_RECOVERY_DISCOVERY_METHODS] as [
-  (typeof KNOWLEDGE_RECOVERY_DISCOVERY_METHODS)[number],
-  ...(typeof KNOWLEDGE_RECOVERY_DISCOVERY_METHODS)[number][],
-];
 const RECOVERY_RESOLUTIONS = KNOWLEDGE_RECOVERY_RESOLUTIONS.filter(
   (resolution) => resolution !== "pending"
 ) as [
@@ -81,30 +58,9 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
       normalized_filename: z.string().optional(),
       segment_id: z.string().optional(),
       claim_ids: z.array(z.string()).optional(),
-      claims: z.array(z.object({
-        text: z.string(),
-        kind: z.enum(CLAIM_KINDS),
-        origin: z.enum(CLAIM_ORIGINS),
-        confidence: z.number().min(0).max(1),
-        target: z.object({
-          entity_key: z.string().optional(),
-          page_path: z.string().optional(),
-          page_title: z.string().optional(),
-          page_type: z.enum(PAGE_TYPES).optional(),
-        }).optional(),
-        relations: z.array(z.object({
-          type: z.enum(RELATION_TYPES),
-          target_claim_id: z.string(),
-        })).optional(),
-      })).optional(),
+      claims: z.array(EvidenceClaimInputSchema).optional(),
       total_evidence_used: z.number().int().nonnegative().optional(),
-      recovery_events: z.array(z.object({
-        evidence_ref: z.string().min(1).max(4_096),
-        source_uri: z.string().min(1).max(4_096),
-        discovered_by: z.enum(RECOVERY_DISCOVERY_METHODS),
-        expected_wiki_pages: z.array(z.string().min(1)).max(50).optional(),
-        reason: z.string().min(1).max(1_024),
-      })).max(100).optional(),
+      recovery_events: z.array(RecoveryEventInputSchema).max(100).optional(),
       recovery_event_id: z.string().optional(),
       recovery_resolution: z.enum(RECOVERY_RESOLUTIONS).optional(),
       recovery_page_refs: z.array(z.string().min(1)).max(50).optional(),
@@ -144,7 +100,7 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
             reason: event.reason,
           })),
         });
-        return textResult([
+        return structuredTextResult([
           "Knowledge recovery usage registrato senza modificare la wiki canonica.",
           `Eventi creati: ${result.created}; riusati: ${result.reused}; riaperti: ${result.reopened}.`,
           `LateRecoveryRate: ${result.metrics.lateRecoveryRate.toFixed(4)} ` +
@@ -153,7 +109,14 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
           ...result.events.map((event) =>
             `- ${event.id} [${event.discoveredBy}/${event.resolution}] ${event.evidenceRef}`
           ),
-        ].join("\n"));
+        ].join("\n"), {
+          action,
+          created: result.created,
+          reused: result.reused,
+          reopened: result.reopened,
+          metrics: result.metrics,
+          events: result.events,
+        });
       }
 
       if (action === "recovery_resolve") {
@@ -169,12 +132,16 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
           pageRefs: recovery_page_refs,
           reason: recovery_reason,
         });
-        return textResult([
+        return structuredTextResult([
           `Knowledge recovery risolta: ${result.event.id} -> ${result.event.resolution}.`,
           `Page refs: ${result.event.pageRefs.join(", ") || "none"}.`,
           `KnowledgeRecoveryPending: ${result.metrics.knowledgeRecoveryPending}.`,
           "Le pagine vengono accettate solo dopo la normale mutation/synthesis pipeline e la verifica della provenance.",
-        ].join("\n"));
+        ].join("\n"), {
+          action,
+          event: result.event,
+          metrics: result.metrics,
+        });
       }
 
       if (action === "recovery_status") {
@@ -182,7 +149,7 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
         const events = include_resolved
           ? result.events
           : result.events.filter((event) => event.resolution === "pending");
-        return textResult([
+        return structuredTextResult([
           "# Knowledge recovery status",
           "",
           `- LateRecoveryRate: ${result.metrics.lateRecoveryRate.toFixed(4)}`,
@@ -196,7 +163,12 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
             `- ${event.id} [${event.discoveredBy}/${event.resolution}] ${event.evidenceRef} -> ` +
             `${event.expectedWikiPages.join(", ") || "target da definire"}`
           ),
-        ].join("\n"));
+        ].join("\n"), {
+          action,
+          metrics: result.metrics,
+          events,
+          includeResolved: include_resolved,
+        });
       }
 
       if (action === "record") {
@@ -279,7 +251,7 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
       const selected = claim_ids?.length
         ? store.claims.filter((claim) => claim_ids.includes(claim.id))
         : store.claims;
-      return textResult([
+      return structuredTextResult([
         "# Evidence IR status",
         "",
         `- claimCount: ${status.claimCount}`,
@@ -292,7 +264,14 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
           const resolution = resolutionByClaim.get(claim.id);
           return `- ${claim.id} [${claim.kind}/${claim.origin}/${claim.status}] -> ${resolution?.disposition ?? "unlinked"} (${claim.sourceUri}#${claim.segmentId})`;
         }),
-      ].join("\n"));
+      ].join("\n"), {
+        action: "status",
+        metrics: status,
+        claims: selected.map((claim) => ({
+          ...claim,
+          resolution: resolutionByClaim.get(claim.id),
+        })),
+      });
     } catch (error: unknown) {
       return errorResult(error);
     }

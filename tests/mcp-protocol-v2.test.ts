@@ -368,7 +368,7 @@ test("2026-07-28 stdio leg uses resource links without legacy Roots negotiation"
       method: "tools/call",
       params: {
         name: "knowledge_ingest",
-        arguments: { action: "status" },
+        arguments: { action: "evidence_status" },
         _meta: modernEnvelope(),
       },
     }));

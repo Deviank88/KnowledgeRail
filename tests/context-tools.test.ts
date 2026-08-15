@@ -116,7 +116,7 @@ test("modern knowledge_context returns resource links without registering a redu
   }
 });
 
-test("legacy wiki_context -> wiki_read_resource materializes only referenced passage", async () => {
+test("legacy context emits the same resource links without a private read alias", async () => {
   const previousRoot = getWikiRoot();
   const projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-context-legacy-"));
   clearRetrievalIndexes();
@@ -126,7 +126,8 @@ test("legacy wiki_context -> wiki_read_resource materializes only referenced pas
     setWikiRoot(projectRoot);
     const { server, tools } = fakeServer();
     registerContextTools(server, "legacy");
-    assert.equal(tools.size, 2);
+    assert.equal(tools.size, 1);
+    assert.equal(tools.has("wiki_read_resource"), false);
 
     const context = await tools.get("wiki_context")!(contextArgs);
     assert.equal(context.isError, undefined);
@@ -135,19 +136,10 @@ test("legacy wiki_context -> wiki_read_resource materializes only referenced pas
     assert.equal(Array.isArray(context.structuredContent.unknowns), true);
     const evidence = context.structuredContent.evidence as Array<Record<string, unknown>>;
     assert.equal(evidence.length, 1);
-    const uri = evidence[0]?.uri;
-    assert.equal(typeof uri, "string");
-
-    const read = await tools.get("wiki_read_resource")!({
-      resource_uri: uri,
-      max_chars: 6000,
-    });
-    assert.equal(read.isError, undefined);
-    const text = read.content.map((item) => item.text ?? "").join("\n");
-    assert.equal(text.includes("utente, ruolo, timestamp e motivazione"), true);
-    assert.equal(text.includes("note di credito"), false, "un passage read non deve materializzare sezioni adiacenti");
-    assert.equal(read.structuredContent?.truncated, false);
-    assert.equal(read.structuredContent?.heading, "Audit obbligatorio");
+    const link = context.content.find((item) => item.type === "resource_link");
+    assert.ok(link);
+    assert.equal(link.uri, evidence[0]?.uri);
+    assert.match(link.uri ?? "", /^knowledge-rail:\/\/page\/requirements\/REQ_42\.md\?passage=p-[0-9a-f]{16}$/);
   } finally {
     clearRetrievalIndexes();
     setWikiRoot(previousRoot);

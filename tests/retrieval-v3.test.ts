@@ -76,10 +76,33 @@ test("migration supports v1/v2 detection, dry-run and idempotent v4 repair", asy
   assert.equal(await detectWikiVersion(root), 4);
   const migratedSchema = await fs.readFile(path.join(root, "SCHEMA.md"), "utf-8");
   assert.equal(migratedSchema, originalSchema, "migration must not rewrite canonical project conventions");
-  assert.equal(migrateSchemaText(originalSchema).includes("`knowledge_context mode=search` senza query"), true);
+  assert.equal(migrateSchemaText(originalSchema).includes("`knowledge_context mode=list`"), true);
   assert.equal(migrateSchemaText(originalSchema).includes("`knowledge_context mode=graph view=traceability`"), true);
   const repair = await applyWikiMigration(root, { backup: true });
   assert.equal(repair.plan.detectedVersion, 4);
   await fs.access(path.join(root, ".knowledge-rail", "state.json"));
   await fs.access(path.join(root, ".knowledge-rail", "migrations", applied.runId, "journal.json"));
+});
+
+test("schema migration proposal covers every retired public operation without mutating source text", () => {
+  const references = [
+    ["wiki_write_page", "knowledge_page action=write"],
+    ["wiki_read_resource", "knowledge_page action=read"],
+    ["wiki_search", "knowledge_context mode=search"],
+    ["wiki_graph_query", "knowledge_context mode=graph"],
+    ["knowledge_prepare_source_ingestion", "knowledge_ingest"],
+    ["knowledge_evidence_ir", "knowledge_ingest"],
+    ["knowledge_code_evidence", "knowledge_code"],
+    ["knowledge_plan_document", "knowledge_document_context action=plan"],
+    ["knowledge_export_docx", "knowledge_document action=export"],
+    ["wiki_lint", "knowledge_admin action=lint"],
+    ["knowledge_menu", "KnowledgeRail domain tools"],
+  ] as const;
+  const original = references.map(([legacy]) => `Use \`${legacy}\`.`).join("\n");
+  const proposal = migrateSchemaText(original);
+  assert.equal(original.includes("wiki_write_page"), true, "the caller-owned source string stays unchanged");
+  for (const [legacy, replacement] of references) {
+    assert.equal(proposal.includes(legacy), false, `${legacy} was not migrated`);
+    assert.equal(proposal.includes(replacement), true, `${replacement} is missing`);
+  }
 });

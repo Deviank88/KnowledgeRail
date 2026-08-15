@@ -3,6 +3,7 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { clearRetrievalIndexes } from "../src/core/retrieval-index.js";
 import { getWikiRoot, setWikiRoot } from "../src/core/paths.js";
 import { buildServer } from "../src/mcp/server.js";
@@ -111,8 +112,46 @@ function nextOf(result: Record<string, unknown>): Record<string, unknown> | null
   return next && typeof next === "object" ? next as Record<string, unknown> : null;
 }
 
+const ROUTING_STOP_WORDS = new Set([
+  "and", "before", "for", "from", "into", "its", "one", "the", "this", "to", "with",
+  "che", "come", "dei", "del", "della", "delle", "dopo", "gli", "il", "la", "le", "lo", "nel", "per", "una",
+]);
+
+const ROUTING_CONCEPTS: Record<string, string> = {
+  caller: "callers",
+  callers: "callers",
+  contesto: "context",
+  dependencies: "dependency",
+  dependency: "dependency",
+  evidenze: "evidence",
+  elimina: "delete",
+  files: "file",
+  grafo: "graph",
+  leggi: "read",
+  elenca: "list",
+  missing: "gaps",
+  irrilevante: "irrelevant",
+  cerca: "search",
+  classifica: "classify",
+  modifica: "edit",
+  modificare: "modify",
+  page: "page",
+  pages: "page",
+  pagine: "page",
+  pagina: "page",
+  processing: "ingest",
+  rinnovo: "renewal",
+  scrivi: "write",
+  segmenti: "segment",
+  segmento: "segment",
+};
+
 function tokens(text: string): Set<string> {
-  return new Set(text.toLowerCase().replace(/[_/=-]/g, " ").match(/[a-z0-9]+/g) ?? []);
+  const raw = text.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[_/=-]/g, " ").match(/[a-z0-9]+/g) ?? [];
+  return new Set(raw
+    .filter((token) => token.length > 2 && !ROUTING_STOP_WORDS.has(token))
+    .map((token) => ROUTING_CONCEPTS[token] ?? token));
 }
 
 function overlap(left: Set<string>, right: Set<string>): number {
@@ -128,42 +167,95 @@ interface CatalogTool {
   inputSchema: { properties?: Record<string, { enum?: string[]; description?: string }> };
 }
 
+export interface ToolSurfaceBaseline {
+  benchmarkSchemaVersion: number;
+  previousToolCount: number;
+  previousToolsArrayBytes: number;
+  previousToolsListResultBytes: number;
+  previousRoutingCallsPerWorkflow: number;
+  currentRoutingCallsPerWorkflow: number;
+  expectedToolCount: number;
+  maximumModernCatalogBytes: number;
+  maximumHeuristicCatalogTokens: number;
+  minimumToolCountReductionPercent: number;
+  minimumCatalogByteReductionPercent: number;
+  minimumToolsListResultByteReductionPercent: number;
+  minimumRoutingGoldenCount: number;
+  minimumCatalogAffordanceAccuracy: number;
+  minimumInvalidCallCount: number;
+  minimumInvalidCallRejectionRate: number;
+  minimumWorkflowTraceCount: number;
+  minimumWorkflowCompletionRate: number;
+  minimumRoutingRoundTripsSaved: number;
+  minimumRoutingRoundTripReductionPercent: number;
+  requiredToolNames: string[];
+  forbiddenToolNames: string[];
+}
+
+export async function loadToolSurfaceBaseline(): Promise<ToolSurfaceBaseline> {
+  const baselineUrl = new URL("./fixtures/tool-surface-baseline-v4.json", import.meta.url);
+  return JSON.parse(await fs.readFile(fileURLToPath(baselineUrl), "utf8")) as ToolSurfaceBaseline;
+}
+
 const ROUTING_GOLDENS = [
-  ["Retrieve bounded project knowledge with explicit coverage and gaps", "knowledge_context", "task"],
-  ["Search project knowledge as a lexical diagnostic", "knowledge_context", "search"],
-  ["Run a graph traceability diagnostic", "knowledge_context", "graph"],
-  ["Write a canonical knowledge page", "knowledge_page", "write"],
-  ["Append the durable page mutation log", "knowledge_page", "append_log"],
-  ["List controlled source files in docs", "knowledge_files", "list"],
-  ["Normalize a source file without changing the original", "knowledge_files", "normalize"],
-  ["Start the guided source evidence integration loop", "knowledge_ingest", "start"],
-  ["Apply evidence claims and synthesize agent memory", "knowledge_ingest", "apply"],
-  ["Search deterministic code evidence", "knowledge_code", "search"],
-  ["Rebuild the code index", "knowledge_code", "rebuild"],
-  ["Plan an evidence backed typed document", "knowledge_document_context", "plan"],
-  ["Compile the bounded context for a document section", "knowledge_document_context", "section"],
-  ["Write a Markdown deliverable", "knowledge_document", "write"],
-  ["Export a reviewed document to DOCX", "knowledge_document", "export"],
-  ["Init KnowledgeRail storage", "knowledge_admin", "init"],
-  ["Lint canonical knowledge", "knowledge_admin", "lint"],
-  ["Plan a conservative data migrate operation", "knowledge_admin", "migrate"],
+  ["Before I change lease renewal, gather the relevant project evidence and tell me what is missing", "knowledge_context", "task"],
+  ["Prima di modificare i lease, recupera il contesto utile e segnala ciò che non sappiamo", "knowledge_context", "task"],
+  ["Show me the catalog of requirement pages already available", "knowledge_context", "list"],
+  ["Elenca le pagine che descrivono requisiti e decisioni", "knowledge_context", "list"],
+  ["Find passages that mention fencing after a lease expires", "knowledge_context", "search"],
+  ["Cerca dove si parla del rinnovo dei lease", "knowledge_context", "search"],
+  ["Show dependencies connecting this requirement to its implementation", "knowledge_context", "graph"],
+  ["Create a new canonical page for the renewal policy", "knowledge_page", "write"],
+  ["Modifica una frase nella pagina della decisione", "knowledge_page", "edit"],
+  ["Rename the incident page while keeping incoming links valid", "knowledge_page", "move"],
+  ["Elimina la pagina obsoleta dalla memoria del progetto", "knowledge_page", "delete"],
+  ["Record this decision in the durable change log", "knowledge_page", "append_log"],
+  ["Which controlled source files are waiting to be processed?", "knowledge_files", "list"],
+  ["Convert this uploaded PDF into controlled Markdown", "knowledge_files", "normalize"],
+  ["Leggi il file cliente senza modificarlo", "knowledge_files", "read"],
+  ["Begin processing the normalized contract source", "knowledge_ingest", "start"],
+  ["Integrate these extracted claims from the current segment", "knowledge_ingest", "apply_claims"],
+  ["Classifica questo segmento come irrilevante e conserva il motivo", "knowledge_ingest", "record_segment"],
+  ["Check source coverage before closing ingestion", "knowledge_ingest", "source_status"],
+  ["Show unresolved evidence debt and claim contradictions", "knowledge_ingest", "evidence_status"],
+  ["Locate the definition of renewLease in the repository", "knowledge_code", "symbol"],
+  ["Find every caller of the selected symbol", "knowledge_code", "references"],
+  ["Recreate the code index from the current source tree", "knowledge_code", "rebuild"],
+  ["Design the outline for a technical architecture deliverable", "knowledge_document_context", "plan"],
+  ["Gather evidence for the Security section of the document", "knowledge_document_context", "section"],
+  ["Save this architecture proposal as a Markdown deliverable", "knowledge_document", "write"],
+  ["Check whether the deliverable satisfies its required sections", "knowledge_document", "review"],
+  ["Produce the client-ready Word version of the reviewed deliverable", "knowledge_document", "export"],
+  ["Bootstrap KnowledgeRail in this repository", "knowledge_admin", "init"],
+  ["Validate the knowledge base for broken links and orphan pages", "knowledge_admin", "lint"],
+  ["Upgrade the stored knowledge format without losing project data", "knowledge_admin", "migrate"],
 ] as const;
 
 function routeFromCatalog(task: string, tools: readonly CatalogTool[]): { tool: string; discriminator?: string } {
   const taskTokens = tokens(task);
-  const ranked = tools.map((tool) => ({
+  const ranked = tools.map((tool, index) => ({
     tool,
-    score: overlap(taskTokens, tokens(`${tool.name} ${tool.title ?? ""} ${tool.description ?? ""}`)),
-  })).sort((left, right) => right.score - left.score || left.tool.name.localeCompare(right.tool.name));
+    index,
+    score: overlap(taskTokens, tokens([
+      tool.name,
+      tool.title ?? "",
+      tool.description ?? "",
+      ...Object.values(tool.inputSchema.properties ?? {}).flatMap((property) => [
+        property.description ?? "",
+        ...(property.enum ?? []),
+      ]),
+    ].join(" "))),
+  })).sort((left, right) => right.score - left.score || left.index - right.index);
   const selected = ranked[0]!.tool;
   const property = selected.inputSchema.properties?.action ?? selected.inputSchema.properties?.mode;
-  const discriminator = property?.enum?.map((value) => ({
+  const discriminator = property?.enum?.map((value, index) => ({
     value,
+    index,
     score: overlap(taskTokens, tokens([
       value,
       property.description?.split(";").find((segment) => segment.trim().startsWith(`${value}=`)) ?? "",
     ].join(" "))),
-  })).sort((left, right) => right.score - left.score || left.value.localeCompare(right.value))[0]?.value;
+  })).sort((left, right) => right.score - left.score || left.index - right.index)[0]?.value;
   return { tool: selected.name, discriminator };
 }
 
@@ -192,11 +284,16 @@ export interface ToolSurfaceReport {
   toolCount: number;
   toolNames: string[];
   modernCatalogBytes: number;
+  toolsListResultBytes: number;
   heuristicCatalogTokens: number;
   previousToolCount: number;
-  previousCatalogBytes: number;
+  previousToolsArrayBytes: number;
+  previousToolsListResultBytes: number;
   toolCountReductionPercent: number;
   catalogByteReductionPercent: number;
+  toolsListResultByteReductionPercent: number;
+  routingRoundTripsSaved: number;
+  routingRoundTripReductionPercent: number;
   menuRemoved: boolean;
   legacyAliasesRemoved: boolean;
   officialInstructionsAdvertised: boolean;
@@ -212,7 +309,10 @@ export interface ToolSurfaceReport {
   defaultContextIsCompact: boolean;
 }
 
-export async function evaluateToolSurface(): Promise<ToolSurfaceReport> {
+export async function evaluateToolSurface(
+  suppliedBaseline?: ToolSurfaceBaseline
+): Promise<ToolSurfaceReport> {
+  const baseline = suppliedBaseline ?? await loadToolSurfaceBaseline();
   const previousRoot = getWikiRoot();
   const projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-agent-surface-"));
   clearRetrievalIndexes();
@@ -227,6 +327,7 @@ export async function evaluateToolSurface(): Promise<ToolSurfaceReport> {
     const listed = resultOf(await harness.request("tools/list", { _meta: modernMeta() }));
     const tools = listed.tools as CatalogTool[];
     const modernCatalogBytes = Buffer.byteLength(JSON.stringify(tools), "utf8");
+    const toolsListResultBytes = Buffer.byteLength(JSON.stringify(listed), "utf8");
     const toolNames = tools.map((tool) => tool.name).sort();
     const discover = resultOf(await harness.request("server/discover", { _meta: modernMeta() }));
     const instructions = String(discover.instructions ?? "");
@@ -243,7 +344,7 @@ export async function evaluateToolSurface(): Promise<ToolSurfaceReport> {
 
     const invalidCalls = [
       ["knowledge_page", { action: "edit", path: "analysis/A.md" }],
-      ["knowledge_ingest", { action: "apply", normalized_filename: "source.md", segment_id: "seg-missing" }],
+      ["knowledge_ingest", { action: "apply_claims", normalized_filename: "source.md", segment_id: "seg-missing" }],
       ["knowledge_code", { action: "record_fallback", query: "raw lookup" }],
       ["knowledge_document", { action: "export", filename: "x", document_type: "custom" }],
       ["knowledge_admin", { action: "migrate", migration_action: "rollback" }],
@@ -282,11 +383,12 @@ export async function evaluateToolSurface(): Promise<ToolSurfaceReport> {
     await fs.writeFile(path.join(projectRoot, "docs", "normalized", "lease.md"), normalized, "utf8");
     const started = await call("knowledge_ingest", { action: "start", normalized_filename: "lease.md" });
     const first = await call("knowledge_ingest", { action: "next", normalized_filename: "lease.md" });
-    const segmentId = textOf(first).match(/Segmento: `([^`]+)`/)?.[1];
+    const segment = structuredOf(first).segment as { id?: string } | undefined;
+    const segmentId = segment?.id;
     let ingestComplete = nextOf(started)?.action === "next" && Boolean(segmentId);
     if (segmentId) {
       const applied = await call("knowledge_ingest", {
-        action: "apply",
+        action: "apply_claims",
         normalized_filename: "lease.md",
         segment_id: segmentId,
         claims: [{
@@ -298,10 +400,10 @@ export async function evaluateToolSurface(): Promise<ToolSurfaceReport> {
         }],
       });
       const after = await call("knowledge_ingest", { action: "next", normalized_filename: "lease.md" });
-      const status = await call("knowledge_ingest", { action: "status", normalized_filename: "lease.md" });
+      const status = await call("knowledge_ingest", { action: "source_status", normalized_filename: "lease.md" });
       const finalized = await call("knowledge_ingest", { action: "finalize", normalized_filename: "lease.md" });
       ingestComplete = ingestComplete && nextOf(applied)?.action === "next" &&
-        nextOf(after)?.action === "status" && nextOf(status)?.action === "finalize" &&
+        nextOf(after)?.action === "source_status" && nextOf(status)?.action === "finalize" &&
         structuredOf(finalized).state === "source_finalized";
     }
     traces.push(ingestComplete);
@@ -345,11 +447,21 @@ export async function evaluateToolSurface(): Promise<ToolSurfaceReport> {
       toolCount: tools.length,
       toolNames,
       modernCatalogBytes,
+      toolsListResultBytes,
       heuristicCatalogTokens: Math.ceil(modernCatalogBytes / 3),
-      previousToolCount: 24,
-      previousCatalogBytes: 19_926,
-      toolCountReductionPercent: Number(((1 - tools.length / 24) * 100).toFixed(2)),
-      catalogByteReductionPercent: Number(((1 - modernCatalogBytes / 19_926) * 100).toFixed(2)),
+      previousToolCount: baseline.previousToolCount,
+      previousToolsArrayBytes: baseline.previousToolsArrayBytes,
+      previousToolsListResultBytes: baseline.previousToolsListResultBytes,
+      toolCountReductionPercent: Number(((1 - tools.length / baseline.previousToolCount) * 100).toFixed(2)),
+      catalogByteReductionPercent: Number(((1 - modernCatalogBytes / baseline.previousToolsArrayBytes) * 100).toFixed(2)),
+      toolsListResultByteReductionPercent: Number(
+        ((1 - toolsListResultBytes / baseline.previousToolsListResultBytes) * 100).toFixed(2)
+      ),
+      routingRoundTripsSaved:
+        (baseline.previousRoutingCallsPerWorkflow - baseline.currentRoutingCallsPerWorkflow) * traces.length,
+      routingRoundTripReductionPercent: Number(
+        ((1 - baseline.currentRoutingCallsPerWorkflow / baseline.previousRoutingCallsPerWorkflow) * 100).toFixed(2)
+      ),
       menuRemoved: !toolNames.includes("knowledge_menu"),
       legacyAliasesRemoved: !toolNames.some((name) => name.startsWith("wiki_")),
       officialInstructionsAdvertised: instructions.includes("eight KnowledgeRail domain tools") &&

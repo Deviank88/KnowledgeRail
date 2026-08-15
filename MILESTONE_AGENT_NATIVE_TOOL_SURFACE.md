@@ -37,7 +37,7 @@ The server MUST advertise exactly these eight tool names in both modern and lega
 
 ## Safety-critical orchestration
 
-`knowledge_ingest action="apply"` owns the Evidence IR sequence: durable claim recording, deterministic linking, synthesis planning, validation, canonical mutation, index refresh, and coverage reconciliation. An agent MUST NOT be required to discover or call record/link/synthesis implementation steps individually.
+`knowledge_ingest action="apply_claims"` owns the Evidence IR sequence: durable claim recording, deterministic linking, synthesis planning, validation, canonical mutation, index refresh, and coverage reconciliation. `record_segment`, `source_status`, and `evidence_status` remain separate so an agent never has to infer an operation from optional arguments. An agent MUST NOT be required to discover or call record/link/synthesis implementation steps individually.
 
 A failed link or synthesis may leave durable, retryable IR state, but MUST NOT silently mark the segment represented or permit finalization. Manual segment classification is restricted to allowed non-represented states and requires a reason. Integrated, duplicate, and contradicted states remain derived from Evidence IR.
 
@@ -49,9 +49,9 @@ The milestone is release-ready only when all existing CI gates remain unchanged 
 
 - exactly eight public tools and zero menu/historical aliases;
 - at least 66% tool-count reduction from the accepted 24-tool surface;
-- serialized modern catalog no larger than 14,000 bytes and 4,700 heuristic tokens;
+- serialized modern tool array no larger than 14,000 bytes and 4,700 heuristic tokens;
 - at least 25% catalog-byte reduction from the measured 19,926-byte baseline;
-- at least 94% deterministic catalog-affordance accuracy on 18 routing goldens;
+- at least 94% deterministic catalog-affordance accuracy on 31 routing goldens;
 - 100% rejection of the pinned invalid action calls;
 - 100% completion of five real MCP workflow traces;
 - compact/full evidence and gap parity;
@@ -64,11 +64,13 @@ Deterministic affordance tests are not a substitute for real-model evaluation. B
 The accepted local evaluation currently reports:
 
 - tools: `24 → 8` (`66.67%` reduction);
-- catalog: `19,926 → 13,261` bytes (`33.45%` reduction);
-- catalog token proxy: `4,421` (`UTF-8 bytes / 3`);
-- routing goldens: `18/18`;
+- tool-array catalog: `19,926 → 13,942` bytes (`30.03%` reduction);
+- complete `tools/list` result: `26,080 → 14,105` bytes (`45.92%` reduction);
+- catalog token proxy: `4,648` (`tool-array UTF-8 bytes / 3`);
+- routing goldens: `31/31`;
 - invalid calls rejected: `5/5`;
 - workflow traces completed: `5/5`;
+- menu routing calls saved across those traces: `15/15` (`100%`);
 - compact/full evidence parity: `true`;
 - compact/full gap parity: `true`.
 
@@ -81,4 +83,4 @@ These are isolated usability smokes, not an old/new provider A/B and therefore d
 - Claude Opus 5, `xhigh`: selected task context without a menu, materialized `4/4` pages, produced the correct lease renewal/expiry/fencing explanation, and retained stale/missing evidence warnings. The pre-final run used 12 turns and cost `$0.3123` (`8,188` cache-creation, `104,271` cache-read, `7,099` output tokens). It exposed one redundant semantic-gap widening; the final implementation removes that `nextAction` once no evidence is budget-omitted.
 - Claude Haiku 4.5, `high`, final implementation: completed in 8 turns and cost `$0.0509` (`14,976` cache-creation, `37,667` cache-read, `3,277` output tokens). It followed exactly one guided `2,000 -> 4,000` budget widening, materialized `4/4` pages, cited every page, retained the stale-evidence warning, and reported concrete documentation gaps. It did not repeat the internal `query_facets` label literally, so provider-level gap wording is recorded as a remaining evaluation limitation rather than a perfect score.
 
-The deterministic acceptance suite remains the release gate: `18/18` routing goldens, `5/5` workflow traces, `5/5` invalid calls rejected, compact/full evidence and gap parity, all thirteen existing/new quality gates, and all 41 test files pass locally. A future model-specific improvement claim still requires the full old/new A/B defined above.
+The deterministic acceptance suite remains the release gate: `31/31` routing goldens, `5/5` workflow traces, `5/5` invalid calls rejected, compact/full evidence and gap parity, all thirteen quality gates, and all discovered test files pass. A future model-specific improvement claim still requires the full old/new A/B defined above. The corrective contract and full state vocabulary are specified separately in [MILESTONE_AGENT_CONTRACT_INTEGRITY.md](MILESTONE_AGENT_CONTRACT_INTEGRITY.md).

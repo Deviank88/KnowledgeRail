@@ -1,29 +1,13 @@
-import * as fs from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { evaluateToolSurface } from "./tool-surface-eval.js";
-
-interface Baseline {
-  expectedToolCount: number;
-  maximumModernCatalogBytes: number;
-  maximumHeuristicCatalogTokens: number;
-  minimumToolCountReductionPercent: number;
-  minimumCatalogByteReductionPercent: number;
-  minimumRoutingGoldenCount: number;
-  minimumCatalogAffordanceAccuracy: number;
-  minimumInvalidCallCount: number;
-  minimumInvalidCallRejectionRate: number;
-  minimumWorkflowTraceCount: number;
-  minimumWorkflowCompletionRate: number;
-  requiredToolNames: string[];
-  forbiddenToolNames: string[];
-}
+import { evaluateToolSurface, loadToolSurfaceBaseline } from "./tool-surface-eval.js";
 
 async function main(): Promise<void> {
-  const baselineUrl = new URL("./fixtures/tool-surface-baseline-v4.json", import.meta.url);
-  const baseline = JSON.parse(await fs.readFile(fileURLToPath(baselineUrl), "utf8")) as Baseline;
-  const report = await evaluateToolSurface();
+  const baseline = await loadToolSurfaceBaseline();
+  const report = await evaluateToolSurface(baseline);
   const failures: string[] = [];
 
+  if (baseline.benchmarkSchemaVersion !== 3) {
+    failures.push(`unsupported benchmark schema version ${baseline.benchmarkSchemaVersion}`);
+  }
   if (report.toolCount !== baseline.expectedToolCount) failures.push(`tool count ${report.toolCount} != ${baseline.expectedToolCount}`);
   if (report.modernCatalogBytes > baseline.maximumModernCatalogBytes) {
     failures.push(`catalog bytes ${report.modernCatalogBytes} > ${baseline.maximumModernCatalogBytes}`);
@@ -36,6 +20,12 @@ async function main(): Promise<void> {
   }
   if (report.catalogByteReductionPercent < baseline.minimumCatalogByteReductionPercent) {
     failures.push(`catalog reduction ${report.catalogByteReductionPercent} < ${baseline.minimumCatalogByteReductionPercent}`);
+  }
+  if (report.toolsListResultByteReductionPercent < baseline.minimumToolsListResultByteReductionPercent) {
+    failures.push(
+      `tools/list result reduction ${report.toolsListResultByteReductionPercent} < ` +
+      `${baseline.minimumToolsListResultByteReductionPercent}`
+    );
   }
   if (report.routingGoldenCount < baseline.minimumRoutingGoldenCount) {
     failures.push(`routing goldens ${report.routingGoldenCount} < ${baseline.minimumRoutingGoldenCount}`);
@@ -54,6 +44,15 @@ async function main(): Promise<void> {
   }
   if (report.workflowCompletionRate < baseline.minimumWorkflowCompletionRate) {
     failures.push(`workflow completion ${report.workflowCompletionRate} < ${baseline.minimumWorkflowCompletionRate}`);
+  }
+  if (report.routingRoundTripsSaved < baseline.minimumRoutingRoundTripsSaved) {
+    failures.push(`routing round trips saved ${report.routingRoundTripsSaved} < ${baseline.minimumRoutingRoundTripsSaved}`);
+  }
+  if (report.routingRoundTripReductionPercent < baseline.minimumRoutingRoundTripReductionPercent) {
+    failures.push(
+      `routing round-trip reduction ${report.routingRoundTripReductionPercent} < ` +
+      `${baseline.minimumRoutingRoundTripReductionPercent}`
+    );
   }
   if (!report.menuRemoved) failures.push("knowledge_menu remains in the public catalog");
   if (!report.legacyAliasesRemoved) failures.push("a wiki_* alias remains in the public catalog");

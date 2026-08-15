@@ -191,9 +191,9 @@ Standard markdown links for external URLs:
 
 1. Normalizza la fonte, se necessario, con \`knowledge_files action="normalize"\`.
 2. Avvia \`knowledge_ingest action="start"\` sul file normalizzato e segui il \`nextAction\` restituito.
-3. Il ciclo guidato è \`next → apply\`: \`apply\` registra, collega, valida e sintetizza Evidence IR prima di aggiornare pagine canoniche.
+3. Il ciclo guidato è \`next → apply_claims\`: \`apply_claims\` registra, collega, valida e sintetizza Evidence IR prima di aggiornare pagine canoniche.
 4. Un segmento privo di claim utili può essere classificato soltanto con stato ammesso e motivazione esplicita.
-5. Usa \`knowledge_ingest action="status"\` per verificare coverage e gap.
+5. Usa \`knowledge_ingest action="source_status"\` per verificare coverage e gap.
 6. La fonte può essere finalizzata soltanto quando lo stato propone \`action="finalize"\` dopo coverage completa.
 
 \`index.md\` viene rigenerato automaticamente a ogni mutation di pagina; registra le operazioni significative con \`knowledge_page action="append_log"\`.

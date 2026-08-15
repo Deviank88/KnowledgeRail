@@ -901,7 +901,7 @@ async function main(): Promise<void> {
       filename: "knowledge-rail_mcp2_dogfood_report",
       document_type: "custom",
       client: "KnowledgeRail maintainers",
-      project: "KnowledgeRail",
+      project_name: "KnowledgeRail",
       category_label: "PRODUCTION READINESS",
       version: "1.0",
       date,
