@@ -812,7 +812,11 @@ export function registerAgentTools(
           tool: "knowledge_document_context",
           action: "section",
           requiredArguments: ["action", "document_type", "section_title"],
-          suggestedArguments: { action: "section", document_type: args.document_type },
+          suggestedArguments: {
+            action: "section",
+            document_type: args.document_type,
+            ...(args.language ? { language: args.language } : {}),
+          },
         } : null,
         args.action === "section" ? "Materialize selected evidence and preserve explicit GAP markers." : undefined,
         true);

@@ -57,16 +57,18 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
       project_name: z.string().optional(),
       objective: z.string().optional(),
       audience: z.string().optional(),
+      language: z.string().optional().describe("Output language; defaults to the user's current request language."),
       max_sections: z.number().int().positive().optional(),
     }),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
-  }, async ({ document_type, project_name, objective, audience, max_sections }) => {
+  }, async ({ document_type, project_name, objective, audience, language, max_sections }) => {
     const contract = documentContract(document_type);
     const plan = await buildDocumentPlan(wikiDir(), {
       documentType: document_type,
       projectName: project_name,
       objective,
       audience,
+      language,
       maxSections: max_sections,
     });
     return {

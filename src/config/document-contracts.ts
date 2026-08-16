@@ -14,6 +14,12 @@ export const DOCUMENT_TYPES = [
 
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
+/**
+ * Human-readable output follows the current user's language unless the caller
+ * supplies a more specific override. Internal contracts remain in English.
+ */
+export const USER_REQUEST_LANGUAGE = "the user's request language";
+
 export interface DocumentContentRule {
   code: string;
   description: string;
@@ -39,7 +45,7 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
     type: "functional_spec",
     label: "Functional specification",
     purpose: "Make scope, behavior, requirements and acceptance criteria unambiguous and verifiable.",
-    defaultLanguage: "english",
+    defaultLanguage: USER_REQUEST_LANGUAGE,
     defaultClientFacing: true,
     categoryLabel: "FUNCTIONAL SPECIFICATION",
     minimumSectionChars: 40,
@@ -53,7 +59,7 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
     type: "architecture_doc",
     label: "Architecture document",
     purpose: "Explain boundaries, components, data, deployment, security, observability and decisions.",
-    defaultLanguage: "english",
+    defaultLanguage: USER_REQUEST_LANGUAGE,
     defaultClientFacing: false,
     categoryLabel: "ARCHITECTURE DOCUMENT",
     minimumSectionChars: 40,
@@ -67,7 +73,7 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
     type: "project_brief",
     label: "Project brief",
     purpose: "Give stakeholders a concise view of the problem, solution, users, success and constraints.",
-    defaultLanguage: "english",
+    defaultLanguage: USER_REQUEST_LANGUAGE,
     defaultClientFacing: true,
     categoryLabel: "PROJECT BRIEF",
     minimumSectionChars: 24,
@@ -81,7 +87,7 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
     type: "onboarding_guide",
     label: "Onboarding guide",
     purpose: "Let a new contributor set up, run, test and troubleshoot the project independently.",
-    defaultLanguage: "english",
+    defaultLanguage: USER_REQUEST_LANGUAGE,
     defaultClientFacing: false,
     categoryLabel: "ONBOARDING GUIDE",
     minimumSectionChars: 32,
@@ -95,7 +101,7 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
     type: "api_reference",
     label: "API reference",
     purpose: "Provide implementable authentication, endpoint, payload, response and error contracts.",
-    defaultLanguage: "english",
+    defaultLanguage: USER_REQUEST_LANGUAGE,
     defaultClientFacing: false,
     categoryLabel: "API REFERENCE",
     minimumSectionChars: 32,
@@ -116,7 +122,7 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
     type: "adr",
     label: "Architecture decision record",
     purpose: "Preserve the context, chosen decision, alternatives and consequences of one decision.",
-    defaultLanguage: "english",
+    defaultLanguage: USER_REQUEST_LANGUAGE,
     defaultClientFacing: false,
     categoryLabel: "ARCHITECTURE DECISION RECORD",
     minimumSectionChars: 32,
@@ -130,7 +136,7 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
     type: "runbook",
     label: "Operational runbook",
     purpose: "Guide operators through detection, diagnosis, mitigation, rollback and escalation.",
-    defaultLanguage: "english",
+    defaultLanguage: USER_REQUEST_LANGUAGE,
     defaultClientFacing: false,
     categoryLabel: "OPERATIONAL RUNBOOK",
     minimumSectionChars: 32,
@@ -144,7 +150,7 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
     type: "test_plan",
     label: "Test plan",
     purpose: "Define scope, environments, test cases, expected results, evidence and exit criteria.",
-    defaultLanguage: "english",
+    defaultLanguage: USER_REQUEST_LANGUAGE,
     defaultClientFacing: false,
     categoryLabel: "TEST PLAN",
     minimumSectionChars: 32,
@@ -158,7 +164,7 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
     type: "incident_report",
     label: "Incident report",
     purpose: "Record impact, timeline, root cause, response, corrective actions and owners.",
-    defaultLanguage: "english",
+    defaultLanguage: USER_REQUEST_LANGUAGE,
     defaultClientFacing: false,
     categoryLabel: "INCIDENT REPORT",
     minimumSectionChars: 32,
@@ -173,7 +179,7 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
     type: "release_notes",
     label: "Release notes",
     purpose: "Explain user-visible changes, fixes, compatibility, upgrade steps and known issues.",
-    defaultLanguage: "english",
+    defaultLanguage: USER_REQUEST_LANGUAGE,
     defaultClientFacing: true,
     categoryLabel: "RELEASE NOTES",
     minimumSectionChars: 24,
@@ -187,7 +193,7 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
     type: "custom",
     label: "Custom document",
     purpose: "Produce a structured evidence-backed document with an explicit audience and objective.",
-    defaultLanguage: "english",
+    defaultLanguage: USER_REQUEST_LANGUAGE,
     defaultClientFacing: false,
     categoryLabel: "DOCUMENT",
     minimumSectionChars: 12,
