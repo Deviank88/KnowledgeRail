@@ -2,7 +2,6 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import {
   buildDocumentPlan,
-  DOCUMENT_TYPES,
   prepareKnowledgeUpdateDraft,
   WIKI_PAGE_TYPES,
 } from "../core/document-workflow.js";
@@ -19,7 +18,11 @@ function promptText(text: string): PromptResult {
 }
 
 const PlanDocumentPromptSchema = z.object({
-  document_type: z.enum(DOCUMENT_TYPES).describe(DOCUMENT_TYPES.join(" | ")),
+  document_type: z.string().trim().min(1).max(128).regex(/^[^\r\n]+$/)
+    .describe("Any document profile; built-in names are optional presets."),
+  required_sections: z.array(
+    z.string().trim().min(1).max(160).regex(/^[^\r\n]+$/)
+  ).max(30).optional(),
   project_name: z.string().optional(),
   objective: z.string().optional(),
   audience: z.string().optional(),
@@ -71,7 +74,7 @@ export function registerWikiPrompts(
         "Generate an editorial plan (sections, writers, context packs, checklist) for a document in docs/deliverables.",
       argsSchema: schemas.document,
     },
-    async ({ document_type, project_name, objective, audience, language }) =>
+    async ({ document_type, project_name, objective, audience, language, required_sections }) =>
       promptText(
         await buildDocumentPlan(wikiDir(), {
           documentType: document_type,
@@ -79,6 +82,13 @@ export function registerWikiPrompts(
           objective,
           audience,
           language,
+          template: required_sections?.length
+            ? [
+                "# " + document_type + ": " + (project_name ?? "{{PROJECT_NAME}}"),
+                "",
+                ...required_sections.flatMap((section) => ["## " + section, "[Write evidence-backed content.]", ""]),
+              ].join("\n")
+            : undefined,
         })
       )
   );

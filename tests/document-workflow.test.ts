@@ -141,7 +141,7 @@ test("reviewDocumentStructure reports placeholders, missing sections, and Mermai
   assert.equal(review.placeholderCount > 0, true);
   assert.equal(review.missingSections.includes("2. Context and Motivation"), true);
   assert.equal(review.findings.some((finding) => finding.code === "PLACEHOLDER_RESIDUO"), true);
-  assert.equal(review.findings.some((finding) => finding.code === "MERMAID_SOSPETTO"), true);
+  assert.equal(review.findings.some((finding) => finding.code === "MERMAID_INVALIDO"), true);
 });
 
 test("reviewDocumentStructure reports client-facing and language issues with wiki update plan", () => {
@@ -185,6 +185,23 @@ test("reviewDocumentStructure accepts a complete custom document without blockin
   assert.equal(review.placeholderCount, 0);
   assert.equal(review.mermaidIssueCount, 0);
   assert.equal(review.findings.some((finding) => finding.severity === "BLOCKER"), false);
+});
+
+test("reviewDocumentStructure flags non-portable HTML and private resource URIs", () => {
+  const review = reviewDocumentStructure(
+    [
+      "# Documento",
+      "",
+      "## Panoramica",
+      "<details><summary>Dettagli</summary>Testo verificato.</details>",
+      "",
+      "Fonte interna: [requisito](knowledge-rail://page/requirements/REQ_1.md).",
+    ].join("\n")
+  );
+
+  assert.equal(review.findings.some((finding) => finding.code === "RAW_HTML"), true);
+  assert.equal(review.findings.some((finding) => finding.code === "PRIVATE_RESOURCE_URI"), true);
+  assert.equal(review.readyForDelivery, false);
 });
 
 test("document contracts apply audience defaults instead of treating every document as client-facing", () => {

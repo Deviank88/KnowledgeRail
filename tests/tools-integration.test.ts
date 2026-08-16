@@ -64,7 +64,7 @@ async function setupWorkspace(): Promise<{
   registerCodeEvidenceTools(server);
   registerDocumentTools(server);
   registerWikiPrompts(server);
-  assert.equal(tools.size, 23);
+  assert.equal(tools.size, 22);
   const init = await tools.get("knowledge_init")!({ force: false });
   assert.equal(init.isError, undefined);
   await fs.access(path.join(root, "docs", "evidence-ir"));
@@ -591,7 +591,7 @@ test("source ingestion: normalize, prepare drafts, dev report ingestion, traceab
   assert.equal(typeof trace.content[0].text, "string");
 });
 
-test("document tools: section context, write, review, knowledge update, docx export", async () => {
+test("document tools: open profiles, section context, Markdown write, terminal review, and knowledge update", async () => {
   const { tools, prompts } = await setupWorkspace();
   await fs.writeFile(path.join(docsCategoryDir("client"), "source.md"), "alpha source", "utf-8");
 
@@ -611,11 +611,32 @@ test("document tools: section context, write, review, knowledge update, docx exp
   await tools.get("wiki_write_page")!({ path: "concepts/Alpha.md", content: page });
 
   const documentPlan = await tools.get("knowledge_plan_document")!({
-    document_type: "runbook",
+    document_type: "safety_case",
     project_name: "Alpha",
+    required_sections: ["Claim", "Evidence"],
   });
   assert.equal(documentPlan.content[0].text.includes("Document editorial plan"), true);
-  assert.equal(documentPlan.structuredContent?.documentType, "runbook");
+  assert.equal(documentPlan.structuredContent?.documentType, "safety_case");
+  assert.equal((documentPlan.structuredContent?.documentProfile as { builtInPreset?: boolean }).builtInPreset, false);
+  assert.deepEqual(documentPlan.structuredContent?.requiredSections, ["Claim", "Evidence"]);
+
+  const diagramPlan = await tools.get("knowledge_plan_document")!({
+    document_type: "architecture_doc",
+    project_name: "Alpha",
+  });
+  const diagramChoice = diagramPlan.structuredContent?.diagramChoice as {
+    default?: string;
+    selected?: string | null;
+    opportunities?: string[];
+    optionDetails?: Array<{ mode?: string; requiresFilesystemAccess?: boolean }>;
+  };
+  assert.equal(diagramChoice.default, "none");
+  assert.equal(diagramChoice.selected, null);
+  assert.equal((diagramChoice.opportunities?.length ?? 0) > 0, true);
+  assert.equal(
+    diagramChoice.optionDetails?.find((option) => option.mode === "external_asset")?.requiresFilesystemAccess,
+    true
+  );
 
   const sectionContext = await tools.get("knowledge_section_context")!({
     section_title: "Requisiti Funzionali",
@@ -627,6 +648,20 @@ test("document tools: section context, write, review, knowledge update, docx exp
   });
   assert.equal(sectionContext.content[0].text.includes("Section context pack"), true);
   assert.equal(sectionContext.content[0].text.includes("Alpha Concept"), true);
+
+  const diagramContext = await tools.get("knowledge_section_context")!({
+    section_title: "System Architecture",
+    document_type: "architecture_doc",
+    diagram_mode: "mermaid",
+    query: "alpha",
+    max_pages: 1,
+  });
+  assert.equal(diagramContext.structuredContent?.diagramRelevant, true);
+  assert.equal(diagramContext.structuredContent?.diagramMode, "mermaid");
+  assert.equal(
+    Array.isArray((diagramContext.structuredContent?.diagramEvidencePack as { nodes?: unknown[] }).nodes),
+    true
+  );
 
   const docWrite = await tools.get("knowledge_write_document")!({
     filename: "brief.md",
@@ -643,7 +678,21 @@ test("document tools: section context, write, review, knowledge update, docx exp
   });
   assert.equal(docReview.content[0].text.includes("Document review"), true);
   assert.equal(docReview.content[0].text.includes("NESSUN_BLOCCANTE"), true);
-  assert.equal(docReview.structuredContent?.readyForExport, true);
+  assert.equal(docReview.structuredContent?.readyForDelivery, true);
+  assert.match(String(docReview.structuredContent?.contentSha256), /^[a-f0-9]{64}$/);
+  const firstHash = String(docReview.structuredContent?.contentSha256);
+  await tools.get("knowledge_write_document")!({
+    filename: "brief.md",
+    title: "Brief",
+    document_type: "custom",
+    content: "# Brief\n\n## Summary\n\nThis concise custom document records a completed and independently verifiable outcome with a changed byte.",
+    overwrite: true,
+  });
+  const changedReview = await tools.get("knowledge_review_document")!({
+    filename: "brief.md",
+    document_type: "custom",
+  });
+  assert.notEqual(changedReview.structuredContent?.contentSha256, firstHash);
 
   const invalidWrite = await tools.get("knowledge_write_document")!({
     filename: "invalid.md",
@@ -653,16 +702,58 @@ test("document tools: section context, write, review, knowledge update, docx exp
     overwrite: false,
   });
   assert.equal(invalidWrite.isError, undefined, "drafts with blockers remain storable");
-  assert.equal(invalidWrite.structuredContent?.readyForExport, false);
-  const blockedExport = await tools.get("knowledge_export_docx")!({
-    filename: "invalid",
+  assert.equal(invalidWrite.structuredContent?.readyForDelivery, false);
+
+  const assetsDir = docsCategoryDir("assets");
+  await fs.mkdir(assetsDir, { recursive: true });
+  await fs.writeFile(
+    path.join(assetsDir, "hostile.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+    "utf8"
+  );
+  const hostileWrite = await tools.get("knowledge_write_document")!({
+    filename: "hostile.md",
+    title: "Hostile",
     document_type: "custom",
-    client: "Client",
-    project: "Project",
+    diagram_mode: "external_asset",
+    content: "# Hostile\n\n## Diagram\n\nA caller-owned diagram is referenced here.\n\n![Flow](../assets/hostile.svg)",
     overwrite: true,
   });
-  assert.equal(blockedExport.isError, true);
-  assert.equal(blockedExport.content[0].text.includes("Export blocked"), true);
+  assert.equal(hostileWrite.structuredContent?.readyForDelivery, false);
+  assert.equal(
+    (hostileWrite.structuredContent?.findings as Array<{ code?: string }>).some(
+      (finding) => finding.code === "SVG_ACTIVE_CONTENT"
+    ),
+    true
+  );
+  const missingAssetWrite = await tools.get("knowledge_write_document")!({
+    filename: "missing-asset.md",
+    title: "Missing asset",
+    document_type: "custom",
+    diagram_mode: "external_asset",
+    content: "# Missing asset\n\n## Diagram\n\nThe expected local diagram is not present.\n\n![Flow](../assets/missing.png)",
+    overwrite: true,
+  });
+  assert.equal(
+    (missingAssetWrite.structuredContent?.findings as Array<{ code?: string }>).some(
+      (finding) => finding.code === "ASSET_MISSING"
+    ),
+    true
+  );
+  const escapingAssetWrite = await tools.get("knowledge_write_document")!({
+    filename: "escaping-asset.md",
+    title: "Escaping asset",
+    document_type: "custom",
+    diagram_mode: "external_asset",
+    content: "# Escaping asset\n\n## Diagram\n\nThe path must remain confined.\n\n![Flow](../../outside.svg)",
+    overwrite: true,
+  });
+  assert.equal(
+    (escapingAssetWrite.structuredContent?.findings as Array<{ code?: string }>).some(
+      (finding) => finding.code === "ASSET_PATH_INVALID"
+    ),
+    true
+  );
 
   const draft = await prompts.get("prepare_knowledge_update")!({
     finding: "La sezione requisiti Alpha è incompleta.",
@@ -674,15 +765,7 @@ test("document tools: section context, write, review, knowledge update, docx exp
   assert.equal(draft.messages[0].content.text.includes("analysis/Requisiti_Alpha.md"), true);
   assert.equal(draft.messages[0].content.text.includes("knowledge_page action=write"), true);
 
-  const docx = await tools.get("knowledge_export_docx")!({
-    filename: "brief",
-    document_type: "custom",
-    client: "Client",
-    project: "Project",
-    overwrite: true,
-  });
-  assert.equal(docx.isError, undefined);
-  await fs.access(path.join(docsCategoryDir("deliverables"), "brief.docx"));
+  assert.equal(tools.has("knowledge_export_docx"), false);
 });
 
 test("MCP prompts return editorial and dev-report plans", async () => {

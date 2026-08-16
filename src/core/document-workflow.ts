@@ -4,8 +4,8 @@ import {
   DOCUMENT_TYPES,
   USER_REQUEST_LANGUAGE,
   type DocumentContract,
-  type DocumentType,
 } from "../config/document-contracts.js";
+import { getRuntimeWikiGraph } from "./graph-runtime.js";
 import { WIKI_PAGE_DIRECTORY_BY_TYPE } from "../config/workspace-layout.js";
 import {
   sectionEvidencePlan,
@@ -43,7 +43,8 @@ export interface SectionContextOptions {
   wikiRoot: string;
   sectionTitle: string;
   query?: string;
-  documentType?: DocumentType;
+  documentType?: string;
+  diagramMode?: DiagramMode;
   writerLanguage?: string;
   evidencePlan?: Partial<SectionEvidencePlan>;
   pagePaths?: string[];
@@ -92,8 +93,11 @@ export interface SectionCoverageMatrix {
 }
 
 export interface SectionContextResult {
-  documentType?: DocumentType;
+  documentType?: string;
   writerLanguage?: string;
+  diagramRelevant: boolean;
+  diagramMode: DiagramMode;
+  diagramEvidencePack?: DiagramEvidencePack;
   pages: SectionContextPage[];
   totalIncludedChars: number;
   totalOriginalChars: number;
@@ -119,8 +123,8 @@ export interface ReviewFinding {
 }
 
 export interface DocumentReviewResult {
-  documentType?: DocumentType;
-  readyForExport: boolean;
+  documentType?: string;
+  readyForDelivery: boolean;
   blockerCount: number;
   contractCheckCount: number;
   contractChecksPassed: number;
@@ -135,19 +139,52 @@ export interface DocumentReviewResult {
 }
 
 export interface ReviewOptions {
-  documentType?: DocumentType;
+  documentType?: string;
+  diagramMode?: DiagramMode;
   language?: string;
   clientFacing?: boolean;
   includeWikiUpdatePlan?: boolean;
 }
 
 export interface DocumentPlanOptions {
-  documentType: DocumentType;
+  documentType: string;
+  template?: string;
   projectName?: string;
   objective?: string;
   audience?: string;
   language?: string;
   maxSections?: number;
+}
+
+export const DIAGRAM_MODES = ["none", "mermaid", "external_asset"] as const;
+export type DiagramMode = (typeof DIAGRAM_MODES)[number];
+
+export interface DiagramEvidenceNode {
+  id: string;
+  label: string;
+  type: string;
+  path?: string;
+  evidenceRefs: string[];
+}
+
+export interface DiagramEvidenceRelation {
+  from: string;
+  to: string;
+  kind: string;
+  evidenceRefs: string[];
+}
+
+export interface DiagramEvidencePack {
+  nodes: DiagramEvidenceNode[];
+  relations: DiagramEvidenceRelation[];
+  gaps: string[];
+}
+
+const DIAGRAM_RELEVANT_SECTION =
+  /architett|architect|component|system context|data|entit|schema|fluss|process|workflow|sequence|integraz|integrat|interface|api|deployment|infrastrutt|infrastruct|topolog|dipenden|dependenc/i;
+
+export function isDiagramRelevantSection(sectionTitle: string): boolean {
+  return DIAGRAM_RELEVANT_SECTION.test(sectionTitle);
 }
 
 export interface KnowledgeUpdateOptions {
@@ -291,7 +328,7 @@ export async function buildDocumentPlan(
   const today = new Date().toISOString().slice(0, 10);
   const contract = documentContract(options.documentType);
   const outputLanguage = options.language?.trim() || contract.defaultLanguage;
-  const rawTemplate = DOCUMENT_TEMPLATES[options.documentType];
+  const rawTemplate = options.template ?? DOCUMENT_TEMPLATES[options.documentType];
   const persona = DOCUMENT_PERSONAS[options.documentType] ?? DEFAULT_EDITOR_PERSONA;
   const template = rawTemplate
     ? rawTemplate
@@ -355,7 +392,7 @@ export async function buildDocumentPlan(
     `- When evidence is missing, write a traceable gap instead of inventing content.`,
     `- Expand relevant budget-excluded pages with \`knowledge_page action="read"\` and verify requirements/decisions across sections.`,
     `- For code evidence use \`knowledge_code\` first; a raw scan is an explicit fallback and must be recorded.`,
-    `- Use Mermaid only when a diagram clarifies flows, architecture, data, or sequences; never use ASCII art.`,
+    `- Diagrams are optional and default to none. Use Mermaid or a relative external asset only when the user selected that representation; never use ASCII art.`,
     `- Write all human-readable titles, headings, and prose in ${outputLanguage}. The English reference template and editor instructions are structural guidance, not an English-output requirement.`,
     ``,
     `## Sections to assign to writers`,
@@ -516,6 +553,94 @@ function compilerGraphSummary(task: TaskContext, includedPaths: readonly string[
   ].join("\n");
 }
 
+async function buildDiagramEvidencePack(
+  wikiRoot: string,
+  pages: readonly SectionContextPage[]
+): Promise<DiagramEvidencePack> {
+  if (pages.length === 0) {
+    return {
+      nodes: [],
+      relations: [],
+      gaps: ["No evidence pages were selected, so no diagram facts can be supported."],
+    };
+  }
+
+  const runtime = await getRuntimeWikiGraph(wikiRoot, false, { persist: false });
+  const pageByNodeId = new Map<string, SectionContextPage>();
+  for (const page of pages) {
+    const nodeId = runtime.pageNodeByPath.get(page.relPath);
+    if (nodeId) pageByNodeId.set(nodeId, page);
+  }
+
+  const selected = new Set(pageByNodeId.keys());
+  const allowedKinds = new Set([
+    "page",
+    "request",
+    "requirement",
+    "implementation",
+    "test_result",
+    "release",
+    "api",
+    "data_model",
+  ]);
+  const candidateEdges = runtime.graph.edges
+    .filter((edge) => selected.has(edge.from) || selected.has(edge.to))
+    .filter((edge) => {
+      const from = runtime.nodesById.get(edge.from);
+      const to = runtime.nodesById.get(edge.to);
+      return Boolean(from && to && allowedKinds.has(from.kind) && allowedKinds.has(to.kind));
+    })
+    .slice(0, 40);
+  const nodeIds = new Set<string>(selected);
+  for (const edge of candidateEdges) {
+    if (nodeIds.size < 20) nodeIds.add(edge.from);
+    if (nodeIds.size < 20) nodeIds.add(edge.to);
+  }
+
+  const nodes = [...nodeIds]
+    .map((id): DiagramEvidenceNode | null => {
+      const node = runtime.nodesById.get(id);
+      if (!node) return null;
+      const page = pageByNodeId.get(id);
+      const evidenceRefs = uniqueStrings([
+        ...(page?.evidenceUri ? [page.evidenceUri] : []),
+        ...(page?.sources ?? []),
+        ...(node.path ? [node.path] : []),
+      ]);
+      return {
+        id,
+        label: node.label,
+        type: node.kind,
+        ...(node.path ? { path: node.path } : {}),
+        evidenceRefs,
+      };
+    })
+    .filter((node): node is DiagramEvidenceNode => node !== null);
+
+  const relations = candidateEdges
+    .filter((edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to))
+    .map((edge): DiagramEvidenceRelation => ({
+      from: edge.from,
+      to: edge.to,
+      kind: edge.kind,
+      evidenceRefs: uniqueStrings([
+        ...(pageByNodeId.get(edge.from)?.evidenceUri ? [pageByNodeId.get(edge.from)!.evidenceUri!] : []),
+        ...(pageByNodeId.get(edge.to)?.evidenceUri ? [pageByNodeId.get(edge.to)!.evidenceUri!] : []),
+        ...(pageByNodeId.get(edge.from)?.sources ?? []),
+        ...(pageByNodeId.get(edge.to)?.sources ?? []),
+      ]),
+    }));
+  const gaps: string[] = [];
+  if (selected.size < pages.length) {
+    gaps.push("Some selected evidence pages are not represented in the current graph index.");
+  }
+  if (relations.length === 0) {
+    gaps.push("The current graph index contains no supported relations among the selected evidence.");
+  }
+  gaps.push("Message flows and cardinalities are omitted unless explicitly represented by indexed evidence.");
+  return { nodes, relations, gaps };
+}
+
 export async function createSectionContext(
   options: SectionContextOptions
 ): Promise<SectionContextResult> {
@@ -611,11 +736,18 @@ export async function createSectionContext(
   };
   const includedPaths = new Set(pages.map((page) => page.relPath));
   const omittedPaths = candidatePaths.filter((candidate) => !includedPaths.has(candidate)).slice(0, 8);
+  const diagramRelevant = isDiagramRelevantSection(options.sectionTitle);
+  const diagramMode = options.diagramMode ?? "none";
   return {
     documentType: options.documentType,
     writerLanguage: options.writerLanguage ?? (
       options.documentType ? documentContract(options.documentType).defaultLanguage : undefined
     ),
+    diagramRelevant,
+    diagramMode,
+    ...(diagramRelevant && diagramMode !== "none"
+      ? { diagramEvidencePack: await buildDiagramEvidencePack(options.wikiRoot, pages) }
+      : {}),
     pages,
     totalIncludedChars,
     totalOriginalChars,
@@ -674,7 +806,11 @@ export function formatSectionContext(
     "- Use only the evidence in this context pack and report gaps instead of inventing content.",
     "- Every factual claim must preserve the provenance shown by the evidence URI or sources.",
     `- Write in the requested language (${result.writerLanguage ?? USER_REQUEST_LANGUAGE}) using a professional, concrete, polished register; the surrounding English instructions are internal guidance only.`,
-    "- Add Mermaid diagrams only when they clarify flows, architecture, or relationships.",
+    ...(result.diagramMode === "mermaid"
+      ? ["- Diagram choice: Mermaid. If a diagram adds material clarity, write a complete fenced Mermaid block grounded only in the diagram evidence pack."]
+      : result.diagramMode === "external_asset"
+        ? ["- Diagram choice: external asset. If a diagram adds material clarity, reference a caller-owned relative SVG/PNG asset; KnowledgeRail does not generate it."]
+        : ["- Diagram choice: none. Do not add a diagram unless the user changes the selection."]),
     "- Do not use ASCII art or placeholders.",
     "",
   ];
@@ -712,6 +848,26 @@ export function formatSectionContext(
     lines.push("## Relevant pages omitted by the budget", "");
     for (const path of result.omittedPaths) lines.push(`- ${path}`);
     lines.push("", "Use `knowledge_page action=read` or a new context pack with `page_paths` to expand them.", "");
+  }
+
+  // The prose evidence remains first so an optional diagram aid cannot consume
+  // the caller's output budget before the primary section evidence.
+  if (result.diagramEvidencePack) {
+    lines.push("## Diagram evidence pack", "");
+    lines.push(`> Selected mode: ${result.diagramMode}; diagram required: no`);
+    lines.push("", "### Nodes", "");
+    if (result.diagramEvidencePack.nodes.length === 0) lines.push("- none");
+    for (const node of result.diagramEvidencePack.nodes) {
+      lines.push(`- ${node.id} — ${node.label} (${node.type}); evidence: ${node.evidenceRefs.join(", ") || "GAP"}`);
+    }
+    lines.push("", "### Relations", "");
+    if (result.diagramEvidencePack.relations.length === 0) lines.push("- none");
+    for (const relation of result.diagramEvidencePack.relations) {
+      lines.push(`- ${relation.from} --${relation.kind}--> ${relation.to}; evidence: ${relation.evidenceRefs.join(", ") || "GAP"}`);
+    }
+    lines.push("", "### Diagram GAPs", "");
+    for (const gap of result.diagramEvidencePack.gaps) lines.push(`- ${gap}`);
+    lines.push("");
   }
 
   const output = lines.join("\n");
@@ -752,6 +908,21 @@ export function reviewDocumentStructure(
   const mustachePlaceholders = markdownWithoutCode.match(/\{\{[^}]+\}\}/g) ?? [];
   placeholders.push(...mustachePlaceholders);
 
+  if (/<\/?[A-Za-z][^>]*>/.test(markdownWithoutCode)) {
+    findings.push({
+      severity: "WARNING",
+      code: "RAW_HTML",
+      message: "Raw HTML is preserved as source but is outside the portable Markdown profile.",
+    });
+  }
+  if (/knowledge-rail:\/\//i.test(markdownWithoutCode)) {
+    findings.push({
+      severity: "BLOCKER",
+      code: "PRIVATE_RESOURCE_URI",
+      message: "Deliverables must not contain private knowledge-rail resource URIs.",
+    });
+  }
+
   if (placeholders.length > 0) {
     findings.push({
       severity: "BLOCKER",
@@ -773,10 +944,23 @@ export function reviewDocumentStructure(
   const mermaidIssues: string[] = [];
   const mermaidBlockRe = /```mermaid\s*\r?\n([\s\S]*?)```/g;
   let mermaidMatch: RegExpExecArray | null;
+  let mermaidBlockCount = 0;
   while ((mermaidMatch = mermaidBlockRe.exec(markdown)) !== null) {
-    const firstLine = mermaidMatch[1].split(/\r?\n/).find((line) => line.trim() !== "")?.trim() ?? "";
+    mermaidBlockCount += 1;
+    const body = mermaidMatch[1].trim();
+    const firstLine = body.split(/\r?\n/).find((line) => line.trim() !== "")?.trim() ?? "";
     if (!/^(flowchart|graph|sequenceDiagram|erDiagram|classDiagram|stateDiagram|journey|gantt|pie|mindmap|timeline)\b/.test(firstLine)) {
       mermaidIssues.push(firstLine || "(empty block)");
+    }
+    if (body.length > 50_000) mermaidIssues.push("block exceeds 50,000 characters");
+    if (/%%\s*\{|(?:^|\s)(?:click|href)\s|https?:\/\/|<[^>]+>|javascript:|data:/i.test(body)) {
+      mermaidIssues.push("block contains a forbidden directive, URL, or HTML");
+    }
+    const pairs: Array<[string, string]> = [["[", "]"], ["(", ")"], ["{", "}"]];
+    for (const [open, close] of pairs) {
+      const opens = [...body].filter((character) => character === open).length;
+      const closes = [...body].filter((character) => character === close).length;
+      if (opens !== closes) mermaidIssues.push("block contains unbalanced delimiters");
     }
   }
   const asciiDiagramRe = /```(?!mermaid|json|bash|shell|ts|typescript|js|javascript|yaml|yml|http|text)\s*\r?\n[\s\S]*(?:──|-->|<--|\+[-+]{2,}|\|.*\|)[\s\S]*?```/g;
@@ -784,10 +968,25 @@ export function reviewDocumentStructure(
 
   if (mermaidIssues.length > 0) {
     findings.push({
-      severity: "WARNING",
-      code: "MERMAID_SOSPETTO",
-      message: "Some Mermaid blocks do not start with a recognized diagram type.",
+      severity: "BLOCKER",
+      code: "MERMAID_INVALIDO",
+      message: "One or more Mermaid blocks are empty, unsupported, unbalanced, oversized, or contain active/external content.",
       evidence: mermaidIssues.slice(0, 5).join(", "),
+    });
+  }
+  const imageLinkCount = (markdown.match(/!\[[^\]]*\]\([^)]+\)/g) ?? []).length;
+  if (options.diagramMode === "none" && mermaidBlockCount > 0) {
+    findings.push({
+      severity: "WARNING",
+      code: "DIAGRAM_MODE_MISMATCH",
+      message: "The document contains Mermaid source although diagram_mode is none.",
+    });
+  }
+  if (options.diagramMode === "external_asset" && mermaidBlockCount > 0 && imageLinkCount === 0) {
+    findings.push({
+      severity: "WARNING",
+      code: "DIAGRAM_MODE_MISMATCH",
+      message: "diagram_mode is external_asset, but the document contains Mermaid source instead.",
     });
   }
   if (asciiDiagrams.length > 0) {
@@ -939,7 +1138,7 @@ export function reviewDocumentStructure(
   const blockerCount = findings.filter((finding) => finding.severity === "BLOCKER").length;
   return {
     documentType: options.documentType,
-    readyForExport: blockerCount === 0,
+    readyForDelivery: blockerCount === 0,
     blockerCount,
     contractCheckCount,
     contractChecksPassed,
@@ -1008,7 +1207,7 @@ export function formatReviewResult(
     `# Document review: ${filename}`,
     "",
     `> Type: ${result.documentType ?? "unspecified"}`,
-    `> Ready for export: ${result.readyForExport ? "yes" : "no"}`,
+    `> Ready for delivery: ${result.readyForDelivery ? "yes" : "no"}`,
     `> Blocker: ${result.blockerCount}`,
     `> Contract checks: ${result.contractChecksPassed}/${result.contractCheckCount}`,
     `> Finding: ${result.findings.length}`,
@@ -1038,7 +1237,7 @@ export function formatReviewResult(
   lines.push("- Resolve every BLOCKER finding before delivery.");
   lines.push("- Replace every placeholder with real content or remove the section when it does not apply.");
   lines.push("- Expand weak sections using `knowledge_document_context action=section` with targeted queries.");
-  lines.push("- Convert ASCII diagrams to valid `mermaid` blocks when they represent processes or architecture.");
+  lines.push("- Remove ASCII diagrams. Use Mermaid or a relative external asset only if that representation was selected.");
   lines.push("- If a finding identifies gaps or inaccuracies, update the wiki before regenerating the document.");
   lines.push("- Save the revised version with `knowledge_document action=write` only after applying patches.");
   if (options.includeWikiUpdatePlan ?? true) {

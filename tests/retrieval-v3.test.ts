@@ -94,7 +94,7 @@ test("schema migration proposal covers every retired public operation without mu
     ["knowledge_evidence_ir", "knowledge_ingest"],
     ["knowledge_code_evidence", "knowledge_code"],
     ["knowledge_plan_document", "knowledge_document_context action=plan"],
-    ["knowledge_export_docx", "knowledge_document action=export"],
+    ["knowledge_export_docx", "knowledge_document action=review (terminal; export removed)"],
     ["wiki_lint", "knowledge_admin action=lint"],
     ["knowledge_menu", "KnowledgeRail domain tools"],
   ] as const;

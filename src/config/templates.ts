@@ -68,7 +68,7 @@ Frontmatter fields (\`title\`, \`tags\`, and so on) retain their technical forma
 │   ├── reports/         # Validated development reports
 │   ├── changelogs/      # Technical and functional changelogs
 │   ├── normalized/      # Normalized Markdown source copies
-│   ├── deliverables/    # Generated documents and DOCX exports
+│   ├── deliverables/    # Reviewed Markdown deliverables
 │   ├── assets/          # Optional deliverable assets
 │   └── evidence-ir/     # Durable Evidence IR managed by KnowledgeRail
 ├── wiki/                # Canonical memory maintained by the agent
@@ -250,19 +250,22 @@ Use this editorial workflow to produce structured documents (functional specific
 3. **Verify code when the wiki is insufficient**: use \`knowledge_code\` and materialize only relevant \`code://\` resources. A raw scan is exclusively an explicit fallback that must be recorded.
 4. **Update the wiki before the document**: for gaps or inaccuracies, use \`prepare_knowledge_update\`, apply the draft with \`knowledge_page action="write"\`, then \`action="append_log"\`. Regenerate the context pack afterward.
 5. **Assign writers**: each writer produces one section using only its updated context pack and reports gaps instead of inventing content.
-6. **Assemble as an editor**: merge sections, remove duplication, and add Mermaid only when it clarifies the content.
+6. **Assemble as an editor**: merge sections and remove duplication. Diagrams are optional; use only the representation explicitly selected by the user.
 7. **Save the draft**: call \`knowledge_document action="write"\` with the filename, title, type, and complete content.
 8. **Review**: follow \`nextAction\` to \`knowledge_document action="review"\` and resolve every blocker.
 9. **Recover post-review gaps**: use \`knowledge_context\` or \`knowledge_code\`, update the wiki, and regenerate the section.
-10. **Export and record**: \`knowledge_document action="export"\` rejects non-conforming content; then use \`knowledge_files\` and \`knowledge_page action="append_log"\`.
+10. **Complete**: a passing review is terminal. Any conversion or branded rendering is owned by the user and their chosen tools.
 
 ### Document types
 
 | Type | Description | Persona |
 |------|-------------|---------|
 | \`functional_spec\` | Complete functional project specification | Expert PM |
+| \`functional_analysis\` | Business processes, rules, requirements and expected outcomes | Business Analyst |
+| \`technical_analysis\` | Current state, proposed implementation and verification strategy | Technical Analyst |
 | \`architecture_doc\` | System architecture and technical decisions | Solution Architect / Tech Lead |
 | \`project_brief\` | Executive stakeholder summary | Business Analyst |
+| \`user_manual\` | Task-oriented guide for end users | Technical Writer |
 | \`onboarding_guide\` | Onboarding guide for new developers | Senior Developer |
 | \`api_reference\` | Endpoint and API-interface documentation | Backend Developer / API Specialist |
 | \`adr\` | Architecture Decision Record | Software Architect |
@@ -270,7 +273,9 @@ Use this editorial workflow to produce structured documents (functional specific
 | \`test_plan\` | Traceable test plan | Test Lead |
 | \`incident_report\` | Incident review and corrective actions | Incident Manager |
 | \`release_notes\` | Release and upgrade notes | Release Manager |
-| \`custom\` | Any other type (no predefined template) | — |
+| \`custom\` | Generic custom structure | Senior Technical Editor |
+
+These are presets, not a closed taxonomy. Any non-empty document type is valid, and callers can provide their own required sections.
 
 ### Storage
 
@@ -286,7 +291,7 @@ Documents are saved under \`docs/deliverables/\`. They are not wiki pages and **
 - In client-facing documents, do not mention the wiki, context packs, agents, prompts, MCP tools, \`src/\`, \`tests/\`, \`docs/\` paths, or internal process details.
 - When the wiki is insufficient but code clarifies behavior, first update the wiki with a verified page or section and then regenerate the document.
 - Use tables and verifiable criteria when they aid validation.
-- Use Markdown \`\`\`mermaid blocks only when the diagram adds clarity; do not use ASCII diagrams or monospace trees.
+- Diagrams default to none. Use Mermaid or a relative external SVG/PNG only when the user selected that representation; do not use ASCII diagrams or monospace trees.
 
 *Schema version 4 — Update this file when conventions evolve.*
 `;
@@ -297,7 +302,7 @@ const DOCUMENT_QUALITY_RULES =
   "leave no unresolved placeholders; do not invent details absent from the wiki; " +
   "if the wiki is incomplete but code clarifies behavior, update the wiki before regenerating the document; " +
   "do not mention the wiki, context packs, agents, prompts, MCP tools, or internal paths in client-facing documents; " +
-  "use Markdown ```mermaid blocks only when a diagram genuinely clarifies flows, architecture, data, or sequences; " +
+  "diagrams are optional and default to none; use Mermaid or a relative external asset only when the user selected it; " +
   "do not use ASCII art, text trees, or monospace diagrams.";
 
 export const DOCUMENT_PERSONAS: Record<string, string> = {
@@ -306,16 +311,21 @@ export const DOCUMENT_PERSONAS: Record<string, string> = {
     "Produce a clear, structured document that the client can validate. " +
     "Prioritize requirements understandable by non-technical stakeholders, concrete usage scenarios, " +
     "and measurable acceptance criteria. The client must be able to validate the solution before development. " +
-    "When diagrams are needed, use only Markdown ```mermaid flowchart or sequenceDiagram blocks; " +
-    "do not use ASCII art, text trees, or monospace diagrams. " +
+    DOCUMENT_QUALITY_RULES,
+
+  functional_analysis:
+    "You are a senior Business Analyst. Describe actors, current and target processes, business rules, functional requirements, exceptions, and measurable outcomes without prescribing unsupported implementation details. " +
+    DOCUMENT_QUALITY_RULES,
+
+  technical_analysis:
+    "You are a senior Technical Analyst. Explain verified current behavior, constraints, components, interfaces, data impact, implementation options, risks, migration, and a concrete verification strategy. " +
     DOCUMENT_QUALITY_RULES,
 
   architecture_doc:
     "You are a senior Solution Architect / Tech Lead with extensive distributed-systems experience. " +
     "Produce an architecture document that guides the development team precisely. " +
     "Prioritize justified architecture decisions, explicit trade-offs, precise components and interfaces, " +
-    "and scalability, security, and maintainability. When diagrams are needed, use only Markdown ```mermaid " +
-    "flowchart, sequenceDiagram, or erDiagram blocks; do not use ASCII art, text trees, or monospace diagrams. " +
+    "and scalability, security, and maintainability. " +
     DOCUMENT_QUALITY_RULES,
 
   project_brief:
@@ -323,6 +333,10 @@ export const DOCUMENT_PERSONAS: Record<string, string> = {
     "Produce a concise summary for executive and non-technical stakeholders. " +
     "Prioritize a clear problem statement, measurable benefits, a realistic timeline, and major risks. " +
     "Use direct language and keep it to one page. " +
+    DOCUMENT_QUALITY_RULES,
+
+  user_manual:
+    "You are a senior Technical Writer focused on end users. Produce task-oriented instructions with prerequisites, expected outcomes, recovery guidance, troubleshooting, and an accessible glossary. " +
     DOCUMENT_QUALITY_RULES,
 
   onboarding_guide:
@@ -363,6 +377,10 @@ export const DOCUMENT_PERSONAS: Record<string, string> = {
     "You are a Release Manager. Communicate observable changes, compatibility, upgrades, fixes, and known issues " +
     "concisely and verifiably for the target audience. " +
     DOCUMENT_QUALITY_RULES,
+
+  custom:
+    "You are a senior technical editor. Follow the user-supplied purpose and structure, keep claims evidence-backed, and make gaps explicit. " +
+    DOCUMENT_QUALITY_RULES,
 };
 
 const ENGLISH_FUNCTIONAL_SPEC = `# Functional Specification: {{PROJECT_NAME}}
@@ -393,13 +411,6 @@ const ENGLISH_FUNCTIONAL_SPEC = `# Functional Specification: {{PROJECT_NAME}}
 ## 5. System Architecture
 [Describe the high-level architecture, main components, responsibilities, and technology stack.]
 
-\`\`\`mermaid
-flowchart LR
-  A[Source system] --> B[Application component]
-  B --> C[Service or integration]
-  C --> D[Persistence]
-\`\`\`
-
 ## 6. Data Model
 [Describe primary entities, fields, constraints, and relationships.]
 
@@ -424,6 +435,62 @@ flowchart LR
 
 export const DOCUMENT_TEMPLATES: Record<string, string> = {
   functional_spec: ENGLISH_FUNCTIONAL_SPEC,
+  functional_analysis: `# Functional Analysis: {{PROJECT_NAME}}
+
+> **Date:** {{DATE}} | **Status:** Draft
+
+## Purpose and Scope
+[Define the business objective, audience, boundaries, and explicit exclusions.]
+
+## Stakeholders and Actors
+[Identify actors, responsibilities, needs, and permissions.]
+
+## Current Process and Problems
+[Describe the verified current workflow, pain points, and constraints.]
+
+## Target Process and Use Cases
+[Describe the desired workflow, primary scenarios, exceptions, and expected outcomes.]
+
+## Functional Requirements
+[List traceable functional requirements and applicable business rules.]
+
+## Data and Integrations
+[Describe business data, ownership, external systems, and exchange requirements.]
+
+## Acceptance Criteria
+[Define measurable criteria that demonstrate the requested behavior.]
+
+## Assumptions, Gaps, and Risks
+[Separate confirmed facts from assumptions, missing evidence, and risks.]
+`,
+  technical_analysis: `# Technical Analysis: {{PROJECT_NAME}}
+
+> **Date:** {{DATE}} | **Status:** Draft
+
+## Objective and Scope
+[Define the technical question, affected boundaries, and exclusions.]
+
+## Verified Current State
+[Describe current components, behavior, interfaces, and implementation evidence.]
+
+## Requirements and Constraints
+[List functional drivers, non-functional constraints, and invariants.]
+
+## Proposed Technical Approach
+[Explain the implementation approach, responsibilities, and justified trade-offs.]
+
+## Components, Interfaces, and Data
+[Describe affected components, contracts, dependencies, and data impact.]
+
+## Security, Operations, and Migration
+[Cover security, observability, rollout, compatibility, and rollback.]
+
+## Risks and Open Questions
+[Record risks, mitigations, unknowns, and evidence gaps.]
+
+## Verification Strategy
+[Define tests, acceptance evidence, and completion criteria.]
+`,
   _legacy_functional_spec: `# Documento Funzionale di Progetto: {{PROJECT_NAME}}
 
 > **Versione:** 1.0
@@ -712,6 +779,32 @@ flowchart TD
 
 ## Budget / Resources
 [High-level resource estimate if known]
+`,
+
+  user_manual: `# User Manual: {{PROJECT_NAME}}
+
+> **Date:** {{DATE}}
+
+## Overview
+[Explain what the product does, who it is for, and its main capabilities.]
+
+## Prerequisites and Access
+[List supported environments, permissions, accounts, and initial configuration.]
+
+## Getting Started
+[Provide the shortest verified path to a successful first outcome.]
+
+## Common Tasks
+[Organize task-oriented procedures by user goal, with expected outcomes.]
+
+## Errors and Troubleshooting
+[Describe recognizable symptoms, safe recovery steps, and escalation conditions.]
+
+## Frequently Asked Questions
+[Answer recurring user questions with concise, verified guidance.]
+
+## Glossary and Support
+[Define product terminology and provide approved support channels.]
 `,
 
   onboarding_guide: `# Onboarding Guide: {{PROJECT_NAME}}

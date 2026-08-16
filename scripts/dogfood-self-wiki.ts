@@ -237,7 +237,7 @@ function selfWikiPages(): SelfWikiPage[] {
         `- [[Retrieval ibrido e Task Context]] descrive il percorso di lettura accuracy-safe.`,
         `- [[Source Coverage ed Evidence IR]] descrive l'ingestione completa e la provenance.`,
         `- [[Code Evidence Index]] descrive l'evidence strutturale dal repository.`,
-        `- [[Pipeline documentale e Mermaid]] descrive deliverable Markdown e DOCX.`,
+        `- [[Pipeline documentale e Mermaid]] descrive deliverable Markdown, review terminale e diagrammi opt-in.`,
         `- [[Modello persistente della conoscenza]] distingue dati canonici e derivati.`,
         `- [[Guida domain-first per agenti]] registra la decisione di navigazione.`,
         `- [[Provider OCR e semantic retrieval]] documenta le integrazioni opzionali.`,
@@ -292,7 +292,7 @@ function selfWikiPages(): SelfWikiPage[] {
         "| knowledge_context | Task Context, search, grafo e widening |",
         "| knowledge_page / knowledge_files | Memoria canonica e fonti controllate |",
         "| knowledge_ingest / knowledge_code | Evidence IR e codice |",
-        "| knowledge_document_context / knowledge_document | Context pack, review ed export |",
+        "| knowledge_document_context / knowledge_document | Context pack, scrittura Markdown e review terminale |",
         "| knowledge_admin | Inizializzazione, lint e migrazione |",
         "",
         "## Risorse",
@@ -370,22 +370,22 @@ function selfWikiPages(): SelfWikiPage[] {
       path: "implementations/Document_Pipeline_And_Mermaid.md",
       title: "Pipeline documentale e Mermaid",
       type: "implementation",
-      tags: ["documents", "docx", "mermaid"],
+      tags: ["documents", "markdown", "mermaid"],
       authority: "test_evidence",
       body: [
         `Vedi [[${OVERVIEW_TITLE}]], [[Retrieval ibrido e Task Context]] e [[Provider OCR e semantic retrieval]].`,
         "",
         "## Context per sezione",
         "",
-        "knowledge_document_context action=section usa lo stesso compiler accuracy-safe e produce evidence plan, matrice di coverage, provenance e GAP per una singola sezione. action=plan seleziona prima un contratto tipizzato; il writer materializza soltanto l'evidence selezionata.",
+        "knowledge_document_context action=section usa lo stesso compiler accuracy-safe e produce evidence plan, matrice di coverage, provenance, GAP e, quando utile, un diagram evidence pack. action=plan accetta preset o profili liberi; il writer materializza soltanto l'evidence selezionata.",
         "",
-        "## Review ed export",
+        "## Review terminale",
         "",
-        "I deliverable Markdown vengono salvati in docs/deliverables e revisionati contro contratti di struttura, contenuto, lingua, audience e placeholder. L'export DOCX rilegge il contenuto corrente e rifiuta ogni blocker. I diagrammi Mermaid vengono validati e renderizzati tramite @mermaid-js/mermaid-cli.",
+        "I deliverable Markdown vengono salvati in docs/deliverables e revisionati contro contratti di struttura, contenuto, lingua, audience, placeholder e asset locali. Una review senza blocker è terminale e restituisce lo SHA-256 del contenuto ispezionato.",
         "",
-        "## Portabilità",
+        "## Diagrammi e portabilità",
         "",
-        "La risoluzione della CLI usa il pacchetto installato e non dipende dalla shell o dalla cwd del progetto servito. Puppeteer fornisce Chromium su macOS, Windows e Linux; installazione e sandbox del browser devono essere verificati nell'ambiente di deployment.",
+        "I diagrammi sono opt-in: l'LLM può scrivere Mermaid nel Markdown oppure collegare un SVG/PNG già presente in docs/assets. KnowledgeRail non disegna e non converte formati; Obsidian e altri viewer compatibili rendono direttamente Mermaid.",
       ],
     },
     {
@@ -598,7 +598,7 @@ function reportMarkdown(metrics: Record<string, unknown>): string {
     "  D --> E[knowledge_admin lint]",
     "  E --> F[knowledge_context compact]",
     "  F --> G[resources/read]",
-    "  G --> H[review ed export DOCX]",
+    "  G --> H[write Markdown e review terminale]",
     "```",
     "Il flusso verifica in ordine discovery, guida, indicizzazione, memoria canonica, retrieval selettivo e deliverable.",
     "",
@@ -681,7 +681,7 @@ async function main(): Promise<void> {
       "hybrid retrieval progressive widening task context",
       "source coverage Evidence IR synthesis",
       "code evidence index resource reader",
-      "Mermaid DOCX export renderer",
+      "Markdown document review diagram evidence assets",
       "workspace path validation migration security",
     ];
     const codeResourceUris = new Set<string>();
@@ -703,7 +703,6 @@ async function main(): Promise<void> {
     }
     assert.ok(codeResourcesRead >= 4);
 
-    const date = new Date().toISOString().slice(0, 10);
     const initialTestPage = dogfoodTestPage({
       sdkVersion,
       toolCount: toolNames.length,
@@ -882,6 +881,7 @@ async function main(): Promise<void> {
       filename: "knowledge-rail_mcp2_dogfood_report.md",
       title: "Report di dogfood MCP 2.0 — KnowledgeRail",
       document_type: "custom",
+      diagram_mode: "mermaid",
       content: reportMarkdown(metrics),
       overwrite: true,
     });
@@ -889,6 +889,7 @@ async function main(): Promise<void> {
       action: "review",
       filename: "knowledge-rail_mcp2_dogfood_report.md",
       document_type: "custom",
+      diagram_mode: "mermaid",
       language: "italiano",
       client_facing: false,
       include_wiki_update_plan: false,
@@ -896,19 +897,9 @@ async function main(): Promise<void> {
     const reviewText = textContent(review);
     assert.match(reviewText, /^- \*\*INFO NESSUN_BLOCCANTE:/m);
     assert.doesNotMatch(reviewText, /^- \*\*(?:BLOCKER|WARNING) /m);
-    const exported = await harness.callTool("knowledge_document", {
-      action: "export",
-      filename: "knowledge-rail_mcp2_dogfood_report",
-      document_type: "custom",
-      client: "KnowledgeRail maintainers",
-      project_name: "KnowledgeRail",
-      category_label: "PRODUCTION READINESS",
-      version: "1.0",
-      date,
-      status: "Verified",
-      overwrite: true,
-    }, 120_000);
-    assert.match(textContent(exported), /Diagrammi Mermaid renderizzati: 1/);
+    assert.equal(review.structuredContent?.readyForDelivery, true);
+    assert.equal(review.structuredContent?.nextAction, null);
+    assert.match(String(review.structuredContent?.contentSha256), /^[a-f0-9]{64}$/);
 
     process.stdout.write(`${JSON.stringify(metrics, null, 2)}\n`);
   } finally {

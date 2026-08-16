@@ -12,8 +12,11 @@ import {
 
 const CONTRACT_SIGNALS: Readonly<Record<DocumentType, string>> = {
   functional_spec: "Criteri di accettazione: dato un utente valido, quando conferma, allora l'operazione è registrata.",
+  functional_analysis: "Expected outcome and acceptance criteria: the verified business process completes without unsupported manual steps.",
+  technical_analysis: "Verification strategy: automated tests and validation confirm the proposed interfaces and migration behavior.",
   architecture_doc: "ADR-001 records the architecture decision and its trade-off after evidence review.",
   project_brief: "Success metric: at least 95% of target users complete the workflow without assistance.",
+  user_manual: "How to complete the task:\n1. Open the verified workspace.\n2. Confirm the expected outcome.",
   onboarding_guide: "```bash\nnpm run verify\n```",
   api_reference: "POST /v1/items\n\n```json\n{ \"id\": \"item-1\" }\n```",
   adr: "Status: Accepted after technical and operational review.",
@@ -52,11 +55,11 @@ export interface DocumentContractEvaluation {
     PersonaCoverage: number;
     ValidDocumentAcceptanceRate: number;
     InvalidDocumentRejectionRate: number;
-    ExportReadinessAccuracy: number;
+    DeliveryReadinessAccuracy: number;
   };
   results: Array<{
     documentType: DocumentType;
-    validReadyForExport: boolean;
+    validReadyForDelivery: boolean;
     invalidRejected: boolean;
     contractChecksPassed: number;
     contractCheckCount: number;
@@ -84,8 +87,8 @@ export function evaluateDocumentContracts(): DocumentContractEvaluation {
     const invalid = reviewDocumentStructure(invalidMarkdown, template, options);
     return {
       documentType,
-      validReadyForExport: valid.readyForExport,
-      invalidRejected: !invalid.readyForExport,
+      validReadyForDelivery: valid.readyForDelivery,
+      invalidRejected: !invalid.readyForDelivery,
       contractChecksPassed: valid.contractChecksPassed,
       contractCheckCount: valid.contractCheckCount,
     };
@@ -105,15 +108,15 @@ export function evaluateDocumentContracts(): DocumentContractEvaluation {
       typedDocuments.length
     ),
     ValidDocumentAcceptanceRate: ratio(
-      results.filter((result) => result.validReadyForExport).length,
+      results.filter((result) => result.validReadyForDelivery).length,
       results.length
     ),
     InvalidDocumentRejectionRate: ratio(
       results.filter((result) => result.invalidRejected).length,
       results.length
     ),
-    ExportReadinessAccuracy: ratio(
-      results.filter((result) => result.validReadyForExport && result.invalidRejected).length,
+    DeliveryReadinessAccuracy: ratio(
+      results.filter((result) => result.validReadyForDelivery && result.invalidRejected).length,
       results.length
     ),
   };

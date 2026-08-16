@@ -1,7 +1,10 @@
 export const DOCUMENT_TYPES = [
   "functional_spec",
+  "functional_analysis",
+  "technical_analysis",
   "architecture_doc",
   "project_brief",
+  "user_manual",
   "onboarding_guide",
   "api_reference",
   "adr",
@@ -28,7 +31,7 @@ export interface DocumentContentRule {
 }
 
 export interface DocumentContract {
-  type: DocumentType;
+  type: string;
   label: string;
   purpose: string;
   defaultLanguage: string;
@@ -53,6 +56,34 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
       code: "CONTRATTO_CRITERI_ACCETTAZIONE",
       description: "The functional specification must include verifiable acceptance criteria.",
       patterns: ["criteri? di accettazione", "acceptance criteria", "dato.+quando.+allora", "given.+when.+then"],
+    }],
+  },
+  functional_analysis: {
+    type: "functional_analysis",
+    label: "Functional analysis",
+    purpose: "Describe business needs, actors, processes, rules, requirements and acceptance criteria without prescribing implementation details.",
+    defaultLanguage: USER_REQUEST_LANGUAGE,
+    defaultClientFacing: true,
+    categoryLabel: "FUNCTIONAL ANALYSIS",
+    minimumSectionChars: 32,
+    contentRules: [{
+      code: "CONTRACT_FUNCTIONAL_ANALYSIS_ACCEPTANCE",
+      description: "A functional analysis must include verifiable acceptance criteria or expected outcomes.",
+      patterns: ["criteri? di accettazione", "acceptance criteria", "risultat[oi] attes[oi]", "expected outcomes?"],
+    }],
+  },
+  technical_analysis: {
+    type: "technical_analysis",
+    label: "Technical analysis",
+    purpose: "Explain the current state, proposed implementation, interfaces, data, constraints, risks and verification strategy.",
+    defaultLanguage: USER_REQUEST_LANGUAGE,
+    defaultClientFacing: false,
+    categoryLabel: "TECHNICAL ANALYSIS",
+    minimumSectionChars: 32,
+    contentRules: [{
+      code: "CONTRACT_TECHNICAL_VERIFICATION",
+      description: "A technical analysis must define how the proposed solution will be verified.",
+      patterns: ["verification", "validation", "test strategy", "strategia di test", "verifica", "validazione"],
     }],
   },
   architecture_doc: {
@@ -81,6 +112,20 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
       code: "CONTRACT_SUCCESS_METRIC",
       description: "The brief must contain at least one measurable success metric.",
       patterns: ["success metrics?", "metriche? di successo", "\\b(kpi|okr)\\b", "\\d+%"],
+    }],
+  },
+  user_manual: {
+    type: "user_manual",
+    label: "User manual",
+    purpose: "Help end users understand prerequisites, complete common tasks and recover from common problems.",
+    defaultLanguage: USER_REQUEST_LANGUAGE,
+    defaultClientFacing: true,
+    categoryLabel: "USER MANUAL",
+    minimumSectionChars: 24,
+    contentRules: [{
+      code: "CONTRACT_USER_MANUAL_TASKS",
+      description: "A user manual must include task-oriented instructions or numbered operating steps.",
+      patterns: ["how to", "come (?:fare|utilizzare)", "procedura", "(?:^|\\n)\\s*1\\.\\s+"],
     }],
   },
   onboarding_guide: {
@@ -201,6 +246,23 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
   },
 };
 
-export function documentContract(documentType: DocumentType): DocumentContract {
-  return DOCUMENT_CONTRACTS[documentType];
+export function isDocumentType(documentType: string): documentType is DocumentType {
+  return (DOCUMENT_TYPES as readonly string[]).includes(documentType);
+}
+
+function customDocumentLabel(documentType: string): string {
+  return documentType
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase()) || DOCUMENT_CONTRACTS.custom.label;
+}
+
+export function documentContract(documentType: string): DocumentContract {
+  if (isDocumentType(documentType)) return DOCUMENT_CONTRACTS[documentType];
+  return {
+    ...DOCUMENT_CONTRACTS.custom,
+    type: documentType,
+    label: customDocumentLabel(documentType),
+  };
 }

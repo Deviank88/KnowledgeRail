@@ -71,6 +71,21 @@ async function waitForJson(filePath, timeoutMs = 10_000) {
   throw new Error(`Timed out waiting for ${path.basename(filePath)}.`);
 }
 
+async function directoryStats(root) {
+  let bytes = 0;
+  let paths = 0;
+  const visit = async (directory) => {
+    for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+      const abs = path.join(directory, entry.name);
+      paths++;
+      if (entry.isDirectory()) await visit(abs);
+      else if (entry.isFile()) bytes += (await fs.stat(abs)).size;
+    }
+  };
+  await visit(root);
+  return { bytes, paths };
+}
+
 let gatewayProcess;
 try {
   const packed = await runNpm(["pack", "--json", "--pack-destination", packDirectory], { cwd: process.cwd() });
@@ -89,6 +104,19 @@ try {
   const tarball = path.join(packDirectory, path.basename(packResult.filename));
   await runNpm(["install", "--no-audit", "--no-fund", tarball], { cwd: installDirectory });
   const installedBin = path.join(installDirectory, "node_modules", "knowledge-rail", "dist", "index.js");
+  const installedPackageRoot = path.dirname(path.dirname(installedBin));
+  const installedPackage = JSON.parse(await fs.readFile(path.join(installedPackageRoot, "package.json"), "utf8"));
+  for (const forbiddenDependency of ["@mermaid-js/mermaid-cli", "docx", "puppeteer", "puppeteer-core"]) {
+    if (installedPackage.dependencies?.[forbiddenDependency]) {
+      throw new Error("Packed runtime declares forbidden renderer dependency " + forbiddenDependency + ".");
+    }
+    try {
+      await fs.access(path.join(installDirectory, "node_modules", ...forbiddenDependency.split("/")));
+      throw new Error("Packed runtime installed forbidden renderer dependency " + forbiddenDependency + ".");
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("forbidden renderer dependency")) throw error;
+    }
+  }
   const firstLine = (await fs.readFile(installedBin, "utf8")).split(/\r?\n/, 1)[0];
   if (firstLine !== "#!/usr/bin/env node") throw new Error("Installed CLI lost its portable Node shebang.");
   const help = await run(process.execPath, [installedBin, "--help"], { cwd: projectDirectory });
@@ -174,8 +202,13 @@ try {
   }
   await autoDesktopClient.close();
 
+  const runtimeStats = await directoryStats(path.join(installDirectory, "node_modules"));
+  const runtimeTree = await runNpm(["ls", "--all", "--parseable", "--omit=dev"], { cwd: installDirectory });
+  const runtimePackagePaths = runtimeTree.stdout.split(/\r?\n/).filter(Boolean).length;
   process.stdout.write(
-    `PACKAGE_SMOKE platform=${process.platform} tarball_bytes=${packResult.size} unpacked_bytes=${packResult.unpackedSize} files=${packResult.entryCount}\n`
+    `PACKAGE_SMOKE platform=${process.platform} tarball_bytes=${packResult.size} unpacked_bytes=${packResult.unpackedSize} ` +
+    `files=${packResult.entryCount} runtime_bytes=${runtimeStats.bytes} runtime_paths=${runtimeStats.paths} ` +
+    `runtime_package_paths=${runtimePackagePaths}\n`
   );
 } finally {
   if (gatewayProcess && gatewayProcess.exitCode === null) {

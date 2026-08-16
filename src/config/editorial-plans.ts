@@ -94,6 +94,14 @@ const DOCUMENT_DEFAULTS: Readonly<Record<string, SectionEvidencePlan>> = {
     require: ["requirement"],
     prefer: ["decision", "source", "implementation", "test", "risk"],
   },
+  functional_analysis: {
+    require: ["requirement", "source"],
+    prefer: ["decision", "current_state", "implementation", "test", "risk"],
+  },
+  technical_analysis: {
+    require: ["implementation", "requirement"],
+    prefer: ["decision", "dependency", "constraint", "test", "risk"],
+  },
   architecture_doc: {
     require: ["implementation", "decision"],
     prefer: ["requirement", "dependency", "constraint", "risk", "test"],
@@ -101,6 +109,10 @@ const DOCUMENT_DEFAULTS: Readonly<Record<string, SectionEvidencePlan>> = {
   project_brief: {
     require: ["source"],
     prefer: ["requirement", "decision", "risk", "constraint"],
+  },
+  user_manual: {
+    require: ["requirement", "implementation"],
+    prefer: ["test", "source", "constraint", "risk"],
   },
   onboarding_guide: {
     require: ["implementation"],

@@ -1,6 +1,6 @@
 {
   "name": "knowledge-rail",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "mcpName": "io.github.Deviank88/knowledge-rail",
   "description": "Local-first MCP 2.0 server for persistent, evidence-backed project knowledge and task context",
   "license": "Apache-2.0",
@@ -85,15 +85,12 @@
     "node": ">=22.12.0"
   },
   "dependencies": {
-    "@mermaid-js/mermaid-cli": "^11.16.0",
     "@modelcontextprotocol/client": "^2.0.0",
     "@modelcontextprotocol/node": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
-    "docx": "^8.5.0",
     "fast-glob": "^3.3.3",
     "jszip": "^3.10.1",
     "pdf-to-png-converter": "3.14.0",
-    "puppeteer": "25.6.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
