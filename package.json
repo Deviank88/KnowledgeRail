@@ -1,7 +1,7 @@
 {
   "name": "knowledge-rail",
-  "version": "1.0.1",
-  "mcpName": "io.github.deviank88/knowledge-rail",
+  "version": "1.0.2",
+  "mcpName": "io.github.Deviank88/knowledge-rail",
   "description": "Local-first MCP 2.0 server for persistent, evidence-backed project knowledge and task context",
   "license": "Apache-2.0",
   "repository": {

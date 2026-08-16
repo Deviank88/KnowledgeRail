@@ -20,7 +20,7 @@ test("product, npm and MCP Registry identities remain aligned", async () => {
 
   assert.equal(packageJson.name, "knowledge-rail");
   assert.equal(packageJson.version, PRODUCT_VERSION);
-  assert.equal(packageJson.mcpName, "io.github.deviank88/knowledge-rail");
+  assert.equal(packageJson.mcpName, "io.github.Deviank88/knowledge-rail");
   assert.equal(registryJson.title, "KnowledgeRail");
   assert.equal(registryJson.name, packageJson.mcpName);
   assert.equal(registryJson.version, packageJson.version);

@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.deviank88/knowledge-rail",
+  "name": "io.github.Deviank88/knowledge-rail",
   "title": "KnowledgeRail",
   "description": "Persistent, evidence-backed project knowledge and task context for coding agents.",
   "repository": {
@@ -8,12 +8,12 @@
     "source": "github",
     "id": "1229624545"
   },
-  "version": "1.0.1",
+  "version": "1.0.2",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "knowledge-rail",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
