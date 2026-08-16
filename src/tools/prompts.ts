@@ -39,7 +39,7 @@ const KnowledgeUpdatePromptSchema = z.object({
   title: z.string().optional(),
   knowledge_context: z.string().optional(),
   code_context: z.string().optional(),
-  sources: z.string().optional().describe("Fonti separate da virgola"),
+  sources: z.string().optional().describe("Comma-separated sources"),
 });
 
 export function registerWikiPrompts(
@@ -64,9 +64,9 @@ export function registerWikiPrompts(
   server.registerPrompt(
     "plan_document",
     {
-      title: "Piano editoriale documento",
+      title: "Document editorial plan",
       description:
-        "Genera il piano editoriale (sezioni, writer, context pack, checklist) per un documento in docs/deliverables.",
+        "Generate an editorial plan (sections, writers, context packs, checklist) for a document in docs/deliverables.",
       argsSchema: schemas.document,
     },
     async ({ document_type, project_name, objective, audience }) =>
@@ -85,7 +85,7 @@ export function registerWikiPrompts(
     {
       title: "Template development report",
       description:
-        "Restituisce il template obbligatorio del development report da compilare prima dell'ingestione wiki.",
+        "Return the required development-report template to complete before wiki ingestion.",
       argsSchema: schemas.report,
     },
     ({ client, project, request_id, objective }) =>
@@ -102,8 +102,8 @@ export function registerWikiPrompts(
   server.registerPrompt(
     "prepare_knowledge_update",
     {
-      title: "Prepara aggiornamento wiki",
-      description: "Genera una bozza wiki valida da una lacuna e dalle evidenze disponibili.",
+      title: "Prepare wiki update",
+      description: "Generate a valid wiki draft from a gap and the available evidence.",
       argsSchema: schemas.update,
     },
     ({ finding, target_page_path, page_type, title, knowledge_context, code_context, sources }) => {
@@ -117,8 +117,8 @@ export function registerWikiPrompts(
         sources: sources?.split(",").map((source) => source.trim()).filter(Boolean),
       });
       return promptText([
-        `Percorso suggerito: ${draft.path}`,
-        "Applica la bozza con knowledge_page action=write e registra la decisione con action=append_log.",
+        `Suggested path: ${draft.path}`,
+        "Apply the draft with knowledge_page action=write and record the decision with action=append_log.",
         "```markdown",
         draft.content,
         "```",

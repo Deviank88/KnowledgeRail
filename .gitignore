@@ -29,7 +29,9 @@ Desktop.ini
 # Generated project knowledge and deliverables
 raw/
 wiki/
-docs/
+/docs/*
+!/docs/reference/
+!/docs/reference/tool-actions.md
 .docx-analysis/
 benchmarks/results/
 .puppeteer-cache/

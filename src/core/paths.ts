@@ -1,4 +1,5 @@
 import * as nodePath from "node:path";
+import * as fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { getActiveWorkspaceContext } from "./workspace-context.js";
 
@@ -118,6 +119,74 @@ export function safeResolveWithin(
   return target;
 }
 
+function isContained(root: string, target: string): boolean {
+  const relative = nodePath.relative(root, target);
+  return relative !== "" && !relative.startsWith("..") && !nodePath.isAbsolute(relative);
+}
+
+async function resolveFromDeepestExisting(absPath: string): Promise<string> {
+  const suffix: string[] = [];
+  let cursor = nodePath.resolve(absPath);
+  while (true) {
+    try {
+      const existingReal = await fs.realpath(cursor);
+      return nodePath.join(existingReal, ...suffix.reverse());
+    } catch (error: unknown) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT" && code !== "ENOTDIR") throw error;
+      const parent = nodePath.dirname(cursor);
+      if (parent === cursor) throw error;
+      suffix.push(nodePath.basename(cursor));
+      cursor = parent;
+    }
+  }
+}
+
+/**
+ * Resolve a caller-owned relative path through the deepest existing ancestor.
+ * Existing symlinks are followed only for validation and must remain inside the
+ * canonical root. Missing leaves are reconstructed below that validated parent.
+ */
+export async function resolveRealWithin(root: string, relPath: string): Promise<string> {
+  const rootAbs = nodePath.resolve(root);
+  const targetAbs = safeResolveWithin(rootAbs, relPath);
+  try {
+    const rootStat = await fs.lstat(rootAbs);
+    if (rootStat.isSymbolicLink()) {
+      throw new Error("Allowed directory has been replaced by a symbolic link.");
+    }
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  const [rootReal, targetReal] = await Promise.all([
+    resolveFromDeepestExisting(rootAbs),
+    resolveFromDeepestExisting(targetAbs),
+  ]);
+
+  if (!isContained(rootReal, targetReal)) {
+    throw new Error(`Path resolves outside allowed directory: ${relPath}`);
+  }
+  return targetReal;
+}
+
+export function validateGlobPattern(pattern: string): string {
+  if (!pattern || pattern.trim() === "") throw new Error("Glob pattern must not be empty.");
+  if (pattern.includes("\0")) throw new Error("Glob pattern must not contain null bytes.");
+  if (pattern.startsWith("/") || pattern.startsWith("\\\\") || /^[A-Za-z]:[\\/]/.test(pattern)) {
+    throw new Error("Absolute glob patterns are not allowed.");
+  }
+  if (process.platform !== "win32" && pattern.includes("\\")) {
+    throw new Error("Backslashes are not allowed in glob patterns on POSIX.");
+  }
+  // Reject any segment containing a parent token. This is intentionally a
+  // little stricter than path normalization so brace/extglob syntax cannot
+  // manufacture a parent segment after validation.
+  if (pattern.split(/[\\/]/).some((segment) => segment.includes(".."))) {
+    throw new Error("Parent-directory segments are not allowed in glob patterns.");
+  }
+  return pattern;
+}
+
 export function relativePathFrom(root: string, absPath: string): string {
   return nodePath.relative(root, absPath).replace(/\\/g, "/");
 }
@@ -132,6 +201,18 @@ export function docsFilePath(filename: string): string {
 
 export function docsCategoryFilePath(category: string, relPath: string): string {
   return safeResolveWithin(docsCategoryDir(category), relPath);
+}
+
+export async function docsCategoryDirReal(category: string): Promise<string> {
+  const safeDocs = await resolveRealWithin(getWikiRoot(), "docs");
+  return resolveRealWithin(safeDocs, category);
+}
+
+export async function docsCategoryFilePathReal(
+  category: string,
+  relPath: string
+): Promise<string> {
+  return resolveRealWithin(await docsCategoryDirReal(category), relPath);
 }
 
 export function wikiPagePath(relPath: string): string {

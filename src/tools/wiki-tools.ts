@@ -1,8 +1,11 @@
+import { randomUUID } from "node:crypto";
+import * as fs from "node:fs/promises";
 import * as nodePath from "node:path";
 import type { McpServer } from "@modelcontextprotocol/server";
 import fg from "fast-glob";
 import { z } from "zod";
 import { atomicWriteText, unlinkWithLock } from "../core/fs-service.js";
+import { withKeyedLock, withWikiFileLock } from "../core/lock-service.js";
 import { readWikiResource } from "../context/resource-reader.js";
 import { formatGraphQueryResult } from "../core/graph-index.js";
 import { retrieveWikiHybrid } from "../core/hybrid-retrieval.js";
@@ -18,13 +21,10 @@ import {
 import { invalidateManifestEntries } from "../core/manifest-service.js";
 import {
   docsDir,
-  indexFile,
-  logFile,
   relativePathFrom,
+  resolveRealWithin,
   safeResolveWithin,
-  schemaFile,
   wikiDir,
-  wikiPagePath,
 } from "../core/paths.js";
 import { searchRetrievalIndex } from "../core/retrieval-index.js";
 import { buildTraceabilityText } from "../core/traceability-service.js";
@@ -82,7 +82,7 @@ async function pageContentWarnings(
 
   for (const name of new Set(wikiLinkTargets(content))) {
     if (resolveWikiLinkName(name, knownFiles, titlesByPath).length === 0) {
-      warnings.push(`[[${name}]] non corrisponde ad alcuna pagina esistente.`);
+      warnings.push(`[[${name}]] does not match any existing page.`);
     }
   }
 
@@ -92,7 +92,7 @@ async function pageContentWarnings(
     : [];
   if (duplicates.length > 0) {
     warnings.push(
-      `Titolo duplicato: '${title}' usato anche da ${duplicates.map((p) => p.path).join(", ")}.`
+      `Duplicate title: '${title}' is also used by ${duplicates.map((p) => p.path).join(", ")}.`
     );
   }
 
@@ -105,6 +105,19 @@ function formatWarnings(warnings: string[]): string[] {
     : [];
 }
 
+function withWikiMutationLock<T>(
+  operation: () => Promise<T>,
+  crossProcess = true
+): Promise<T> {
+  const root = wikiDir();
+  return crossProcess
+    ? withWikiFileLock(root, `${root}:wiki-mutation`, async () => {
+        await recoverPendingWikiMoves(root);
+        return operation();
+      })
+    : withKeyedLock(`${root}:wiki-read-transaction`, operation);
+}
+
 interface LinkChange {
   file: string;
   type: "wikilink" | "mdlink";
@@ -113,12 +126,100 @@ interface LinkChange {
   valid: boolean;
 }
 
+interface MoveJournal {
+  version: 1;
+  id: string;
+  createdAt: string;
+  files: Array<{ path: string; existed: boolean; contentBase64?: string }>;
+}
+
+let moveFailureAfterWritesForTests: number | null = null;
+
+export function setWikiMoveFailureAfterWritesForTests(value: number | null): void {
+  moveFailureAfterWritesForTests = value;
+}
+
+function maybeInjectMoveFailure(writeCount: number): void {
+  if (moveFailureAfterWritesForTests !== null && writeCount >= moveFailureAfterWritesForTests) {
+    throw new Error("Injected wiki move failure.");
+  }
+}
+
+async function moveJournalDirectory(wikiRoot: string): Promise<string> {
+  return resolveRealWithin(wikiRoot, ".knowledge-rail/move-journals");
+}
+
+async function restoreMoveJournal(wikiRoot: string, journalPath: string): Promise<void> {
+  const parsed = JSON.parse(await fs.readFile(journalPath, "utf8")) as Partial<MoveJournal>;
+  if (parsed.version !== 1 || !Array.isArray(parsed.files)) {
+    throw new Error("Wiki move journal is invalid; refusing automatic recovery.");
+  }
+  for (const snapshot of parsed.files) {
+    if (!snapshot || typeof snapshot.path !== "string" || typeof snapshot.existed !== "boolean") {
+      throw new Error("Wiki move journal contains an invalid file snapshot.");
+    }
+    const target = await resolveRealWithin(wikiRoot, snapshot.path);
+    if (snapshot.existed) {
+      if (typeof snapshot.contentBase64 !== "string") {
+        throw new Error("Wiki move journal is missing recovery content.");
+      }
+      await atomicWriteText(target, Buffer.from(snapshot.contentBase64, "base64").toString("utf8"));
+    } else {
+      await unlinkWithLock(target).catch((error: unknown) => {
+        if (!isNodeError(error) || error.code !== "ENOENT") throw error;
+      });
+    }
+  }
+  await fs.unlink(journalPath);
+}
+
+async function recoverPendingWikiMoves(wikiRoot: string): Promise<void> {
+  const directory = await moveJournalDirectory(wikiRoot);
+  const names = await fs.readdir(directory).catch((error: unknown) => {
+    if (isNodeError(error) && error.code === "ENOENT") return [] as string[];
+    throw error;
+  });
+  for (const name of names.filter((value) => /^[a-f0-9-]+\.json$/i.test(value)).sort()) {
+    await restoreMoveJournal(wikiRoot, await resolveRealWithin(directory, name));
+  }
+}
+
+async function prepareMoveJournal(
+  wikiRoot: string,
+  relPaths: readonly string[]
+): Promise<string> {
+  const directory = await moveJournalDirectory(wikiRoot);
+  await ensureDir(directory);
+  const journal: MoveJournal = {
+    version: 1,
+    id: randomUUID(),
+    createdAt: new Date().toISOString(),
+    files: [],
+  };
+  for (const relPath of [...new Set(relPaths)]) {
+    const target = await resolveRealWithin(wikiRoot, relPath);
+    const content = await fs.readFile(target).catch((error: unknown) => {
+      if (isNodeError(error) && error.code === "ENOENT") return null;
+      throw error;
+    });
+    journal.files.push({
+      path: relPath.replace(/\\/g, "/"),
+      existed: content !== null,
+      ...(content ? { contentBase64: content.toString("base64") } : {}),
+    });
+  }
+  const journalPath = await resolveRealWithin(directory, `${journal.id}.json`);
+  await atomicWriteText(journalPath, `${JSON.stringify(journal)}\n`);
+  return journalPath;
+}
+
 /**
  * Rewrite relative markdown links in `content`. Each local target is resolved
  * from `fromDir` (relative to wiki/); `mapTarget` decides whether (and towards
  * where) the link must be rewritten. Rewrites are validated by re-resolving.
  */
 function rewriteMarkdownLinks(options: {
+  wikiRoot: string;
   content: string;
   file: string;
   fromDir: string;
@@ -132,18 +233,18 @@ function rewriteMarkdownLinks(options: {
       const { path: targetPath, anchor } = splitAnchor(target);
       try {
         const resolvedAbs = safeResolveWithin(
-          wikiDir(),
+          options.wikiRoot,
           nodePath.join(options.fromDir, targetPath)
         );
         const mapped = options.mapTarget(resolvedAbs);
         if (!mapped) return match;
-        const newFromAbs = nodePath.resolve(wikiDir(), mapped.newFromDir);
+        const newFromAbs = nodePath.resolve(options.wikiRoot, mapped.newFromDir);
         const rawRel = nodePath.relative(newFromAbs, mapped.destAbs).replace(/\\/g, "/");
         if (rawRel === targetPath) return match;
         let valid = false;
         try {
           valid =
-            safeResolveWithin(wikiDir(), nodePath.join(mapped.newFromDir, rawRel)) ===
+            safeResolveWithin(options.wikiRoot, nodePath.join(mapped.newFromDir, rawRel)) ===
             mapped.destAbs;
         } catch {
           valid = false;
@@ -158,31 +259,35 @@ function rewriteMarkdownLinks(options: {
   );
 }
 
-export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"): void {
-  server.registerTool(toolName("init", era), { description: "Crea la struttura wiki/ e docs/ (index.md, log.md, SCHEMA.md). Idempotente: non sovrascrive file esistenti salvo force=true.", inputSchema: z.object({
-              force: z.boolean().optional().default(false).describe("Sovrascrive SCHEMA.md se già presente"),
+export function registerWikiTools(
+  server: McpServer,
+  era: ProtocolEra = "modern",
+  testHooks: { afterEditRead?: () => Promise<void> } = {}
+): void {
+  server.registerTool(toolName("init", era), { description: "Create the wiki/ and docs/ structure (index.md, log.md, SCHEMA.md). Idempotent: existing files are preserved unless force=true.", inputSchema: z.object({
+              force: z.boolean().optional().default(false).describe("Overwrite SCHEMA.md when it already exists"),
             }) }, async ({ force }) => {
               await ensureWikiStructure(force);
               return textResult(
                 [
-                  `Wiki inizializzata: ${wikiDir()}`,
-                  `  docs/      → ${docsDir()}`,
-                  `  index.md   → ${indexFile()}`,
-                  `  log.md     → ${logFile()}`,
-                  `  SCHEMA.md  → ${schemaFile()}`,
+                  "Wiki initialized: wiki/",
+                  "  docs/      → docs/",
+                  "  index.md   → wiki/index.md",
+                  "  log.md     → wiki/log.md",
+                  "  SCHEMA.md  → wiki/SCHEMA.md",
                 ].join("\n")
               );
             });
 
-  server.registerTool(toolName("writePage", era), { description: "Crea o sovrascrive una pagina wiki (path relativo a wiki/, frontmatter YAML obbligatorio). Valida il contenuto, segnala wikilink rotti e titoli duplicati, rigenera index.md.", inputSchema: z.object({
-              path: z.string().describe("Path relativo a wiki/ (es. 'concepts/RAG.md')"),
-              content: z.string().describe("Contenuto markdown completo, frontmatter incluso"),
-            }) }, async ({ path: relPath, content }) => {
-              const absPath = wikiPagePath(relPath);
+  server.registerTool(toolName("writePage", era), { description: "Create or overwrite a wiki page (path relative to wiki/, required YAML frontmatter). Validate content, report broken wikilinks and duplicate titles, and rebuild index.md.", inputSchema: z.object({
+              path: z.string().describe("Path relative to wiki/ (for example 'concepts/RAG.md')"),
+              content: z.string().describe("Complete Markdown content, including frontmatter"),
+            }) }, async ({ path: relPath, content }) => withWikiMutationLock(async () => {
+              const absPath = await resolveRealWithin(wikiDir(), relPath);
               const validation = await validateWikiPageContent(content, { checkSourceExists: true });
               if (hasErrors(validation.issues)) {
                 return errorResult(
-                  `Validazione fallita per ${relPath}:\n\n${formatValidationIssues(validation.issues)}`
+                  `Validation failed for ${relPath}:\n\n${formatValidationIssues(validation.issues)}`
                 );
               }
 
@@ -196,40 +301,41 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               const indexLine = await finalizePageMutation([relPath]);
               return textResult(
                 [
-                  `Scritta: ${relPath}`,
-                  `Titolo: ${frontmatterString(validation.frontmatter, "title") ?? "(assente)"} [${frontmatterString(validation.frontmatter, "type") ?? "?"}]`,
+                  `Written: ${relPath}`,
+                  `Title: ${frontmatterString(validation.frontmatter, "title") ?? "(missing)"} [${frontmatterString(validation.frontmatter, "type") ?? "?"}]`,
                   indexLine,
                   ...formatWarnings(warnings),
                 ].join("\n")
               );
-            });
+            }));
 
-  server.registerTool(toolName("editPage", era), { description: "Modifica mirata di una pagina wiki: sostituisce old_string con new_string senza riscrivere il file. La pagina risultante viene rivalidata e index.md rigenerato.", inputSchema: z.object({
-              path: z.string().describe("Path relativo a wiki/"),
-              old_string: z.string().describe("Testo esatto da sostituire"),
-              new_string: z.string().describe("Testo sostitutivo"),
+  server.registerTool(toolName("editPage", era), { description: "Perform a targeted wiki-page edit by replacing old_string with new_string. Revalidate the resulting page and rebuild index.md.", inputSchema: z.object({
+              path: z.string().describe("Path relative to wiki/"),
+              old_string: z.string().describe("Exact text to replace"),
+              new_string: z.string().describe("Replacement text"),
               replace_all: z
                 .boolean()
                 .optional()
                 .default(false)
-                .describe("Sostituisce tutte le occorrenze (default: old_string deve essere unico)"),
-            }) }, async ({ path: relPath, old_string, new_string, replace_all }) => {
-              const absPath = wikiPagePath(relPath);
+                .describe("Replace every occurrence (by default old_string must be unique)"),
+            }) }, async ({ path: relPath, old_string, new_string, replace_all }) => withWikiMutationLock(async () => {
+              const absPath = await resolveRealWithin(wikiDir(), relPath);
               const content = await readFileSafe(absPath);
               if (content === null) {
-                return errorResult(`Pagina non trovata: ${relPath}`);
+                return errorResult(`Page not found: ${relPath}`);
               }
+              await testHooks.afterEditRead?.();
               if (old_string === new_string) {
-                return errorResult("old_string e new_string sono identici.");
+                return errorResult("old_string and new_string are identical.");
               }
 
               const occurrences = content.split(old_string).length - 1;
               if (occurrences === 0) {
-                return errorResult(`old_string non trovato in ${relPath}.`);
+                return errorResult(`old_string was not found in ${relPath}.`);
               }
               if (occurrences > 1 && !replace_all) {
                 return errorResult(
-                  `old_string compare ${occurrences} volte in ${relPath}. Renderlo unico o usare replace_all=true.`
+                  `old_string occurs ${occurrences} times in ${relPath}. Make it unique or use replace_all=true.`
                 );
               }
 
@@ -239,7 +345,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               const validation = await validateWikiPageContent(updated, { checkSourceExists: true });
               if (hasErrors(validation.issues)) {
                 return errorResult(
-                  `Modifica bloccata: la pagina risultante non è valida.\n\n${formatValidationIssues(validation.issues)}`
+                  `Edit blocked because the resulting page is invalid.\n\n${formatValidationIssues(validation.issues)}`
                 );
               }
 
@@ -248,12 +354,12 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               const indexLine = await finalizePageMutation([relPath]);
               return textResult(
                 [
-                  `Modificata: ${relPath} (${replace_all ? occurrences : 1} sostituzione/i)`,
+                  `Edited: ${relPath} (${replace_all ? occurrences : 1} replacement(s))`,
                   indexLine,
                   ...formatWarnings(warnings),
                 ].join("\n")
               );
-            });
+            }));
 
   server.registerTool(toolName("readPage", era), {
             description:
@@ -285,35 +391,39 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               }
             });
 
-  server.registerTool(toolName("deletePage", era), { description: "Elimina una pagina wiki e rigenera index.md.", inputSchema: z.object({
-              path: z.string().describe("Path relativo a wiki/"),
-            }) }, async ({ path: relPath }) => {
+  server.registerTool(toolName("deletePage", era), { description: "Delete a wiki page and rebuild index.md.", inputSchema: z.object({
+              path: z.string().describe("Path relative to wiki/"),
+            }) }, async ({ path: relPath }) => withWikiMutationLock(async () => {
               try {
-                await unlinkWithLock(wikiPagePath(relPath));
+                await unlinkWithLock(await resolveRealWithin(wikiDir(), relPath));
               } catch (err: unknown) {
                 if (isNodeError(err) && err.code === "ENOENT") {
-                  return errorResult(`Pagina non trovata: ${relPath}`);
+                  return errorResult(`Page not found: ${relPath}`);
                 }
                 throw err;
               }
               const indexLine = await finalizePageMutation([relPath]);
-              return textResult(`Eliminata: ${relPath}\n${indexLine}`);
-            });
+              return textResult(`Deleted: ${relPath}\n${indexLine}`);
+            }));
 
-  server.registerTool(toolName("movePage", era), { description: "Sposta o rinomina una pagina wiki aggiornando [[wikilink]] e link markdown relativi in tutta la wiki. Con dry_run=true mostra solo l'anteprima.", inputSchema: z.object({
-              old_path: z.string().describe("Path attuale relativo a wiki/"),
-              new_path: z.string().describe("Nuovo path relativo a wiki/"),
+  server.registerTool(toolName("movePage", era), { description: "Move or rename a wiki page and update [[wikilinks]] and relative Markdown links across the wiki. dry_run=true returns only a preview.", inputSchema: z.object({
+              old_path: z.string().describe("Current path relative to wiki/"),
+              new_path: z.string().describe("New path relative to wiki/"),
               dry_run: z.boolean().optional().default(false),
-            }) }, async ({ old_path: relOld, new_path: relNew, dry_run }) => {
-              const absOld = wikiPagePath(relOld);
-              const absNew = wikiPagePath(relNew);
+            }) }, async ({ old_path: relOld, new_path: relNew, dry_run }) => withWikiMutationLock(async () => {
+              const absOld = await resolveRealWithin(wikiDir(), relOld);
+              const absNew = await resolveRealWithin(wikiDir(), relNew);
+              const canonicalWikiRoot = await resolveRealWithin(
+                nodePath.dirname(wikiDir()),
+                nodePath.basename(wikiDir())
+              );
 
               const oldContent = await readFileSafe(absOld);
               if (oldContent === null) {
-                return errorResult(`Pagina non trovata: ${relOld}`);
+                return errorResult(`Page not found: ${relOld}`);
               }
               if ((await readFileSafe(absNew)) !== null) {
-                return errorResult(`Destinazione già esistente: ${relNew}. Eliminarla prima.`);
+                return errorResult(`Destination already exists: ${relNew}. Delete it first.`);
               }
 
               const oldFilename = nodePath.basename(relOld, ".md");
@@ -325,11 +435,16 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
 
               const changes: LinkChange[] = [];
               const updatedFiles = new Map<string, string>();
-              const allFiles = await fg("**/*.md", { cwd: wikiDir(), ignore: CONTROL_FILES });
+              const allFiles = await fg("**/*.md", {
+                cwd: wikiDir(),
+                absolute: false,
+                followSymbolicLinks: false,
+                ignore: CONTROL_FILES,
+              });
 
               for (const f of allFiles) {
                 if (f === relOld) continue;
-                const raw = await readFileSafe(nodePath.join(wikiDir(), f));
+                const raw = await readFileSafe(await resolveRealWithin(wikiDir(), f));
                 if (!raw) continue;
 
                 let current = raw;
@@ -347,6 +462,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
                 if (filenameChanged || dirChanged) {
                   const fileDir = nodePath.dirname(f);
                   current = rewriteMarkdownLinks({
+                    wikiRoot: canonicalWikiRoot,
                     content: current,
                     file: f,
                     fromDir: fileDir,
@@ -361,6 +477,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               // Relative links inside the moved page must keep pointing at their targets
               const movedContent = dirChanged
                 ? rewriteMarkdownLinks({
+                    wikiRoot: canonicalWikiRoot,
                     content: oldContent,
                     file: relOld,
                     fromDir: nodePath.dirname(relOld),
@@ -379,7 +496,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
                 ...(warnings.length > 0
                   ? [
                       "",
-                      "WARNING — link non validabili (lasciati invariati):",
+                      "WARNING — links could not be validated and were left unchanged:",
                       ...warnings.map((c) => `  [${c.type}] ${c.file}: ${c.oldRef}`),
                     ]
                   : []),
@@ -389,37 +506,53 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
                 return textResult(
                   [
                     `DRY RUN: ${relOld} → ${relNew}`,
-                    `${applied.length} riferimento/i da aggiornare, ${warnings.length} non validabili:`,
+                    `${applied.length} reference(s) to update; ${warnings.length} could not be validated:`,
                     ...changeLines,
                   ].join("\n")
                 );
               }
 
-              await ensureDir(nodePath.dirname(absNew));
-              await atomicWriteText(absNew, movedContent);
-              await unlinkWithLock(absOld);
-              for (const [f, content] of updatedFiles) {
-                await atomicWriteText(nodePath.join(wikiDir(), f), content);
+              const journalPath = await prepareMoveJournal(canonicalWikiRoot, [
+                relOld,
+                relNew,
+                ...updatedFiles.keys(),
+                "index.md",
+              ]);
+              let writeCount = 0;
+              try {
+                await ensureDir(nodePath.dirname(absNew));
+                await atomicWriteText(absNew, movedContent);
+                maybeInjectMoveFailure(++writeCount);
+                await unlinkWithLock(absOld);
+                maybeInjectMoveFailure(++writeCount);
+                for (const [f, content] of updatedFiles) {
+                  await atomicWriteText(await resolveRealWithin(canonicalWikiRoot, f), content);
+                  maybeInjectMoveFailure(++writeCount);
+                }
+                const indexLine = await finalizePageMutation([relOld, relNew, ...updatedFiles.keys()]);
+                await fs.unlink(journalPath);
+                return textResult(
+                  [
+                    `Moved: ${relOld} → ${relNew}`,
+                    `Updated ${updatedFiles.size} file(s) and ${applied.length} reference(s).`,
+                    indexLine,
+                    ...changeLines,
+                  ].join("\n")
+                );
+              } catch (error: unknown) {
+                await restoreMoveJournal(canonicalWikiRoot, journalPath);
+                throw error;
               }
-              const indexLine = await finalizePageMutation([relOld, relNew, ...updatedFiles.keys()]);
-              return textResult(
-                [
-                  `Spostata: ${relOld} → ${relNew}`,
-                  `Aggiornati ${updatedFiles.size} file con ${applied.length} riferimento/i.`,
-                  indexLine,
-                  ...changeLines,
-                ].join("\n")
-              );
-            });
+            }, !dry_run));
 
-  server.registerTool(toolName("appendLog", era), { description: "Aggiunge una voce timestampata a log.md.", inputSchema: z.object({
-              entry: z.string().describe("Testo della voce (markdown)"),
+  server.registerTool(toolName("appendLog", era), { description: "Append a timestamped entry to log.md.", inputSchema: z.object({
+              entry: z.string().describe("Log entry text (Markdown)"),
               level: z.enum(["INFO", "WARN", "ACTION", "DECISION"]).optional().default("ACTION"),
-            }) }, async ({ entry, level }) => {
+            }) }, async ({ entry, level }) => withWikiMutationLock(async () => {
               await appendLog(entry, level ?? "ACTION");
               await invalidateManifestEntries(wikiDir(), ["log.md"]);
-              return textResult("Voce di log aggiunta.");
-            });
+              return textResult("Log entry appended.");
+            }));
 
   server.registerTool(toolName("search", era), { description: "Internal lexical diagnostic used by knowledge_context mode=search.", inputSchema: z.object({
               query: z.string().optional(),
@@ -436,12 +569,12 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
                 persist: false,
               });
               if (top.length === 0) {
-                return textResult(query ? `Nessun risultato per: "${query}"` : "Nessuna pagina wiki.");
+                return textResult(query ? `No results for: "${query}"` : "No wiki pages.");
               }
               const lines = top.map(
                 (r, i) =>
                   query
-                    ? `${i + 1}. **${r.title}** (${r.path}) [${r.type}]\n   Score: ${r.score.toFixed(4)} | Sezione: ${r.heading}\n   > ${r.excerpt}`
+                    ? `${i + 1}. **${r.title}** (${r.path}) [${r.type}]\n   Score: ${r.score.toFixed(4)} | Section: ${r.heading}\n   > ${r.excerpt}`
                     : `${i + 1}. ${r.path} | ${r.title} [${r.type}]${r.record.updated ? ` (${r.record.updated})` : ""}`
               );
               return textResult(lines.join("\n\n"));
@@ -456,7 +589,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
             }), annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true } }, async ({ query, max_nodes, max_depth, page_types, view }) => {
               if (view === "traceability") return textResult(await buildTraceabilityText());
               if (!(query ?? "").trim()) {
-              return textResult("Specificare una query per la vista subgraph; usare view=traceability per la matrice completa.");
+              return textResult("Provide a query for the subgraph view; use view=traceability for the complete matrix.");
             }
             const hybrid = await retrieveWikiHybrid({
               wikiRoot: wikiDir(),
@@ -494,7 +627,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
             );
             });
 
-  server.registerTool(toolName("migrate", era), { description: "Pianifica, applica o ripristina la migrazione conservativa wiki v1/v2/v3 → v4; plan predefinito.", inputSchema: z.object({
+  server.registerTool(toolName("migrate", era), { description: "Plan, apply, or roll back the conservative wiki v1/v2/v3 to v4 migration; plan is the default.", inputSchema: z.object({
               action: z.enum(["plan", "apply", "rollback"]).optional(),
               target_version: z.string().optional().default("4"),
               dry_run: z.boolean().optional(),
@@ -505,9 +638,9 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               if (operation === "plan") return textResult(formatMigrationPlan(await planWikiMigration(wikiDir(), target_version)));
               try {
                 if (operation === "rollback") {
-                  if (!run_id) return errorResult("run_id è obbligatorio per il rollback.");
+                  if (!run_id) return errorResult("run_id is required for rollback.");
                   const result = await rollbackWikiMigration(wikiDir(), run_id);
-                  return textResult(`Rollback completato: ${result.runId}\nFile derivati ripristinati: ${result.restoredFiles}`);
+                  return textResult(`Rollback completed: ${result.runId}\nDerived files restored: ${result.restoredFiles}`);
                 }
                 const result = await applyWikiMigration(wikiDir(), {
                   targetVersion: target_version,
@@ -516,7 +649,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
                 });
                 return textResult(
                   `${formatMigrationPlan(result.plan)}\n\n` +
-                  `Migrazione completata: ${result.runId}\nBackup: ${result.backupDir}\n` +
+                  `Migration completed: ${result.runId}\nBackup: ${result.backupDir}\n` +
                   `Journal: ${result.journalFile}\nCoverage: ${result.coverageReportFile}\n` +
                   `Canonical SHA-256: ${result.canonicalDigest}`
                 );
@@ -525,12 +658,17 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               }
             });
 
-  server.registerTool(toolName("lint", era), { description: "Health check della wiki: frontmatter, pagine orfane, [[wikilink]] mancanti, link markdown rotti, titoli duplicati e file vuoti.", inputSchema: z.object({
+  server.registerTool(toolName("lint", era), { description: "Check wiki health: frontmatter, orphan pages, missing [[wikilinks]], broken Markdown links, duplicate titles, and empty files.", inputSchema: z.object({
               include_orphans: z.boolean().optional().default(true),
               include_missing: z.boolean().optional().default(true),
               include_broken_links: z.boolean().optional().default(true),
             }) }, async ({ include_orphans, include_missing, include_broken_links }) => {
-              const files = await fg("**/*.md", { cwd: wikiDir(), ignore: CONTROL_FILES });
+              const files = await fg("**/*.md", {
+                cwd: wikiDir(),
+                absolute: false,
+                followSymbolicLinks: false,
+                ignore: CONTROL_FILES,
+              });
 
               type LintIssue = { severity: "ERROR" | "WARN" | "INFO"; code: string; detail: string };
               const report: LintIssue[] = [];
@@ -539,10 +677,10 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               const titlesByPath = new Map<string, string>();
 
               for (const f of files) {
-                const content = await readFileSafe(nodePath.join(wikiDir(), f));
+                const content = await readFileSafe(await resolveRealWithin(wikiDir(), f));
                 if (content === null) continue;
                 if (content.trim() === "") {
-                  report.push({ severity: "ERROR", code: "EMPTY_FILE", detail: `${f}: file vuoto` });
+                  report.push({ severity: "ERROR", code: "EMPTY_FILE", detail: `${f}: empty file` });
                   continue;
                 }
                 contentMap.set(f, content);
@@ -602,7 +740,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
               if (include_orphans) {
                 for (const [f, count] of inboundCount) {
                   if (count === 0) {
-                    report.push({ severity: "INFO", code: "ORPHAN", detail: `${f} (nessuna pagina la collega)` });
+                    report.push({ severity: "INFO", code: "ORPHAN", detail: `${f} (no page links to it)` });
                   }
                 }
               }
@@ -611,13 +749,13 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
                   report.push({
                     severity: "ERROR",
                     code: "MISSING_WIKILINK",
-                    detail: `[[${name}]] è referenziato ma non esiste`,
+                    detail: `[[${name}]] is referenced but does not exist`,
                   });
                 }
               }
 
               if (report.length === 0) {
-                return textResult("Wiki lint superato. Nessun problema trovato.");
+                return textResult("Wiki lint passed. No problems found.");
               }
               const order = { ERROR: 0, WARN: 1, INFO: 2 } as const;
               report.sort(
@@ -627,7 +765,7 @@ export function registerWikiTools(server: McpServer, era: ProtocolEra = "modern"
                   a.detail.localeCompare(b.detail)
               );
               return textResult(
-                `Wiki lint: ${report.length} problema/i:\n\n` +
+                `Wiki lint: ${report.length} problem(s):\n\n` +
                   report.map((item) => `${item.severity} ${item.code}: ${item.detail}`).join("\n")
               );
             });

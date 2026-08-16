@@ -19,8 +19,7 @@ import {
   sourceSegmentAccountingIsComplete,
 } from "./source-segmentation.js";
 import { safeResolveWithin } from "../paths.js";
-
-const compilerLocks = new Map<string, Promise<void>>();
+import { withWikiFileLock } from "../lock-service.js";
 
 async function withCompilerLock<T>(
   wikiRoot: string,
@@ -28,20 +27,7 @@ async function withCompilerLock<T>(
   operation: () => Promise<T>
 ): Promise<T> {
   const key = `${wikiRoot}\0${sourceUri}`;
-  const previous = compilerLocks.get(key) ?? Promise.resolve();
-  let release!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const queued = previous.then(() => gate, () => gate);
-  compilerLocks.set(key, queued);
-  await previous.catch(() => undefined);
-  try {
-    return await operation();
-  } finally {
-    release();
-    if (compilerLocks.get(key) === queued) compilerLocks.delete(key);
-  }
+  return withWikiFileLock(wikiRoot, key, operation);
 }
 
 export interface SourceCompilePlanResult {

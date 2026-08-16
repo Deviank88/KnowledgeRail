@@ -120,7 +120,7 @@ test("Evidence IR preserves provenance, epistemic origin, contradictions and reb
     const firstPage = await fs.readFile(path.join(wikiRoot, pagePath), "utf8");
     assert.equal(firstPage.includes("retained for 365 days"), true);
     assert.equal(firstPage.includes("retained for 90 days"), true);
-    assert.equal(firstPage.includes("**synthesized** — non è un fatto esplicito"), true);
+    assert.equal(firstPage.includes("**synthesized** — this is not an explicit source fact"), true);
     assert.equal(firstPage.includes(`${sourceA}#${segmentA}`), true);
     assert.equal(firstPage.includes(`${sourceB}#${segmentB}`), true);
 

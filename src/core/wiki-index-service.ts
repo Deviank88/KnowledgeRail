@@ -1,4 +1,5 @@
-import { indexFile, logFile, wikiDir } from "./paths.js";
+import * as nodePath from "node:path";
+import { resolveRealWithin, wikiDir } from "./paths.js";
 import { atomicWriteText, appendTextWithLock } from "./fs-service.js";
 import {
   ensureDir,
@@ -15,25 +16,25 @@ export interface WikiPageMetadata {
 }
 
 export const WIKI_TYPE_LABELS: Record<string, string> = {
-  entity: "Entità",
-  concept: "Concetti",
-  summary: "Riepiloghi",
-  comparison: "Confronti",
-  overview: "Panoramiche",
-  analysis: "Analisi",
-  meeting_note: "Meeting note",
-  client_source: "Fonti cliente",
-  candidate_request: "Richieste candidate",
-  request: "Richieste validate",
-  requirement: "Requisiti",
-  implementation: "Implementazioni",
-  test_result: "Esiti test",
-  decision: "Decisioni",
-  release: "Release",
-  risk: "Rischi",
+  entity: "Entities",
+  concept: "Concepts",
+  summary: "Summaries",
+  comparison: "Comparisons",
+  overview: "Overviews",
+  analysis: "Analysis",
+  meeting_note: "Meeting notes",
+  client_source: "Client sources",
+  candidate_request: "Candidate requests",
+  request: "Validated requests",
+  requirement: "Requirements",
+  implementation: "Implementations",
+  test_result: "Test results",
+  decision: "Decisions",
+  release: "Releases",
+  risk: "Risks",
   data_model: "Data model",
-  automation: "Automazioni",
-  integration: "Integrazioni",
+  automation: "Automations",
+  integration: "Integrations",
   api: "API",
 };
 
@@ -64,9 +65,9 @@ export async function rebuildIndex(): Promise<number> {
     ),
   ];
   const lines = [
-    "# Indice Wiki",
+    "# Wiki Index",
     "",
-    "> Catalogo rigenerato automaticamente.",
+    "> Automatically regenerated catalog.",
     "",
   ];
 
@@ -81,8 +82,9 @@ export async function rebuildIndex(): Promise<number> {
     lines.push("");
   }
 
-  await ensureDir(wikiDir());
-  await atomicWriteText(indexFile(), lines.join("\n").trimEnd() + "\n");
+  const safeIndex = await resolveRealWithin(wikiDir(), "index.md");
+  await ensureDir(nodePath.dirname(safeIndex));
+  await atomicWriteText(safeIndex, lines.join("\n").trimEnd() + "\n");
   return pages.length;
 }
 
@@ -90,6 +92,7 @@ export async function appendLog(
   entry: string,
   level: "INFO" | "WARN" | "ACTION" | "DECISION" = "ACTION"
 ): Promise<void> {
-  await ensureDir(wikiDir());
-  await appendTextWithLock(logFile(), `\n## [${level}] ${timestamp()}\n\n${entry}\n`);
+  const safeLog = await resolveRealWithin(wikiDir(), "log.md");
+  await ensureDir(nodePath.dirname(safeLog));
+  await appendTextWithLock(safeLog, `\n## [${level}] ${timestamp()}\n\n${entry}\n`);
 }

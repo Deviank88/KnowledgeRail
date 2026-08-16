@@ -60,6 +60,9 @@ async function main(): Promise<void> {
   if (!report.compactContextEvidenceParity) failures.push("compact context changed selected evidence");
   if (!report.compactContextGapParity) failures.push("compact context changed reported gaps");
   if (!report.defaultContextIsCompact) failures.push("knowledge_context does not default to compact output");
+  if (report.catalogLanguageViolations.length > 0) {
+    failures.push(`Italian terms remain in the public catalog: ${report.catalogLanguageViolations.join(", ")}`);
+  }
   for (const required of baseline.requiredToolNames) {
     if (!report.toolNames.includes(required)) failures.push(`required tool missing: ${required}`);
   }

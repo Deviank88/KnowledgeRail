@@ -1,7 +1,14 @@
 import type { McpServer } from "@modelcontextprotocol/server";
+import * as nodePath from "node:path";
+import type { Readable } from "node:stream";
 import fg from "fast-glob";
 import { z } from "zod";
-import { docsCategoryDir, docsCategoryFilePath, wikiDir } from "../core/paths.js";
+import {
+  docsCategoryDirReal,
+  docsCategoryFilePathReal,
+  validateGlobPattern,
+  wikiDir,
+} from "../core/paths.js";
 import {
   sourceCompileNext,
   sourceCompilePlan,
@@ -30,6 +37,37 @@ const CATEGORY_ENUM = [...FILE_CATEGORIES] as [
   (typeof FILE_CATEGORIES)[number],
   ...(typeof FILE_CATEGORIES)[number][],
 ];
+const MAX_LIST_ENTRIES = 1_000;
+
+async function boundedGlob(
+  pattern: string,
+  cwd: string,
+  limit: number
+): Promise<{ entries: fg.Entry[]; truncated: boolean }> {
+  const entries: fg.Entry[] = [];
+  const stream = fg.stream(pattern, {
+    cwd: nodePath.resolve(cwd),
+    absolute: false,
+    dot: false,
+    onlyFiles: true,
+    stats: true,
+    followSymbolicLinks: false,
+  }) as Readable;
+  let truncated = false;
+  try {
+    for await (const value of stream as Readable & AsyncIterable<fg.Entry>) {
+      if (entries.length >= limit) {
+        truncated = true;
+        stream.destroy();
+        break;
+      }
+      entries.push(value);
+    }
+  } finally {
+    if (truncated && !stream.destroyed) stream.destroy();
+  }
+  return { entries, truncated };
+}
 
 function draftBlock(path: string, content: string): string {
   return [`## ${path}`, "", "```markdown", content, "```"].join("\n");
@@ -60,51 +98,73 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
   server.registerTool(toolName("files", era), { description: "Internal docs file operation.", inputSchema: z.object({
               action: z.enum(["list", "read"]).optional().default("list"),
               category: z.enum(CATEGORY_ENUM).optional(),
-              pattern: z.string().optional().default("**/*"),
+              pattern: z.string().min(1).max(1024).optional().default("**/*"),
               path: z.string().optional(),
               max_chars: z.number().int().positive().optional(),
             }) }, async ({ action, category, pattern, path, max_chars }) => {
-              if (action === "read") {
-                if (!category || !path) return errorResult("category e path sono obbligatori per action=read.");
-                const content = await readFileSafe(docsCategoryFilePath(category, path));
-                if (content === null) return errorResult(`File non trovato: docs/${category}/${path}`);
-                return textResult(max_chars && content.length > max_chars
-                  ? `${content.slice(0, max_chars)}\n\n[Truncated: ${content.length - max_chars} more characters.]`
-                  : content);
-              }
-              const categories = category ? [category] : FILE_CATEGORIES;
-              const lines: string[] = [];
-
-              for (const cat of categories) {
-                const entries = await fg(pattern ?? "**/*", {
-                  cwd: docsCategoryDir(cat),
-                  dot: false,
-                  onlyFiles: true,
-                  stats: true,
-                }).catch(() => [] as fg.Entry[]);
-
-                lines.push(`## ${cat} (${entries.length})`);
-                if (entries.length === 0) {
-                  lines.push("_Nessun file._", "");
-                  continue;
+              try {
+                if (action === "read") {
+                  if (!category || !path) return errorResult("category and path are required for action=read.");
+                  const absPath = await docsCategoryFilePathReal(category, path);
+                  const content = await readFileSafe(absPath);
+                  if (content === null) return errorResult(`File not found: docs/${category}/${path}`);
+                  return textResult(max_chars && content.length > max_chars
+                    ? `${content.slice(0, max_chars)}\n\n[Truncated: ${content.length - max_chars} more characters.]`
+                    : content);
                 }
-                for (const entry of entries as fg.Entry[]) {
-                  const sizeKB = entry.stats ? (entry.stats.size / 1024).toFixed(1) : "?";
-                  const mtime = entry.stats
-                    ? entry.stats.mtime.toISOString().slice(0, 16).replace("T", " ")
-                    : "";
-                  const status =
-                    cat === "normalized"
+                const safePattern = validateGlobPattern(pattern ?? "**/*");
+                const categories = category ? [category] : FILE_CATEGORIES;
+                const lines: string[] = [];
+                const listed: Array<{ category: string; entries: string[]; truncated: boolean }> = [];
+                let remaining = MAX_LIST_ENTRIES;
+                let truncated = false;
+
+                for (const cat of categories) {
+                  const cwd = await docsCategoryDirReal(cat);
+                  const result = remaining > 0
+                    ? await boundedGlob(safePattern, cwd, remaining)
+                    : { entries: [] as fg.Entry[], truncated: true };
+                  remaining -= result.entries.length;
+                  truncated ||= result.truncated;
+                  listed.push({
+                    category: cat,
+                    entries: result.entries.map((entry) => entry.path.replace(/\\/g, "/")),
+                    truncated: result.truncated,
+                  });
+
+                  lines.push(`## ${cat} (${result.entries.length}${result.truncated ? "+" : ""})`);
+                  if (result.entries.length === 0) {
+                    lines.push("_No files._", "");
+                    continue;
+                  }
+                  for (const entry of result.entries) {
+                    const sizeKB = entry.stats ? (entry.stats.size / 1024).toFixed(1) : "?";
+                    const mtime = entry.stats
+                      ? entry.stats.mtime.toISOString().slice(0, 16).replace("T", " ")
+                      : "";
+                    const normalized = normalizedOutputPath(cat, entry.path);
+                    const normalizedAbs = await docsCategoryFilePathReal("normalized", normalized.rel);
+                    const status = cat === "normalized"
                       ? "ready"
-                      : (await readFileSafe(normalizedOutputPath(cat, entry.path).abs)) === null
-                        ? "not-normalized"
-                        : "normalized";
-                  lines.push(`- ${entry.path} (${sizeKB} KB, ${mtime}, ${status})`);
+                      : (await readFileSafe(normalizedAbs)) === null ? "not-normalized" : "normalized";
+                    lines.push(`- ${entry.path} (${sizeKB} KB, ${mtime}, ${status})`);
+                  }
+                  if (result.truncated) lines.push(`_Truncated at ${MAX_LIST_ENTRIES} total entries._`);
+                  lines.push("");
                 }
-                lines.push("");
-              }
 
-              return textResult(lines.join("\n").trimEnd());
+                if (truncated && !lines.some((line) => line.startsWith("_Truncated"))) {
+                  lines.push(`_Truncated at ${MAX_LIST_ENTRIES} total entries._`);
+                }
+                return structuredTextResult(lines.join("\n").trimEnd(), {
+                  pattern: safePattern,
+                  maxEntries: MAX_LIST_ENTRIES,
+                  truncated,
+                  categories: listed,
+                });
+              } catch (error: unknown) {
+                return errorResult(error);
+              }
             });
 
   server.registerTool(toolName("normalizeSource", era), { description: "Normalize supported text, office, image or PDF sources into docs/normalized Markdown.", inputSchema: z.object({
@@ -113,26 +173,26 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
               overwrite: z.boolean().optional().default(false),
             }) }, async ({ category, path: relPath, overwrite }) => {
               if (category === "normalized" || category === "deliverables" || category === "assets") {
-                return errorResult(`Categoria non normalizzabile: ${category}.`);
+                return errorResult(`Category cannot be normalized: ${category}.`);
               }
               const out = normalizedOutputPath(category, relPath);
               if (!overwrite && (await readFileSafe(out.abs)) !== null) {
-                return errorResult(`Output già esistente: docs/normalized/${out.rel}. Usare overwrite=true.`);
+                return errorResult(`Output already exists: docs/normalized/${out.rel}. Use overwrite=true.`);
               }
 
               try {
                 const normalized = await normalizeSourceFile({ category, relPath, overwrite });
                 return textResult(
                   [
-                    `Fonte normalizzata: docs/normalized/${normalized.rel}`,
-                    `Origine: ${normalized.sourceLabel}`,
-                    `Caratteri: ${normalized.chars}`,
+                    `Normalized source: docs/normalized/${normalized.rel}`,
+                    `Source: ${normalized.sourceLabel}`,
+                    `Characters: ${normalized.chars}`,
                   ].join("\n")
                 );
               } catch (err: unknown) {
                 const message = err instanceof Error ? err.message : String(err);
                 return errorResult(
-                  message.includes("ENOENT") ? `File non trovato: docs/${category}/${relPath}` : message
+                  message.includes("ENOENT") ? `File not found: docs/${category}/${relPath}` : message
                 );
               }
             });
@@ -140,9 +200,11 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
   server.registerTool(toolName("prepareRequestIngestion", era), { description: "Validate a development report and prepare wiki drafts without writing them.", inputSchema: z.object({
               report_filename: z.string(),
             }) }, async ({ report_filename }) => {
-              const content = await readFileSafe(docsCategoryFilePath("reports", report_filename));
+              const content = await readFileSafe(
+                await docsCategoryFilePathReal("reports", report_filename)
+              );
               if (content === null) {
-                return errorResult(`Report non trovato: docs/reports/${report_filename}`);
+                return errorResult(`Report not found: docs/reports/${report_filename}`);
               }
               const prepared = prepareRequestIngestionDrafts(content, `docs/reports/${report_filename}`);
               if (!prepared.valid) {
@@ -150,9 +212,9 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
               }
               return textResult(
                 [
-                  "# Bozze ingestione richiesta",
+                  "# Request-ingestion drafts",
                   "",
-                  "> Applicare ogni bozza con `knowledge_page action=write`, poi registrare l'operazione con `action=append_log`.",
+                  "> Apply each draft with `knowledge_page action=write`, then record the operation with `action=append_log`.",
                   "",
                   ...prepared.drafts.map((draft) => draftBlock(draft.path, draft.content)),
                 ].join("\n")
@@ -161,7 +223,7 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
 
   server.registerTool(toolName("prepareSourceIngestion", era), { description: `Normalized-source coverage state machine: plan, next, record, coverage, finalize.`, inputSchema: z.object({
               action: z.enum(["plan", "next", "record", "coverage", "finalize"]).optional().default("next"),
-              normalized_filename: z.string().describe("Nome file relativo a docs/normalized"),
+              normalized_filename: z.string().describe("Filename relative to docs/normalized"),
               max_chars: z.number().int().positive().optional().default(12000),
               segment_max_chars: z.number().int().min(256).max(50000).optional(),
               segment_id: z.string().optional(),
@@ -170,9 +232,11 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
               page_refs: z.array(z.string()).optional(),
               reason: z.string().optional(),
             }) }, async ({ action, normalized_filename, max_chars, segment_max_chars, segment_id, status, evidence_refs, page_refs, reason }) => {
-              const content = await readFileSafe(docsCategoryFilePath("normalized", normalized_filename));
+              const content = await readFileSafe(
+                await docsCategoryFilePathReal("normalized", normalized_filename)
+              );
               if (content === null) {
-                return errorResult(`Fonte normalizzata non trovata: docs/normalized/${normalized_filename}`);
+                return errorResult(`Normalized source not found: docs/normalized/${normalized_filename}`);
               }
               const uri = sourceUri(normalized_filename);
               const unitBudget = max_chars ?? 12000;
@@ -186,7 +250,7 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                     segmentMaxChars: segment_max_chars ?? unitBudget,
                   });
                   return structuredTextResult([
-                    "# Piano compilazione fonte",
+                    "# Source-compilation plan",
                     "",
                     `- source: ${result.ledger.sourceUri}`,
                     `- sourceHash: ${result.ledger.sourceHash}`,
@@ -196,8 +260,8 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                     ...coverageLines(result.metrics),
                     "",
                     result.metrics.unresolvedSegmentCount > 0
-                      ? "Usare action=next per processare la prima unità unresolved."
-                      : "Nessuna unità in coda.",
+                      ? "Use action=next to process the first unresolved unit."
+                      : "No units are queued.",
                   ].join("\n"), {
                     action: "plan",
                     sourceUri: result.ledger.sourceUri,
@@ -212,11 +276,11 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
 
                 if (action === "record") {
                   if (!segment_id || !status) {
-                    return errorResult("segment_id e status sono obbligatori per action=record.");
+                    return errorResult("segment_id and status are required for action=record.");
                   }
                   if (["integrated", "duplicate", "contradicted"].includes(status)) {
                     return errorResult(
-                      "Gli stati integrated, duplicate e contradicted sono derivati esclusivamente da knowledge_ingest action=apply_claims; la coverage verrà riconciliata automaticamente."
+                      "The integrated, duplicate, and contradicted states are derived only by knowledge_ingest action=apply_claims; coverage is reconciled automatically."
                     );
                   }
                   const result = await sourceRecordSegment({
@@ -232,8 +296,8 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                     },
                   });
                   return structuredTextResult([
-                    `Segmento registrato: ${segment_id} -> ${status}`,
-                    `Stato fonte: ${result.ledger.state}`,
+                    `Segment recorded: ${segment_id} -> ${status}`,
+                    `Source state: ${result.ledger.state}`,
                     ...coverageLines(result.metrics),
                   ].join("\n"), {
                     action: "record",
@@ -247,7 +311,7 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                 if (action === "coverage") {
                   const result = await sourceCoverage({ wikiRoot: wikiDir(), sourceUri: uri, content });
                   return structuredTextResult([
-                    "# Coverage fonte",
+                    "# Source coverage",
                     "",
                     `- source: ${result.ledger.sourceUri}`,
                     `- state: ${result.ledger.state}`,
@@ -266,8 +330,8 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                 if (action === "finalize") {
                   const result = await sourceFinalize({ wikiRoot: wikiDir(), sourceUri: uri, content });
                   return structuredTextResult([
-                    "Coverage fonte finalizzata.",
-                    `Stato fonte: ${result.ledger.state}`,
+                    "Source coverage finalized.",
+                    `Source state: ${result.ledger.state}`,
                     ...coverageLines(result.metrics),
                   ].join("\n"), {
                     action: "finalize",
@@ -294,12 +358,12 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                 if (!unit) {
                   const result = await sourceCoverage({ wikiRoot: wikiDir(), sourceUri: uri, content });
                   return structuredTextResult([
-                    "Nessun segmento unresolved in coda.",
-                    `Stato fonte: ${result.ledger.state}`,
+                    "No unresolved segments are queued.",
+                    `Source state: ${result.ledger.state}`,
                     ...coverageLines(result.metrics),
                     result.ledger.state === "fully_covered"
-                      ? "Coverage già finalizzata."
-                      : "Usare action=finalize per chiudere esplicitamente la coverage.",
+                      ? "Coverage is already finalized."
+                      : "Use action=finalize to close coverage explicitly.",
                   ].join("\n"), {
                     action: "next",
                     sourceUri: result.ledger.sourceUri,
@@ -309,10 +373,10 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                   });
                 }
                 return structuredTextResult([
-                  "# Unità estrazione Evidence IR",
+                  "# Evidence IR extraction unit",
                   "",
-                  `> Segmento: \`${unit.segment.id}\` (${unit.segment.start}-${unit.segment.end}, ${unit.segment.kind})`,
-                  `> Coda unresolved: ${unit.queuedSegmentIds.length} segmenti (incluso quello corrente).`,
+                  `> Segment: \`${unit.segment.id}\` (${unit.segment.start}-${unit.segment.end}, ${unit.segment.kind})`,
+                  `> Unresolved queue: ${unit.queuedSegmentIds.length} segment(s), including the current one.`,
                   "> Extract claims with provenance and use `knowledge_ingest action=apply_claims`; record, link, validation and synthesis are orchestrated internally.",
                   "",
                   "```source",

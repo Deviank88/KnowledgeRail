@@ -46,8 +46,14 @@ export class WorkspaceBindingManager {
     readonly registry: WorkspaceRegistry,
     readonly ttlMs = 30 * 60 * 1_000,
     readonly maximumLifetimeMs = 8 * 60 * 60 * 1_000,
-    private readonly now: () => number = Date.now
+    private readonly now: () => number = Date.now,
+    private readonly onWorkspaceInactive?: (workspaceId: string) => void | Promise<void>
   ) {}
+
+  private notifyIfInactive(workspaceId: string): void {
+    if ([...this.records.values()].some((record) => record.workspaceId === workspaceId)) return;
+    void this.onWorkspaceInactive?.(workspaceId);
+  }
 
   private key(digest: Buffer): string {
     return digest.toString("base64url");
@@ -102,6 +108,7 @@ export class WorkspaceBindingManager {
     }
     if (this.now() >= record.expiresAtMs) {
       this.records.delete(this.key(digest));
+      this.notifyIfInactive(record.workspaceId);
       throw new WorkspaceBindingError("The workspace binding expired; renew or select the workspace again.", "expired");
     }
     return record;
@@ -152,10 +159,22 @@ export class WorkspaceBindingManager {
 
   release(token: string, principalId: string): boolean {
     const record = this.recordFor(token, principalId);
-    return this.records.delete(this.key(record.digest));
+    const removed = this.records.delete(this.key(record.digest));
+    if (removed) this.notifyIfInactive(record.workspaceId);
+    return removed;
   }
 
   revokeAll(): void {
+    const workspaceIds = new Set([...this.records.values()].map((record) => record.workspaceId));
     this.records.clear();
+    for (const workspaceId of workspaceIds) this.notifyIfInactive(workspaceId);
+  }
+
+  activeBindingCount(): number {
+    return this.records.size;
+  }
+
+  activeWorkspaceCount(): number {
+    return new Set([...this.records.values()].map((record) => record.workspaceId)).size;
   }
 }

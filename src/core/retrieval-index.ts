@@ -2,6 +2,12 @@ import * as fs from "node:fs/promises";
 import { watch, type FSWatcher } from "node:fs";
 import * as nodePath from "node:path";
 import { atomicWriteText } from "./fs-service.js";
+import { withWikiFileLock } from "./lock-service.js";
+import {
+  evictWorkspaceState,
+  registerWorkspaceState,
+  touchWorkspaceState,
+} from "./workspace-state.js";
 import { listWikiPagePaths, readWikiPageRecord, type WikiPageRecord } from "./page-record.js";
 import { wikiMetaDir } from "./manifest-service.js";
 import { ensureDir, readFileSafe } from "./utils.js";
@@ -46,10 +52,10 @@ export interface RetrievalHit {
 }
 
 const states = new Map<string, IndexState>();
-const persistenceQueues = new Map<string, Promise<void>>();
 const passageTokenCache = new WeakMap<WikiPageRecord, ReadonlyArray<ReadonlySet<string>>>();
 const SNAPSHOT_VERSION = 1;
 const DEFAULT_REFRESH_MS = 2_000;
+const DEFAULT_RECONCILIATION_MS = 60_000;
 
 function snapshotFile(wikiRoot: string): string {
   return nodePath.join(wikiMetaDir(wikiRoot), "retrieval-index.json");
@@ -60,11 +66,7 @@ function deltaFile(wikiRoot: string): string {
 }
 
 async function enqueuePersistence(wikiRoot: string, operation: () => Promise<void>): Promise<void> {
-  const root = nodePath.resolve(wikiRoot);
-  const previous = persistenceQueues.get(root) ?? Promise.resolve();
-  const next = previous.then(operation, operation);
-  persistenceQueues.set(root, next.catch(() => undefined));
-  await next;
+  await withWikiFileLock(wikiRoot, `${nodePath.resolve(wikiRoot)}:retrieval`, operation);
 }
 
 function emptyState(): IndexState {
@@ -88,6 +90,10 @@ function stateFor(wikiRoot: string): IndexState {
     state = emptyState();
     states.set(root, state);
     try {
+      // libuv's recursive Windows watcher can abort the process on valid
+      // directory/case combinations instead of reporting an ordinary error.
+      // Periodic reconciliation is already authoritative on this platform.
+      if (process.platform === "win32") throw new Error("Use periodic reconciliation on Windows.");
       // `persistent: false` is stronger than relying only on `unref()` and ensures
       // the derived-index watcher cannot keep short-lived CLI/test processes alive.
       // In the MCP server the transport already keeps the event loop alive, so the
@@ -109,6 +115,12 @@ function stateFor(wikiRoot: string): IndexState {
     } catch {
       // Recursive watch is platform-dependent; periodic metadata scans remain the fallback.
     }
+    registerWorkspaceState(root, "retrieval", () => {
+      state!.watcher?.close();
+      states.delete(root);
+    });
+  } else {
+    touchWorkspaceState(root);
   }
   return state;
 }
@@ -214,8 +226,14 @@ export async function refreshRetrievalIndex(
   const state = stateFor(wikiRoot);
   await loadSnapshot(wikiRoot, state);
   const refreshMs = Number(process.env["KNOWLEDGE_RAIL_REFRESH_MS"] ?? DEFAULT_REFRESH_MS);
-  const fallbackDue = Date.now() - state.lastScanMs >= Math.max(0, refreshMs);
-  if (!options.force && !state.dirty && (state.watcherReliable || !fallbackDue)) return state;
+  const reconciliationMs = Number(
+    process.env["KNOWLEDGE_RAIL_RECONCILIATION_MS"] ?? DEFAULT_RECONCILIATION_MS
+  );
+  const scanInterval = state.watcherReliable
+    ? Math.max(refreshMs, reconciliationMs)
+    : refreshMs;
+  const fallbackDue = Date.now() - state.lastScanMs >= Math.max(0, scanInterval);
+  if (!options.force && !state.dirty && !fallbackDue) return state;
 
   const paths = await listWikiPagePaths(wikiRoot);
   const seen = new Set(paths);
@@ -388,7 +406,7 @@ export async function getWikiPageRecords(
 }
 
 export function clearRetrievalIndexes(): void {
+  for (const root of [...states.keys()]) evictWorkspaceState(root);
   for (const state of states.values()) state.watcher?.close();
   states.clear();
-  persistenceQueues.clear();
 }

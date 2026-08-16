@@ -3,6 +3,8 @@ import * as nodePath from "node:path";
 import { createHash } from "node:crypto";
 import fg from "fast-glob";
 import { atomicWriteText } from "./fs-service.js";
+import { resolveRealWithin } from "./paths.js";
+import { withWikiFileLock } from "./lock-service.js";
 import { ensureDir, readFileSafe } from "./utils.js";
 
 export interface ManifestEntry {
@@ -37,16 +39,22 @@ async function fileHash(absPath: string): Promise<string> {
 }
 
 export async function buildManifest(wikiRoot: string): Promise<WikiManifest> {
+  const safeWikiRoot = await resolveRealWithin(
+    nodePath.dirname(wikiRoot),
+    nodePath.basename(wikiRoot)
+  );
   const files = await fg("**/*.md", {
-    cwd: wikiRoot,
+    cwd: safeWikiRoot,
+    absolute: false,
     dot: false,
     onlyFiles: true,
+    followSymbolicLinks: false,
     ignore: [".knowledge-rail/**"],
   }).catch(() => [] as string[]);
 
   const entries: ManifestEntry[] = [];
   for (const relPath of files.sort()) {
-    const absPath = nodePath.join(wikiRoot, relPath);
+    const absPath = await resolveRealWithin(safeWikiRoot, relPath);
     const stat = await fs.stat(absPath);
     entries.push({
       path: relPath.replace(/\\/g, "/"),
@@ -70,9 +78,11 @@ export async function saveManifest(wikiRoot: string, manifest: WikiManifest): Pr
 }
 
 export async function rebuildManifest(wikiRoot: string): Promise<WikiManifest> {
-  const manifest = await buildManifest(wikiRoot);
-  await saveManifest(wikiRoot, manifest);
-  return manifest;
+  return withWikiFileLock(wikiRoot, manifestFile(wikiRoot), async () => {
+    const manifest = await buildManifest(wikiRoot);
+    await saveManifest(wikiRoot, manifest);
+    return manifest;
+  });
 }
 
 export async function readManifest(wikiRoot: string): Promise<WikiManifest | null> {
@@ -91,11 +101,12 @@ export async function invalidateManifestEntries(
   wikiRoot: string,
   relPaths: string[]
 ): Promise<void> {
-  const manifest = await readManifest(wikiRoot);
-  if (!manifest) return;
-  const invalid = new Set(relPaths.map((p) => p.replace(/\\/g, "/")));
-  manifest.entries = manifest.entries.filter((entry) => !invalid.has(entry.path));
-  manifest.generatedAt = new Date().toISOString();
-  await saveManifest(wikiRoot, manifest);
+  await withWikiFileLock(wikiRoot, manifestFile(wikiRoot), async () => {
+    const manifest = await readManifest(wikiRoot);
+    if (!manifest) return;
+    const invalid = new Set(relPaths.map((p) => p.replace(/\\/g, "/")));
+    manifest.entries = manifest.entries.filter((entry) => !invalid.has(entry.path));
+    manifest.generatedAt = new Date().toISOString();
+    await saveManifest(wikiRoot, manifest);
+  });
 }
-

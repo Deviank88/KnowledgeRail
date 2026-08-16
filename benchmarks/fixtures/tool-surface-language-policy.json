@@ -1,0 +1,21 @@
+{
+  "forbiddenItalianTerms": [
+    "aggiorna",
+    "aggiornare",
+    "bozza",
+    "crea",
+    "elimina",
+    "fonti",
+    "modifica",
+    "nessuna",
+    "pagina",
+    "pagine",
+    "percorso",
+    "scrivi",
+    "sovrascrive",
+    "sposta",
+    "trovato",
+    "usa",
+    "valida"
+  ]
+}

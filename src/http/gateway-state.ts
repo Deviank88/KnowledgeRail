@@ -116,6 +116,9 @@ export class GatewayStateStore {
       throw new Error("A KnowledgeRail gateway process already owns the local state directory.");
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EPERM") {
+        throw new Error("A KnowledgeRail gateway process already owns the local state directory.");
+      }
       if (code !== "ESRCH") throw error;
     }
     const rendezvous = await this.read();

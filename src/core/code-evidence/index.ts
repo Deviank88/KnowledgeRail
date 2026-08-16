@@ -3,6 +3,8 @@ import * as fs from "node:fs/promises";
 import * as nodePath from "node:path";
 import fg from "fast-glob";
 import { atomicWriteText } from "../fs-service.js";
+import { withWikiFileLock } from "../lock-service.js";
+import { logger } from "../logger.js";
 import { wikiMetaDir } from "../manifest-service.js";
 import { safeResolveWithin } from "../paths.js";
 import { tokenizeSearchText } from "../text-analysis.js";
@@ -36,24 +38,6 @@ const CODE_IGNORES = [
   "coverage/**",
   "wiki/.knowledge-rail/**",
 ];
-
-const mutations = new Map<string, Promise<unknown>>();
-
-async function withMutationLock<T>(key: string, operation: () => Promise<T>): Promise<T> {
-  const normalized = nodePath.resolve(key);
-  const previous = mutations.get(normalized) ?? Promise.resolve();
-  let release!: () => void;
-  const current = new Promise<void>((resolve) => { release = resolve; });
-  const tail = previous.then(() => current, () => current);
-  mutations.set(normalized, tail);
-  await previous.catch(() => undefined);
-  try {
-    return await operation();
-  } finally {
-    release();
-    if (mutations.get(normalized) === tail) mutations.delete(normalized);
-  }
-}
 
 function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
@@ -157,6 +141,16 @@ export async function readCodeEvidenceSnapshot(
   } catch (error: unknown) {
     throw new Error(`Cannot read code evidence index: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+async function discardCorruptSnapshot(
+  wikiRoot: string,
+  parserVersion: string,
+  error: unknown
+): Promise<CodeEvidenceSnapshot> {
+  logger.warn("code-evidence", "corrupt_index_discarded", {}, error);
+  await fs.unlink(codeEvidenceIndexFile(wikiRoot)).catch(() => undefined);
+  return emptySnapshot(parserVersion);
 }
 
 async function writeSnapshot(wikiRoot: string, snapshot: CodeEvidenceSnapshot): Promise<void> {
@@ -282,7 +276,13 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
   }
 
   private async querySnapshot(): Promise<CodeEvidenceSnapshot> {
-    const snapshot = await this.snapshot();
+    let snapshot: CodeEvidenceSnapshot;
+    try {
+      snapshot = await this.snapshot();
+    } catch (error: unknown) {
+      await this.rebuild();
+      snapshot = await this.snapshot();
+    }
     if (snapshot.files.length > 0 && snapshot.parserVersion !== this.adapter.parserVersion) {
       throw new Error(
         `Code evidence parser version changed from ${snapshot.parserVersion} to ${this.adapter.parserVersion}; rebuild the index.`
@@ -292,8 +292,10 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
   }
 
   async rebuild(): Promise<CodeEvidenceUpdateReport> {
-    return withMutationLock(codeEvidenceIndexFile(this.wikiRoot), async () => {
-      const before = await this.snapshot();
+    return withWikiFileLock(this.wikiRoot, codeEvidenceIndexFile(this.wikiRoot), async () => {
+      const before = await this.snapshot().catch((error: unknown) =>
+        discardCorruptSnapshot(this.wikiRoot, this.adapter.parserVersion, error)
+      );
       const paths = (await fg(CODE_GLOB, {
         cwd: this.repositoryRoot,
         dot: false,
@@ -355,7 +357,7 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
   }
 
   async updateFile(path: string): Promise<CodeEvidenceUpdateReport> {
-    return withMutationLock(codeEvidenceIndexFile(this.wikiRoot), async () => {
+    return withWikiFileLock(this.wikiRoot, codeEvidenceIndexFile(this.wikiRoot), async () => {
       const normalizedPath = normalizedRelativePath(path);
       const before = await this.snapshot();
       if (before.files.length > 0 && before.parserVersion !== this.adapter.parserVersion) {
@@ -395,7 +397,7 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
   }
 
   async removeFile(path: string): Promise<CodeEvidenceUpdateReport> {
-    return withMutationLock(codeEvidenceIndexFile(this.wikiRoot), async () => {
+    return withWikiFileLock(this.wikiRoot, codeEvidenceIndexFile(this.wikiRoot), async () => {
       const normalizedPath = normalizedRelativePath(path);
       safeResolveWithin(this.repositoryRoot, normalizedPath);
       const before = await this.snapshot();

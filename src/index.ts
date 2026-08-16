@@ -2,6 +2,7 @@
 
 import { CLI_HELP, CliUsageError, parseCli } from "./cli.js";
 import { assertSupportedNodeRuntime } from "./core/runtime-compatibility.js";
+import { logger } from "./core/logger.js";
 import { PRODUCT_VERSION } from "./product.js";
 import { runStdio } from "./runtime/stdio.js";
 import { runHttpGateway } from "./http/gateway.js";
@@ -19,7 +20,7 @@ function installShutdownHandlers(handle: { close(): Promise<void> }): void {
     closing = true;
     void handle.close()
       .catch((error: unknown) => {
-        process.stderr.write(`[knowledge-rail] Error during ${signal} shutdown: ${String(error)}\n`);
+        logger.error("runtime", "shutdown_failed", { signal }, error);
       })
       .finally(() => process.exit(0));
   };
@@ -73,6 +74,6 @@ async function main(): Promise<void> {
 
 main().catch((err: unknown) => {
   const usage = err instanceof CliUsageError;
-  process.stderr.write(`[knowledge-rail] ${usage ? "Configuration" : "Fatal"} error: ${err instanceof Error ? err.message : String(err)}\n`);
+  logger.error("runtime", usage ? "configuration_error" : "fatal_error", {}, err);
   process.exit(usage ? err.exitCode : 1);
 });

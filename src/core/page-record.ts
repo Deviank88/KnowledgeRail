@@ -9,6 +9,7 @@ import {
   stripFrontmatter,
 } from "./utils.js";
 import { tokenizeSearchText } from "./text-analysis.js";
+import { resolveRealWithin } from "./paths.js";
 
 export interface WikiPassage {
   id: string;
@@ -104,7 +105,7 @@ export async function readWikiPageRecord(
   relPath: string,
   knownStat?: { mtimeMs: number; size: number }
 ): Promise<WikiPageRecord | null> {
-  const absPath = nodePath.join(wikiRoot, relPath);
+  const absPath = await resolveRealWithin(wikiRoot, relPath);
   const raw = await readFileSafe(absPath);
   if (raw === null) return null;
   const stat = knownStat ?? await fs.stat(absPath);
@@ -112,10 +113,16 @@ export async function readWikiPageRecord(
 }
 
 export async function listWikiPagePaths(wikiRoot: string): Promise<string[]> {
+  const safeWikiRoot = await resolveRealWithin(
+    nodePath.dirname(wikiRoot),
+    nodePath.basename(wikiRoot)
+  );
   const files = await fg("**/*.md", {
-    cwd: wikiRoot,
+    cwd: safeWikiRoot,
+    absolute: false,
     dot: false,
     onlyFiles: true,
+    followSymbolicLinks: false,
     ignore: [".knowledge-rail/**"],
   }).catch(() => [] as string[]);
   return files

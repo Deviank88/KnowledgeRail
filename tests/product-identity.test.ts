@@ -30,6 +30,14 @@ test("product, npm and MCP Registry identities remain aligned", async () => {
   assert.match(wikiPageUri("requirements/REQ_1.md"), /^knowledge-rail:\/\/page\//);
 });
 
+test("the current package version has a dated changelog release", async () => {
+  const packageJson = await readJson("package.json");
+  const changelog = await readFile(path.join(repositoryRoot, "CHANGELOG.md"), "utf8");
+  const version = String(packageJson.version).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  assert.match(changelog, new RegExp(`^## \\[${version}\\] - \\d{4}-\\d{2}-\\d{2}$`, "m"));
+});
+
 test("public documentation distinguishes local self-hosting from future remote service", async () => {
   const [readme, selfHosting, security] = await Promise.all([
     readFile(path.join(repositoryRoot, "README.md"), "utf8"),

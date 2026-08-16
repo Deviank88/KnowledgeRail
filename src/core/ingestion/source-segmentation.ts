@@ -28,7 +28,7 @@ interface Boundary {
   priority: number;
 }
 
-const REPORT_SECTION = /^(contesto richiesta|modifiche funzionali|data model|automazioni|integrazioni\/api|ui\/ux|permessi\/sicurezza|test|changelog|impatto documentale|gap\/ambiguit[aà])$/i;
+const REPORT_SECTION = /^(contesto richiesta|request context|modifiche funzionali|functional changes|data model|automazioni|automations|integrazioni\/api|integrations\/api|ui\/ux|permessi\/sicurezza|permissions\/security|test|tests|changelog|impatto documentale|documentation impact|gap\/ambiguit[aà]|gaps\/ambiguities)$/i;
 const CODE_SYMBOL = /^\s*(?:(?:export|public|private|protected|static|async|abstract|declare)\s+)*(?:class|interface|enum|type|function|def|func|fn|struct|trait|module|namespace)\s+[A-Za-z_$][\w$]*/;
 
 export function sourceContentHash(content: string): string {

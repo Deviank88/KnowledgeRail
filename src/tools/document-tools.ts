@@ -17,14 +17,14 @@ import {
   reviewDocumentStructure,
 } from "../core/document-workflow.js";
 import { atomicWriteBuffer, atomicWriteText } from "../core/fs-service.js";
-import { docsCategoryFilePath, wikiDir } from "../core/paths.js";
+import { docsCategoryFilePathReal, wikiDir } from "../core/paths.js";
 import { ensureDir, readFileSafe, stripFrontmatter } from "../core/utils.js";
 import { exportDocxFromMarkdownWithStats } from "../docx/index.js";
 import { errorResult, textResult } from "./helpers.js";
 import { toolName, type ProtocolEra } from "../mcp/tool-names.js";
 
-function deliverablePath(filename: string): { abs: string; name: string } {
-  const abs = docsCategoryFilePath("deliverables", nodePath.basename(filename));
+async function deliverablePath(filename: string): Promise<{ abs: string; name: string }> {
+  const abs = await docsCategoryFilePathReal("deliverables", nodePath.basename(filename));
   return { abs, name: nodePath.basename(abs) };
 }
 
@@ -129,12 +129,12 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
               client_facing: z.boolean().optional(),
               overwrite: z.boolean().optional().default(false),
             }) }, async ({ filename, title, document_type, content, project_name, language, client_facing, overwrite }) => {
-              const { abs, name } = deliverablePath(filename);
+              const { abs, name } = await deliverablePath(filename);
               await ensureDir(nodePath.dirname(abs));
 
               if (!overwrite && (await readFileSafe(abs)) !== null) {
                 return errorResult(
-                  `Il documento esiste già: docs/deliverables/${name}\nImpostare overwrite=true per sovrascrivere.`
+                  `Document already exists: docs/deliverables/${name}\nSet overwrite=true to replace it.`
                 );
               }
 
@@ -152,12 +152,12 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
               const sizeKB = (Buffer.byteLength(content, "utf-8") / 1024).toFixed(1);
               return {
                 content: [{ type: "text" as const, text: [
-                  `Documento salvato: docs/deliverables/${name}`,
-                  `Titolo: ${title} [${document_type}]`,
-                  `Dim: ${sizeKB} KB`,
-                  `Stato contratto: ${review.readyForExport ? "review-ready" : `draft con ${review.blockerCount} blocker`}`,
-                  "Prossimo step: knowledge_document action=review.",
-                  `Percorso: ${abs}`,
+                  `Document saved: docs/deliverables/${name}`,
+                  `Title: ${title} [${document_type}]`,
+                  `Size: ${sizeKB} KB`,
+                  `Contract state: ${review.readyForExport ? "review-ready" : `draft with ${review.blockerCount} blocker(s)`}`,
+                  "Next step: knowledge_document action=review.",
+                  `Path: docs/deliverables/${name}`,
                 ].join("\n") }],
                 structuredContent: {
                   path: `docs/deliverables/${name}`,
@@ -179,18 +179,18 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
               category_label: z.string().optional(),
               subtitle: z.string().optional().default(""),
               version: z.string().optional().default("1.0"),
-              date: z.string().optional().describe("Default: oggi (ISO)"),
+              date: z.string().optional().describe("Default: today (ISO)"),
               status: z.string().optional().default("Reviewed"),
               overwrite: z.boolean().optional().default(false),
             }) }, async ({ filename, document_type, client, project, language, client_facing, category_label, subtitle, version, date, status, overwrite }) => {
               const baseName = nodePath.basename(filename.replace(/\.(md|docx)$/i, ""));
-              const mdPath = docsCategoryFilePath("deliverables", `${baseName}.md`);
-              const docxPath = docsCategoryFilePath("deliverables", `${baseName}.docx`);
+              const mdPath = await docsCategoryFilePathReal("deliverables", `${baseName}.md`);
+              const docxPath = await docsCategoryFilePathReal("deliverables", `${baseName}.docx`);
 
               const markdown = await readFileSafe(mdPath);
               if (markdown === null) {
                 return errorResult(
-                  `Documento sorgente non trovato: docs/deliverables/${baseName}.md\nCrearlo prima con knowledge_document action=write.`
+                  `Source document not found: docs/deliverables/${baseName}.md\nCreate it first with knowledge_document action=write.`
                 );
               }
               const reviewOptions = reviewOptionsFor(document_type, {
@@ -208,18 +208,18 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
                   .filter((finding) => finding.severity === "BLOCKER")
                   .map((finding) => finding.code);
                 return errorResult(
-                  `Export bloccato dal contratto ${document_type}: ${blockerCodes.join(", ")}. ` +
-                  "Correggere il documento e rieseguire knowledge_document action=review."
+                  `Export blocked by the ${document_type} contract: ${blockerCodes.join(", ")}. ` +
+                  "Fix the document and run knowledge_document action=review again."
                 );
               }
               if (!overwrite) {
                 try {
                   await fs.access(docxPath);
                   return errorResult(
-                    `Il file DOCX esiste già: docs/deliverables/${baseName}.docx\nImpostare overwrite=true per sovrascriverlo.`
+                    `DOCX file already exists: docs/deliverables/${baseName}.docx\nSet overwrite=true to replace it.`
                   );
                 } catch {
-                  // il file non esiste — procedi
+                  // The file does not exist; continue.
                 }
               }
 
@@ -244,14 +244,14 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
               await atomicWriteBuffer(docxPath, buffer);
               return textResult(
                 [
-                  `DOCX esportato: docs/deliverables/${baseName}.docx`,
-                  `Sorgente: docs/deliverables/${baseName}.md`,
-                  `Contratto: ${document_type} (${review.contractChecksPassed}/${review.contractCheckCount} check)`,
-                  `Cliente: ${client} | Progetto: ${project}`,
-                  `Versione: ${version ?? "1.0"} | Data: ${date ?? today} | Stato: ${status ?? "Draft"}`,
-                  `Diagrammi Mermaid renderizzati: ${stats.mermaidDiagramsRendered}`,
-                  `Diagrammi ASCII legacy rilevati: ${stats.legacyAsciiDiagrams}`,
-                  `Dim: ${(buffer.byteLength / 1024).toFixed(1)} KB`,
+                  `DOCX exported: docs/deliverables/${baseName}.docx`,
+                  `Source: docs/deliverables/${baseName}.md`,
+                  `Contract: ${document_type} (${review.contractChecksPassed}/${review.contractCheckCount} checks)`,
+                  `Client: ${client} | Project: ${project}`,
+                  `Version: ${version ?? "1.0"} | Date: ${date ?? today} | Status: ${status ?? "Draft"}`,
+                  `Mermaid diagrams rendered: ${stats.mermaidDiagramsRendered}`,
+                  `Legacy ASCII diagrams detected: ${stats.legacyAsciiDiagrams}`,
+                  `Size: ${(buffer.byteLength / 1024).toFixed(1)} KB`,
                 ].join("\n")
               );
             });
@@ -264,10 +264,10 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
               client_facing: z.boolean().optional(),
               include_wiki_update_plan: z.boolean().optional().default(true),
             }) }, async ({ filename, document_type, project_name, language, client_facing, include_wiki_update_plan }) => {
-              const { abs, name } = deliverablePath(filename);
+              const { abs, name } = await deliverablePath(filename);
               const content = await readFileSafe(abs);
               if (content === null) {
-                return errorResult(`Documento non trovato: docs/deliverables/${name}`);
+                return errorResult(`Document not found: docs/deliverables/${name}`);
               }
 
               const reviewOptions = reviewOptionsFor(document_type, {

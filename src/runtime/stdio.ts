@@ -3,6 +3,7 @@ import { buildServer } from "../mcp/server.js";
 import { activateWorkspace, resolveWorkspace } from "../mcp/workspace.js";
 import { canonicalizeExistingDirectory } from "../mcp/workspace-discovery.js";
 import { WorkspaceRegistry } from "../workspaces/registry.js";
+import { logger } from "../core/logger.js";
 
 export interface StdioRuntimeHandle {
   close(): Promise<void>;
@@ -23,16 +24,14 @@ export async function runStdio(options: { root?: string } = {}): Promise<StdioRu
     {
       legacy: "serve",
       onerror: (error) => {
-        process.stderr.write(`[knowledge-rail] MCP serving error: ${error.message}\n`);
+        logger.error("stdio", "mcp_serving_error", {}, error);
       },
     }
   );
 
-  process.stderr.write(
-    `[knowledge-rail] MCP stdio ready; workspace source: ${initial.source}.\n`
-  );
-  void new WorkspaceRegistry().register(initial.root, "automatic").catch(() => {
-    process.stderr.write("[knowledge-rail] Workspace catalog refresh failed; stdio remains available.\n");
+  logger.info("stdio", "ready", { workspaceSource: initial.source });
+  void new WorkspaceRegistry().register(initial.root, "automatic").catch((error: unknown) => {
+    logger.warn("stdio", "workspace_catalog_refresh_failed", {}, error);
   });
   return handle;
 }

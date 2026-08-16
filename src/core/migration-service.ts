@@ -4,6 +4,7 @@ import * as fs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { createSectionContext } from "./document-workflow.js";
 import { atomicWriteBuffer, atomicWriteText } from "./fs-service.js";
+import { withWikiFileLock } from "./lock-service.js";
 import { buildWikiGraph, graphFile, graphReportFile, invalidateWikiGraph, type GraphEdgeKind } from "./graph-index.js";
 import { clearRuntimeWikiGraphs } from "./graph-runtime.js";
 import { rebuildManifest, manifestFile, wikiMetaDir } from "./manifest-service.js";
@@ -161,7 +162,6 @@ const TEXT_SOURCE_EXTENSIONS = new Set([
   ".rst", ".yaml", ".yml", ".log",
 ]);
 const MAX_LEGACY_SOURCE_BYTES = 5 * 1024 * 1024;
-const migrationLocks = new Map<string, Promise<void>>();
 
 const STATIC_DERIVED_PATHS = [
   ".knowledge-rail/state.json",
@@ -205,19 +205,7 @@ function inferredProjectRoot(wikiRoot: string, explicit?: string): string {
 }
 
 async function withMigrationLock<T>(wikiRoot: string, operation: () => Promise<T>): Promise<T> {
-  const key = nodePath.resolve(wikiRoot);
-  const previous = migrationLocks.get(key) ?? Promise.resolve();
-  let release!: () => void;
-  const gate = new Promise<void>((resolve) => { release = resolve; });
-  const queued = previous.then(() => gate, () => gate);
-  migrationLocks.set(key, queued);
-  await previous.catch(() => undefined);
-  try {
-    return await operation();
-  } finally {
-    release();
-    if (migrationLocks.get(key) === queued) migrationLocks.delete(key);
-  }
+  return withWikiFileLock(wikiRoot, nodePath.resolve(wikiRoot), operation);
 }
 
 async function assertMigrationMetaSafe(wikiRoot: string): Promise<void> {
@@ -450,9 +438,9 @@ export async function planWikiMigration(
   const detectedVersion = await detectWikiVersion(wikiRoot);
   const blockers: string[] = [];
   if (!["4", "4.0", "current"].includes(targetVersion)) {
-    blockers.push(`Versione target non supportata: ${targetVersion}.`);
+    blockers.push(`Unsupported target version: ${targetVersion}.`);
   }
-  if (detectedVersion === "unknown") blockers.push("Versione wiki non riconosciuta o state.json non valido.");
+  if (detectedVersion === "unknown") blockers.push("Unrecognized wiki version or invalid state.json.");
   let snapshot: CanonicalSnapshot = { digest: sha256(""), files: [] };
   let records: WikiPageRecord[] = [];
   try {
@@ -464,25 +452,25 @@ export async function planWikiMigration(
   try {
     const incomplete = await incompleteMigrationRuns(wikiRoot);
     if (incomplete.length > 0) {
-      blockers.push(`Migrazioni incomplete richiedono rollback o intervento: ${incomplete.join(", ")}.`);
+      blockers.push(`Incomplete migrations require rollback or intervention: ${incomplete.join(", ")}.`);
     }
   } catch (error: unknown) {
     blockers.push(error instanceof Error ? error.message : String(error));
   }
   const steps = [
-    "pre-flight e rilevamento formato senza scritture",
-    "snapshot SHA-256 e backup completo dei Markdown canonici",
-    "backfill coverage conservativo con stato legacy_unverified",
-    "invalidazione o rebuild degli indici derivati",
-    "regressione retrieval, document context e traceability",
-    "verifica hash canonici e commit atomico dello state format 4",
+    "read-only preflight and format detection",
+    "SHA-256 snapshot and complete backup of canonical Markdown",
+    "conservative coverage backfill with legacy_unverified state",
+    "derived-index invalidation or rebuild",
+    "retrieval, document-context, and traceability regression checks",
+    "canonical-hash verification and atomic state-format 4 commit",
   ];
   const warnings: string[] = [];
   if (detectedVersion === 1 || detectedVersion === 2) {
-    warnings.push(`Il formato v${detectedVersion} è stato inferito conservativamente da SCHEMA.md.`);
+    warnings.push(`Format v${detectedVersion} was inferred conservatively from SCHEMA.md.`);
   }
   if (sourceRefs(records).size > 0) {
-    warnings.push("Le fonti legacy senza ledger verificabile restano open come legacy_unverified.");
+    warnings.push("Legacy sources without a verifiable ledger remain open as legacy_unverified.");
   }
   return {
     detectedVersion,
@@ -829,10 +817,10 @@ export async function applyWikiMigration(
 ): Promise<MigrationResult> {
   return withMigrationLock(wikiRoot, async () => {
     const plan = await planWikiMigration(wikiRoot, options.targetVersion ?? "4");
-    if (!options.backup) throw new Error("backup=true è obbligatorio per applicare la migrazione.");
+    if (!options.backup) throw new Error("backup=true is required to apply the migration.");
     if (plan.blockers.length > 0) throw new Error(plan.blockers.join(" "));
     const sourceVersion = plan.detectedVersion;
-    if (sourceVersion === "unknown") throw new Error("Versione wiki non riconosciuta.");
+    if (sourceVersion === "unknown") throw new Error("Unrecognized wiki version.");
     await assertMigrationMetaSafe(wikiRoot);
     const projectRoot = inferredProjectRoot(wikiRoot, options.projectRoot);
     const startedAt = new Date().toISOString();
@@ -965,18 +953,18 @@ export async function rollbackWikiMigration(
 
 export function formatMigrationPlan(plan: MigrationPlan): string {
   return [
-    "# Migrazione wiki",
+    "# Wiki migration",
     "",
-    `Versione rilevata: ${plan.detectedVersion}`,
-    `Versione target: ${plan.targetVersion}`,
-    `Markdown canonici: ${plan.canonicalFileCount}`,
-    `Pagine knowledge: ${plan.pageCount}`,
-    `Fonti referenziate: ${plan.sourceCount}`,
+    `Detected version: ${plan.detectedVersion}`,
+    `Target version: ${plan.targetVersion}`,
+    `Canonical Markdown files: ${plan.canonicalFileCount}`,
+    `Knowledge pages: ${plan.pageCount}`,
+    `Referenced sources: ${plan.sourceCount}`,
     "",
     "## Step",
     ...plan.steps.map((step) => `- ${step}`),
     "",
-    "## Artefatti derivati aggiornati",
+    "## Updated derived artifacts",
     ...plan.changedFiles.map((file) => `- ${file}`),
     ...(plan.warnings.length > 0 ? ["", "## Warning", ...plan.warnings.map((warning) => `- ${warning}`)] : []),
     ...(plan.blockers.length > 0 ? ["", "## Blocker", ...plan.blockers.map((blocker) => `- ${blocker}`)] : []),

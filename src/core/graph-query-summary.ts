@@ -19,7 +19,7 @@ export function graphSummaryForSeededResult(
   if (relevant.length === 0) return "";
 
   return [
-    "## Sintesi graph-based",
+    "## Graph-based summary",
     "",
     ...relevant.slice(0, 40).map(
       (edge) => `- ${labels.get(edge.from) ?? edge.from} --${edge.kind}--> ${labels.get(edge.to) ?? edge.to}`

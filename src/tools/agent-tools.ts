@@ -426,7 +426,7 @@ async function applyEvidenceSegment(args: z.output<typeof IngestSchema>): Promis
   const normalizedFilename = args.normalized_filename!;
   const segmentId = args.segment_id!;
   const content = await readFileSafe(docsCategoryFilePath("normalized", normalizedFilename));
-  if (content === null) return errorResult(`Fonte normalizzata non trovata: ${normalizedFilename}`);
+  if (content === null) return errorResult(`Normalized source not found: ${normalizedFilename}`);
   const claims = z.array(EvidenceClaimInputSchema).parse(args.claims);
   const recorded = await recordEvidenceClaims({
     wikiRoot: wikiDir(),
@@ -456,7 +456,7 @@ async function applyEvidenceSegment(args: z.output<typeof IngestSchema>): Promis
   const drafts = await applyEvidenceSynthesis({ wikiRoot: wikiDir(), claimIds });
   const index = drafts.length > 0
     ? await finalizePageMutation(drafts.map((draft) => draft.pagePath))
-    : "Nessuna pagina da aggiornare.";
+    : "No pages to update.";
   const coverage = await reconcileEvidenceCoverage(wikiDir());
   return {
     content: [{
@@ -464,7 +464,7 @@ async function applyEvidenceSegment(args: z.output<typeof IngestSchema>): Promis
       text: [
         `Segmento applicato: ${segmentId}.`,
         `Claim: ${recorded.claims.length} (${recorded.created} nuovi, ${recorded.reused} riusati).`,
-        `Risoluzioni: ${resolutions.length}; bozze validate: ${planned.length}; pagine aggiornate: ${drafts.length}.`,
+        `Resolutions: ${resolutions.length}; validated drafts: ${planned.length}; pages updated: ${drafts.length}.`,
         `Coverage: ${coverage.segmentsRecorded} segmenti rappresentati; ${coverage.segmentsPending} pending.`,
         index,
       ].join("\n"),

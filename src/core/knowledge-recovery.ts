@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { parseWikiResourceUri } from "../context/resource-uri.js";
 import { atomicWriteText } from "./fs-service.js";
+import { withWikiFileLock } from "./lock-service.js";
 import { safeResolveWithin } from "./paths.js";
 import { ensureDir, readFileSafe } from "./utils.js";
 import { hasErrors, validateWikiPageContent } from "./wiki-validation.js";
@@ -86,7 +87,6 @@ const DISCOVERY_METHODS = new Set<string>(KNOWLEDGE_RECOVERY_DISCOVERY_METHODS);
 const RESOLUTIONS = new Set<string>(KNOWLEDGE_RECOVERY_RESOLUTIONS);
 const CLAIM_ID = /^claim-[a-f0-9]{32}$/;
 const SEGMENT_ID = /^seg-[a-f0-9]{24}$/;
-const storeLocks = new Map<string, Promise<void>>();
 
 function isoTimestamp(value: string): boolean {
   return value.trim().length > 0 && !Number.isNaN(Date.parse(value));
@@ -366,15 +366,7 @@ async function mutateKnowledgeRecoveryStore<T>(
   operation: (store: KnowledgeRecoveryStore) => Promise<T> | T
 ): Promise<T> {
   const key = path.resolve(knowledgeRecoveryStoreFile(wikiRoot));
-  const previous = storeLocks.get(key) ?? Promise.resolve();
-  let release!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const queued = previous.then(() => gate, () => gate);
-  storeLocks.set(key, queued);
-  await previous.catch(() => undefined);
-  try {
+  return withWikiFileLock(wikiRoot, key, async () => {
     const store = await readKnowledgeRecoveryStore(wikiRoot);
     const result = await operation(store);
     store.updatedAt = new Date().toISOString();
@@ -382,10 +374,7 @@ async function mutateKnowledgeRecoveryStore<T>(
     await assertStorePathSafe(wikiRoot, true);
     await atomicWriteText(knowledgeRecoveryStoreFile(wikiRoot), `${JSON.stringify(store, null, 2)}\n`);
     return result;
-  } finally {
-    release();
-    if (storeLocks.get(key) === queued) storeLocks.delete(key);
-  }
+  });
 }
 
 export function knowledgeRecoveryMetrics(store: KnowledgeRecoveryStore): KnowledgeRecoveryMetrics {

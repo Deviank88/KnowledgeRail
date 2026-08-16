@@ -9,6 +9,7 @@ import {
   REGISTRY_SCHEMA_VERSION,
 } from "../product.js";
 import { buildDesktopProxyServer, loadDesktopRemoteCatalog } from "./proxy-server.js";
+import { logger } from "../core/logger.js";
 
 export interface DesktopRuntimeHandle {
   close(): Promise<void>;
@@ -83,10 +84,10 @@ export async function runDesktop(
       () => buildDesktopProxyServer(client, catalog),
       {
         legacy: "serve",
-        onerror: () => process.stderr.write("[knowledge-rail] Desktop MCP adapter request failed.\n"),
+        onerror: (error) => logger.error("desktop", "mcp_adapter_request_failed", {}, error),
       }
     );
-    process.stderr.write("[knowledge-rail] Desktop adapter connected to the local multi-workspace gateway.\n");
+    logger.info("desktop", "gateway_connected");
 
     let closing: Promise<void> | undefined;
     return {

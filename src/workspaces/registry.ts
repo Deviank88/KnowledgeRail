@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { REGISTRY_SCHEMA_VERSION } from "../product.js";
+import { atomicWriteBuffer, atomicWriteText } from "../core/fs-service.js";
 import { canonicalizeExistingDirectory } from "../mcp/workspace-discovery.js";
 import { resolveStateDirectory } from "./state-paths.js";
 
@@ -28,6 +29,16 @@ interface RegistryDocument {
   schemaVersion: number;
   workspaces: WorkspaceRegistration[];
 }
+
+interface RegistryLockRecord {
+  version: 1;
+  pid: number;
+  nonce: string;
+  processStartedAt: number;
+  acquiredAt: string;
+}
+
+const PROCESS_STARTED_AT = Math.round(Date.now() - process.uptime() * 1_000);
 
 const EMPTY_REGISTRY: RegistryDocument = {
   schemaVersion: REGISTRY_SCHEMA_VERSION,
@@ -102,13 +113,62 @@ export class WorkspaceRegistry {
     return structuredClone(EMPTY_REGISTRY);
   }
 
-  private async acquireFileLock(): Promise<fs.FileHandle> {
+  private async recoverStaleLock(): Promise<boolean> {
+    let record: RegistryLockRecord | null = null;
+    try {
+      const parsed = JSON.parse(await fs.readFile(this.lockPath, "utf8")) as Partial<RegistryLockRecord>;
+      if (parsed.version === 1 && Number.isInteger(parsed.pid) && typeof parsed.nonce === "string" &&
+          Number.isFinite(parsed.processStartedAt) && typeof parsed.acquiredAt === "string") {
+        record = parsed as RegistryLockRecord;
+      }
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+    }
+    if (!record) {
+      const stat = await fs.stat(this.lockPath).catch(() => null);
+      if (!stat || Date.now() - stat.mtimeMs < 2_000) return false;
+      await fs.unlink(this.lockPath).catch(() => undefined);
+      return true;
+    }
+    if (record.pid === process.pid && Math.abs(record.processStartedAt - PROCESS_STARTED_AT) <= 2_000) {
+      return false;
+    }
+    try {
+      process.kill(record.pid, 0);
+      return false;
+    } catch (error: unknown) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EPERM") return false;
+      if (code !== "ESRCH") throw error;
+      await fs.unlink(this.lockPath).catch(() => undefined);
+      return true;
+    }
+  }
+
+  private async acquireFileLock(): Promise<{ handle: fs.FileHandle; nonce: string }> {
     await ensurePrivateDirectory(this.directory);
     for (let attempt = 0; attempt < 40; attempt++) {
+      let handle: fs.FileHandle | undefined;
       try {
-        return await fs.open(this.lockPath, "wx", 0o600);
+        handle = await fs.open(this.lockPath, "wx", 0o600);
+        const nonce = randomBytes(16).toString("hex");
+        const record: RegistryLockRecord = {
+          version: 1,
+          pid: process.pid,
+          nonce,
+          processStartedAt: PROCESS_STARTED_AT,
+          acquiredAt: new Date().toISOString(),
+        };
+        await handle.writeFile(`${JSON.stringify(record)}\n`, "utf8");
+        await handle.sync();
+        return { handle, nonce };
       } catch (error) {
+        if (handle) {
+          await handle.close().catch(() => undefined);
+          await fs.unlink(this.lockPath).catch(() => undefined);
+        }
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        await this.recoverStaleLock();
         if (attempt === 39) throw new Error("Workspace registry is busy; retry shortly.");
         await delay(25);
       }
@@ -118,16 +178,10 @@ export class WorkspaceRegistry {
 
   private async writeDocument(document: RegistryDocument): Promise<void> {
     const serialized = `${JSON.stringify(document, null, 2)}\n`;
-    const temporary = nodePath.join(this.directory, `.workspaces.${process.pid}.${randomBytes(8).toString("hex")}.tmp`);
-    try {
-      const existing = await fs.readFile(this.filePath).catch(() => null);
-      if (existing) await fs.writeFile(this.backupPath, existing, { mode: 0o600 });
-      await fs.writeFile(temporary, serialized, { mode: 0o600 });
-      await fs.rename(temporary, this.filePath);
-      if (process.platform !== "win32") await fs.chmod(this.filePath, 0o600);
-    } finally {
-      await fs.unlink(temporary).catch(() => undefined);
-    }
+    const existing = await fs.readFile(this.filePath).catch(() => null);
+    if (existing) await atomicWriteBuffer(this.backupPath, existing);
+    await atomicWriteText(this.filePath, serialized);
+    if (process.platform !== "win32") await fs.chmod(this.filePath, 0o600);
   }
 
   private mutate<T>(operation: (document: RegistryDocument) => Promise<T>): Promise<T> {
@@ -136,8 +190,15 @@ export class WorkspaceRegistry {
       try {
         return await operation(await this.readDocument());
       } finally {
-        await lock.close().catch(() => undefined);
-        await fs.unlink(this.lockPath).catch(() => undefined);
+        await lock.handle.close().catch(() => undefined);
+        try {
+          const current = JSON.parse(await fs.readFile(this.lockPath, "utf8")) as Partial<RegistryLockRecord>;
+          if (current.pid === process.pid && current.nonce === lock.nonce) {
+            await fs.unlink(this.lockPath).catch(() => undefined);
+          }
+        } catch {
+          // Never remove a lock whose ownership cannot be proven.
+        }
       }
     };
     const result = this.inProcessQueue.then(run, run);

@@ -29,6 +29,7 @@ const perFileTimeoutMs = positiveInteger(
   process.env.TEST_FILE_TIMEOUT_MS,
   90000
 );
+const continueOnFailure = /^(1|true|yes)$/i.test(process.env.CONTINUE_ON_FAILURE ?? "");
 
 console.log(
   `Running ${testFiles.length} test files with concurrency=${concurrency} ` +
@@ -123,7 +124,7 @@ async function worker() {
 
     const result = await runTestFile(testFiles[index]);
     results[index] = result;
-    if (!printResult(result)) {
+    if (!printResult(result) && !continueOnFailure) {
       abortRequested = true;
     }
   }
@@ -137,7 +138,7 @@ const failures = results.filter(Boolean).filter((result) =>
 const skipped = testFiles.filter((_, index) => !results[index]);
 
 if (skipped.length > 0) {
-  console.error(`\nSkipped ${skipped.length} test file(s) after fail-fast:`);
+  console.error(`\nSkipped ${skipped.length} test file(s) after fail-fast (set CONTINUE_ON_FAILURE=1 to run all files):`);
   for (const file of skipped) console.error(`- ${file}`);
 }
 
