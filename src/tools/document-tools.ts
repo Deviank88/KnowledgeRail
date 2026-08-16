@@ -13,6 +13,7 @@ import {
   createSectionContext,
   buildDocumentPlan,
   DIAGRAM_MODES,
+  DOCUMENT_ASSET_MAX_BYTES,
   formatReviewResult,
   formatSectionContext,
   isDiagramRelevantSection,
@@ -119,7 +120,7 @@ function createDocumentAssetResolver(): DocumentAssetResolver {
         : { status: "invalid", detail: error instanceof Error ? error.message : String(error) };
     }
     if (!stat.isFile()) return { status: "invalid", detail: "Asset target is not a regular file." };
-    if (readLimit <= 0 || stat.size > 5 * 1024 * 1024) {
+    if (readLimit <= 0 || stat.size > DOCUMENT_ASSET_MAX_BYTES) {
       return { status: "resolved", byteLength: stat.size };
     }
 

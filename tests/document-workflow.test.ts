@@ -20,6 +20,7 @@ import {
   prepareKnowledgeUpdateDraft,
   parseTemplateSections,
   reviewDocumentStructure,
+  DOCUMENT_ASSET_MAX_BYTES,
   WIKI_PAGE_TYPES,
 } from "../src/core/document-workflow.js";
 import {
@@ -309,6 +310,187 @@ test("asset review covers image forms, ignores examples, and preserves legacy JP
   assert.equal(legacy.findings.some((finding) => finding.code === "NO_BLOCKERS"), true);
 });
 
+test("tokenized review cannot hide rendered assets behind malformed Markdown delimiters", async () => {
+  const hostileSvg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+  const resolver = async () => ({
+    status: "resolved" as const,
+    byteLength: hostileSvg.byteLength,
+    bytes: hostileSvg,
+  });
+  const variants = [
+    "Prefix `open\n\n![Flow](../assets/hostile.svg)\n\nclose`",
+    "```info`invalid\n![Flow](../assets/hostile.svg)",
+  ];
+  for (const body of variants) {
+    const review = await reviewDocumentStructure(
+      `# Asset\n\n## Diagram\n\nThis section has enough explanatory prose for review.\n\n${body}`,
+      undefined,
+      { assetResolver: resolver }
+    );
+    assert.equal(review.findings.some((finding) => finding.code === "SVG_ACTIVE_CONTENT"), true, body);
+    assert.equal(review.readyForDelivery, false, body);
+  }
+});
+
+test("tokenized review handles both fence markers and keeps nested examples inert", async () => {
+  const unclosed = await reviewDocumentStructure(
+    "# Example\n\n## Code\n\nThis section describes the incomplete example below.\n\n~~~ts\nconst active = true;"
+  );
+  assert.equal(unclosed.findings.some((finding) => finding.code === "UNCLOSED_CODE_FENCE"), true);
+
+  const nested = await reviewDocumentStructure(
+    [
+      "# Example",
+      "",
+      "## Markdown",
+      "",
+      "This section documents Mermaid source as inert Markdown syntax.",
+      "",
+      "~~~markdown",
+      "```mermaid",
+      "flowchart LR; click A \"https://evil.example\"",
+      "```",
+      "![Example](javascript:alert(1))",
+      "~~~",
+    ].join("\n")
+  );
+  assert.equal(nested.findings.some((finding) => finding.code === "MERMAID_UNSAFE"), false);
+  assert.equal(nested.findings.some((finding) => finding.code.startsWith("ASSET_")), false);
+  assert.equal(nested.readyForDelivery, true);
+});
+
+test("active Mermaid content blocks regardless of statement position or HTML wrapping", async () => {
+  const variants = [
+    'flowchart LR\n  A-->B; click A "https://evil.example"',
+    "flowchart LR\n  A[\"<img src=x onerror=alert(1)>\"] --> B",
+    "flowchart LR\n  A --> B\n  href A \"data:text/html,evil\"",
+  ];
+  for (const body of variants) {
+    const review = await reviewDocumentStructure(
+      `# Unsafe diagram\n\n## Flow\n\nThis section contains enough explanatory prose for review.\n\n\`\`\`mermaid\n${body}\n\`\`\``
+    );
+    assert.equal(review.findings.some((finding) => finding.code === "MERMAID_UNSAFE"), true, body);
+    assert.equal(review.readyForDelivery, false, body);
+  }
+});
+
+test("unsafe image and link schemes are blockers after URI normalization", async () => {
+  for (const scheme of [
+    "javascript:alert(1)",
+    "vbscript:msgbox(1)",
+    "data:image/svg+xml,evil",
+    "file:///tmp/private.png",
+    "java&#x73;cript:alert(1)",
+    "java&#9;script:alert(1)",
+  ]) {
+    const image = await reviewDocumentStructure(
+      `# Unsafe image\n\n## Evidence\n\nThis section contains enough explanatory prose.\n\n<img src="${scheme}" alt="unsafe">`
+    );
+    assert.equal(image.findings.some((finding) => finding.code === "ASSET_UNSAFE_URI"), true, scheme);
+    assert.equal(image.findings.some((finding) => finding.code === "RAW_HTML_UNSAFE"), true, scheme);
+    assert.equal(image.readyForDelivery, false, scheme);
+  }
+
+  const link = await reviewDocumentStructure(
+    "# Unsafe link\n\n## Evidence\n\nThis section contains an unsafe [destination](javascript:alert(1))."
+  );
+  assert.equal(link.findings.some((finding) => finding.code === "LINK_UNSAFE_URI"), true);
+  assert.equal(link.readyForDelivery, false);
+});
+
+test("asset resolution uses bounded concurrency and deterministic finding order", async () => {
+  let active = 0;
+  let maximumActive = 0;
+  const targets = Array.from({ length: 7 }, (_value, index) => `![Asset ${index}](../assets/${index}.svg)`).join("\n");
+  const review = await reviewDocumentStructure(
+    `# Assets\n\n## Diagram\n\nThis section references a deterministic set of missing assets.\n\n${targets}`,
+    undefined,
+    {
+      assetResolver: async () => {
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        active -= 1;
+        return { status: "missing" };
+      },
+    }
+  );
+  assert.equal(maximumActive, 4);
+  assert.deepEqual(
+    review.findings.filter((finding) => finding.code === "ASSET_MISSING").map((finding) => finding.evidence),
+    Array.from({ length: 7 }, (_value, index) => `../assets/${index}.svg`)
+  );
+});
+
+test("extensionless SVG assets are fully inspected and oversized assets stop before signature checks", async () => {
+  const hostileSvg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+  let extensionlessReadLimit = -1;
+  const extensionless = await reviewDocumentStructure(
+    "# Asset\n\n## Diagram\n\nThis section contains a verified diagram asset.\n\n![Flow](../assets/diagram)",
+    undefined,
+    {
+      assetResolver: async ({ readLimit }) => {
+        extensionlessReadLimit = readLimit;
+        return { status: "resolved", byteLength: hostileSvg.byteLength, bytes: hostileSvg };
+      },
+    }
+  );
+  assert.equal(extensionlessReadLimit, DOCUMENT_ASSET_MAX_BYTES);
+  assert.equal(extensionless.findings.some((finding) => finding.code === "SVG_ACTIVE_CONTENT"), true);
+  assert.equal(extensionless.readyForDelivery, false);
+
+  const oversized = await reviewDocumentStructure(
+    "# Asset\n\n## Diagram\n\nThis section contains a verified diagram asset.\n\n![Flow](../assets/huge.png)",
+    undefined,
+    { assetResolver: async () => ({ status: "resolved", byteLength: DOCUMENT_ASSET_MAX_BYTES + 1 }) }
+  );
+  assert.equal(oversized.findings.some((finding) => finding.code === "ASSET_TOO_LARGE"), true);
+  assert.equal(oversized.findings.some((finding) => finding.code === "ASSET_SIGNATURE_INVALID"), false);
+});
+
+test("frontmatter cannot add headings or satisfy body content contracts", async () => {
+  const review = await reviewDocumentStructure(
+    [
+      "---",
+      "# forged title",
+      "note: acceptance criteria",
+      "---",
+      "# Functional specification",
+      "",
+      "## Scope",
+      "",
+      "This body section explains the verified behavior but intentionally omits the required outcome phrase.",
+    ].join("\n"),
+    undefined,
+    { documentType: "functional_spec", clientFacing: false }
+  );
+  assert.equal(review.findings.some((finding) => finding.code === "DOCUMENT_TITLE_CONTRACT"), false);
+  assert.equal(review.findings.some((finding) => finding.code === "CONTRACT_ACCEPTANCE_CRITERIA"), true);
+  assert.equal(review.readyForDelivery, false);
+});
+
+test("placeholder review scans destinations and accepts resolved shortcut references", async () => {
+  const unresolvedDestination = await reviewDocumentStructure(
+    "# Document\n\n## Links\n\nThis section links to the unresolved [documentation]({{DOCS_URL}})."
+  );
+  assert.equal(unresolvedDestination.findings.some((finding) => finding.code === "UNRESOLVED_PLACEHOLDER"), true);
+  assert.equal(unresolvedDestination.readyForDelivery, false);
+
+  const unresolvedImageDestination = await reviewDocumentStructure(
+    "# Document\n\n## Image\n\nThis section contains an unresolved image destination.\n\n![Diagram]({{ASSET_URL}})"
+  );
+  assert.equal(unresolvedImageDestination.findings.some((finding) => finding.code === "UNRESOLVED_PLACEHOLDER"), true);
+
+  const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+  const shortcut = await reviewDocumentStructure(
+    "# Document\n\n## Diagram\n\nThis section contains enough verified explanatory prose.\n\n![System diagram]\n\n[System diagram]: ../assets/flow.svg",
+    undefined,
+    { assetResolver: async () => ({ status: "resolved", byteLength: svg.byteLength, bytes: svg }) }
+  );
+  assert.equal(shortcut.findings.some((finding) => finding.code === "UNRESOLVED_PLACEHOLDER"), false);
+  assert.equal(shortcut.readyForDelivery, true);
+});
+
 test("custom contract verdicts are profile-name independent", async () => {
   const markdown = "# Notes\n\n## Outcome\n\nShort.";
   const generic = await reviewDocumentStructure(markdown, undefined, { documentType: "custom" });
@@ -316,6 +498,13 @@ test("custom contract verdicts are profile-name independent", async () => {
   assert.deepEqual(named.findings, generic.findings);
   assert.equal(named.readyForDelivery, generic.readyForDelivery);
   assert.equal(documentContract("meeting_notes").kind, "custom");
+  assert.equal(documentContract("functional_spec").kind, "preset");
+  assert.equal(generic.findings.find((finding) => finding.code === "WEAK_SECTIONS")?.severity, "WARNING");
+  const weakPreset = await reviewDocumentStructure(markdown, undefined, {
+    documentType: "functional_spec",
+    clientFacing: false,
+  });
+  assert.equal(weakPreset.findings.find((finding) => finding.code === "WEAK_SECTIONS")?.severity, "BLOCKER");
   assert.deepEqual(sectionEvidencePlan("constructor", "Miscellaneous"), sectionEvidencePlan("custom", "Miscellaneous"));
 });
 

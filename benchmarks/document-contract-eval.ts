@@ -40,7 +40,7 @@ function validDocument(documentType: DocumentType, omitLastSection = false): str
       `## ${section.title}`,
       "",
       index === 0
-        ? `${CONTRACT_SIGNALS[documentType]} This section records concrete, evidence-backed information and a verifiable outcome for the intended audience.`
+        ? `${CONTRACT_SIGNALS[documentType]}\n\nThis section records concrete, evidence-backed information and a verifiable outcome for the intended audience.`
         : "This section records concrete, evidence-backed information, its operational implications, and a verifiable outcome for the intended audience.",
       "",
     ]),
@@ -50,6 +50,7 @@ function validDocument(documentType: DocumentType, omitLastSection = false): str
 export interface DocumentContractEvaluation {
   documentTypes: DocumentType[];
   assetSecurityRejected: boolean;
+  securityCases: Array<{ name: string; rejected: boolean; blockerCodes: string[] }>;
   metrics: {
     ContractRegistryCoverage: number;
     TemplateCoverage: number;
@@ -95,20 +96,73 @@ export async function evaluateDocumentContracts(): Promise<DocumentContractEvalu
     };
   }));
   const hostileSvg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
-  const hostileAssetReview = await reviewDocumentStructure(
-    "# Asset security fixture\n\n## Diagram\n\nThis section references a caller-owned asset for security validation.\n\n![Flow](../assets/hostile.svg)",
-    undefined,
+  const hostileResolver = async () => ({
+    status: "resolved" as const,
+    byteLength: hostileSvg.byteLength,
+    bytes: hostileSvg,
+  });
+  const securityFixtures = [
     {
-      documentType: "custom",
-      assetResolver: async () => ({
-        status: "resolved",
-        byteLength: hostileSvg.byteLength,
-        bytes: hostileSvg,
-      }),
-    }
-  );
-  const assetSecurityRejected = !hostileAssetReview.readyForDelivery &&
-    hostileAssetReview.findings.some((finding) => finding.code === "SVG_ACTIVE_CONTENT");
+      name: "active-svg",
+      markdown: "# Asset security fixture\n\n## Diagram\n\nThis section references a caller-owned asset for security validation.\n\n![Flow](../assets/hostile.svg)",
+      options: { documentType: "custom", assetResolver: hostileResolver },
+      expectedCode: "SVG_ACTIVE_CONTENT",
+    },
+    {
+      name: "inline-mermaid-click",
+      markdown: '# Mermaid security fixture\n\n## Diagram\n\nThis section contains a hostile active directive.\n\n```mermaid\nflowchart LR\nA-->B; click A "https://evil.example"\n```',
+      options: { documentType: "custom" },
+      expectedCode: "MERMAID_UNSAFE",
+    },
+    {
+      name: "active-image-scheme",
+      markdown: "# URI security fixture\n\n## Diagram\n\nThis section contains a hostile image destination.\n\n![Flow](javascript:alert(1))",
+      options: { documentType: "custom" },
+      expectedCode: "ASSET_UNSAFE_URI",
+    },
+    {
+      name: "cross-paragraph-backticks",
+      markdown: "# Tokenizer security fixture\n\n## Diagram\n\nPrefix `open\n\n![Flow](../assets/hostile.svg)\n\nclose`",
+      options: { documentType: "custom", assetResolver: hostileResolver },
+      expectedCode: "SVG_ACTIVE_CONTENT",
+    },
+    {
+      name: "invalid-fence-info",
+      markdown: "# Tokenizer security fixture\n\n## Diagram\n\n```info`invalid\n![Flow](../assets/hostile.svg)",
+      options: { documentType: "custom", assetResolver: hostileResolver },
+      expectedCode: "SVG_ACTIVE_CONTENT",
+    },
+    {
+      name: "extensionless-svg",
+      markdown: "# Asset security fixture\n\n## Diagram\n\nThis section references an extensionless hostile asset.\n\n![Flow](../assets/hostile)",
+      options: { documentType: "custom", assetResolver: hostileResolver },
+      expectedCode: "SVG_ACTIVE_CONTENT",
+    },
+    {
+      name: "frontmatter-contract-bypass",
+      markdown: "---\nnote: acceptance criteria\n---\n# Functional specification\n\n## Scope\n\nThis body intentionally omits the required contractual outcome.",
+      options: { documentType: "functional_spec", clientFacing: false },
+      expectedCode: "CONTRACT_ACCEPTANCE_CRITERIA",
+    },
+    {
+      name: "mermaid-active-html",
+      markdown: '# Mermaid security fixture\n\n## Diagram\n\nThis section contains a hostile node label.\n\n```mermaid\nflowchart LR\nA["<img src=x onerror=alert(1)>"] --> B\n```',
+      options: { documentType: "custom" },
+      expectedCode: "MERMAID_UNSAFE",
+    },
+  ] as const;
+  const securityCases = await Promise.all(securityFixtures.map(async (fixture) => {
+    const review = await reviewDocumentStructure(fixture.markdown, undefined, fixture.options);
+    const blockerCodes = review.findings
+      .filter((finding) => finding.severity === "BLOCKER")
+      .map((finding) => finding.code);
+    return {
+      name: fixture.name,
+      rejected: !review.readyForDelivery && blockerCodes.includes(fixture.expectedCode),
+      blockerCodes,
+    };
+  }));
+  const assetSecurityRejected = securityCases.find((result) => result.name === "active-svg")?.rejected ?? false;
   const typedDocuments = DOCUMENT_TYPES.filter((type) => type !== "custom");
   const metrics = {
     ContractRegistryCoverage: ratio(
@@ -133,8 +187,8 @@ export async function evaluateDocumentContracts(): Promise<DocumentContractEvalu
     ),
     DeliveryReadinessAccuracy: ratio(
       results.filter((result) => result.validReadyForDelivery && result.invalidRejected).length +
-        (assetSecurityRejected ? 1 : 0),
-      results.length + 1
+        securityCases.filter((result) => result.rejected).length,
+      results.length + securityCases.length
     ),
   };
   process.stdout.write(
@@ -142,7 +196,7 @@ export async function evaluateDocumentContracts(): Promise<DocumentContractEvalu
     `templates=${metrics.TemplateCoverage.toFixed(4)} personas=${metrics.PersonaCoverage.toFixed(4)} ` +
     `valid=${metrics.ValidDocumentAcceptanceRate.toFixed(4)} invalid=${metrics.InvalidDocumentRejectionRate.toFixed(4)}\n`
   );
-  return { documentTypes: [...DOCUMENT_TYPES], assetSecurityRejected, metrics, results };
+  return { documentTypes: [...DOCUMENT_TYPES], assetSecurityRejected, securityCases, metrics, results };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

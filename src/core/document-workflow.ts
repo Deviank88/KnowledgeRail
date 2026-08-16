@@ -1,3 +1,5 @@
+import * as nodePath from "node:path";
+import { marked, type Token, type Tokens } from "marked";
 import { documentPersona, documentTemplate } from "../config/templates.js";
 import {
   documentContract,
@@ -18,7 +20,6 @@ import { readSourceCoverageLedger, sourceCoverageMetrics } from "./ingestion/cov
 import type { WikiPageRecord } from "./page-record.js";
 import { getWikiPageRecords } from "./retrieval-index.js";
 import { tokenizeSearchText, type RetrievalProfile } from "./text-analysis.js";
-import { stripFrontmatter } from "./utils.js";
 import { WIKI_PAGE_TYPES, type WikiPageType } from "./wiki-validation.js";
 
 export { DOCUMENT_TYPES, type DocumentType } from "../config/document-contracts.js";
@@ -198,6 +199,8 @@ export type DocumentAssetResolver = (
   request: DocumentAssetRequest
 ) => Promise<DocumentAssetResolution>;
 
+export const DOCUMENT_ASSET_MAX_BYTES = 5 * 1024 * 1024;
+
 const DIAGRAM_RELEVANT_SECTION =
   /architett|architect|component|system context|data|entit|schema|fluss|process|workflow|sequence|integraz|integrat|interface|api|deployment|infrastrutt|infrastruct|topolog|dipenden|dependenc/i;
 
@@ -277,29 +280,6 @@ function isTemplatePlaceholder(text: string): boolean {
   if (trimmed.length < 3) return false;
   if (/^https?:\/\//i.test(trimmed)) return false;
   return /[A-Za-zÀ-ÿ]/.test(trimmed);
-}
-
-function markdownHeadings(markdown: string): Array<{ level: number; title: string; index: number }> {
-  const headings: Array<{ level: number; title: string; index: number }> = [];
-  const headingRe = /^(#{1,6})\s+(.+)$/gm;
-  let match: RegExpExecArray | null;
-  while ((match = headingRe.exec(markdown)) !== null) {
-    headings.push({
-      level: match[1].length,
-      title: match[2].trim(),
-      index: match.index,
-    });
-  }
-  return headings;
-}
-
-function sectionBody(markdown: string, heading: { level: number; index: number }): string {
-  const headingLineEnd = markdown.indexOf("\n", heading.index);
-  const bodyStart = headingLineEnd === -1 ? markdown.length : headingLineEnd + 1;
-  const nextHeadingRe = new RegExp(`^#{1,${heading.level}}\\s+`, "gm");
-  nextHeadingRe.lastIndex = bodyStart;
-  const next = nextHeadingRe.exec(markdown);
-  return markdown.slice(bodyStart, next ? next.index : markdown.length).trim();
 }
 
 export async function collectWikiInventory(
@@ -902,85 +882,188 @@ export function formatSectionContext(
   return `${bounded}${marker}`;
 }
 
-function withoutFencedCode(markdown: string): string {
-  const output: string[] = [];
-  let fence: { marker: "`" | "~"; length: number } | null = null;
-  for (const line of markdown.split(/\r?\n/)) {
-    if (fence) {
-      const close = line.match(/^[ \t]{0,3}(`{3,}|~{3,})[ \t]*$/);
-      if (close && close[1][0] === fence.marker && close[1].length >= fence.length) fence = null;
-      output.push("");
-      continue;
+interface DeliverableHeading {
+  level: number;
+  title: string;
+  blockIndex: number;
+}
+
+interface DeliverableCodeBlock {
+  raw: string;
+  language: string;
+  text: string;
+  fenced: boolean;
+  closed: boolean;
+}
+
+interface TokenizedDeliverable {
+  body: string;
+  frontmatter?: string;
+  tokens: Token[];
+  headings: DeliverableHeading[];
+  codeBlocks: DeliverableCodeBlock[];
+  images: string[];
+  links: string[];
+  rawHtml: string[];
+  proseFragments: string[];
+}
+
+function splitLeadingFrontmatter(markdown: string): { body: string; frontmatter?: string } {
+  const firstLineEnd = markdown.indexOf("\n");
+  const firstLine = (firstLineEnd === -1 ? markdown : markdown.slice(0, firstLineEnd)).replace(/^\uFEFF/, "").replace(/\r$/, "");
+  if (!/^[ \t]*---[ \t]*$/.test(firstLine)) return { body: markdown };
+
+  let lineStart = firstLineEnd === -1 ? markdown.length : firstLineEnd + 1;
+  while (lineStart < markdown.length) {
+    const lineEnd = markdown.indexOf("\n", lineStart);
+    const nextEnd = lineEnd === -1 ? markdown.length : lineEnd;
+    const line = markdown.slice(lineStart, nextEnd).replace(/\r$/, "");
+    if (/^[ \t]*(?:---|\.\.\.)[ \t]*$/.test(line)) {
+      const bodyStart = lineEnd === -1 ? markdown.length : lineEnd + 1;
+      return {
+        frontmatter: markdown.slice(firstLineEnd === -1 ? markdown.length : firstLineEnd + 1, lineStart),
+        body: markdown.slice(bodyStart),
+      };
     }
-    const open = line.match(/^[ \t]{0,3}(`{3,}|~{3,})(.*)$/);
-    if (open) {
-      fence = { marker: open[1][0] as "`" | "~", length: open[1].length };
-      output.push("");
-      continue;
+    if (lineEnd === -1) break;
+    lineStart = lineEnd + 1;
+  }
+  return { body: markdown };
+}
+
+function tokenChildren(token: Token): Token[] {
+  if (token.type === "table") {
+    const table = token as Tokens.Table;
+    return [...table.header.flatMap((cell) => cell.tokens), ...table.rows.flatMap((row) => row.flatMap((cell) => cell.tokens))];
+  }
+  if (token.type === "list") return (token as Tokens.List).items;
+  const children = (token as { tokens?: Token[] }).tokens;
+  return children ?? [];
+}
+
+function tokenPlainText(tokens: readonly Token[]): string {
+  const fragments: string[] = [];
+  const visit = (token: Token): void => {
+    if (token.type === "code" || token.type === "codespan" || token.type === "def") return;
+    if (token.type === "html") {
+      fragments.push((token as Tokens.HTML).text);
+      return;
     }
-    output.push(line);
+    const children = tokenChildren(token);
+    if (children.length > 0) {
+      children.forEach(visit);
+      return;
+    }
+    if ("text" in token && typeof token.text === "string") fragments.push(token.text);
+  };
+  tokens.forEach(visit);
+  return fragments.join("\n");
+}
+
+function fencedCodeClosed(raw: string): boolean {
+  const opening = raw.match(/^[ \t]{0,3}(`{3,}|~{3,})[^\n]*(?:\n|$)/);
+  if (!opening) return true;
+  const marker = opening[1][0];
+  const minimum = opening[1].length;
+  const lines = raw.slice(opening[0].length).split(/\r?\n/);
+  return lines.some((line) => {
+    const close = line.match(/^[ \t]{0,3}(`{3,}|~{3,})[ \t]*$/);
+    return Boolean(close && close[1][0] === marker && close[1].length >= minimum);
+  });
+}
+
+function htmlAttributeValues(html: string, element: string, attribute: string): string[] {
+  const values: string[] = [];
+  const elementRe = new RegExp(`<${element}\\b[^>]*>`, "gi");
+  const attributeRe = new RegExp(`\\b${attribute}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>\\\u0060]+))`, "i");
+  let elementMatch: RegExpExecArray | null;
+  while ((elementMatch = elementRe.exec(html)) !== null) {
+    const attributeMatch = attributeRe.exec(elementMatch[0]);
+    const value = attributeMatch?.[1] ?? attributeMatch?.[2] ?? attributeMatch?.[3];
+    if (value) values.push(value);
   }
-  return output.join("\n");
+  return values;
 }
 
-function withoutInlineCode(markdown: string): string {
-  return markdown.replace(/(`+)[\s\S]*?\1/g, "");
-}
-
-function withoutCommonMarkAutolinks(markdown: string): string {
-  return markdown.replace(
-    /<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\s]*|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+)>/g,
-    ""
-  );
-}
-
-function normalizeReferenceLabel(label: string): string {
-  return label.trim().replace(/\s+/g, " ").toLowerCase();
-}
-
-function inlineImageDestination(raw: string): string | null {
-  const target = raw.trim();
-  if (target.startsWith("<")) {
-    const end = target.indexOf(">");
-    return end > 1 ? target.slice(1, end) : null;
+function htmlUriAttributeValues(html: string): string[] {
+  const values: string[] = [];
+  const attributeRe = /\b(?:href|src|xlink:href|action|formaction)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi;
+  let match: RegExpExecArray | null;
+  while ((match = attributeRe.exec(html)) !== null) {
+    const value = match[1] ?? match[2] ?? match[3];
+    if (value) values.push(value);
   }
-  return target.split(/\s+(?=["'])/, 1)[0] || null;
+  return values;
+}
+
+function tokenizeDeliverable(markdown: string): TokenizedDeliverable {
+  const { body, frontmatter } = splitLeadingFrontmatter(markdown);
+  const tokens = marked.lexer(body, { gfm: true, pedantic: false }) as Token[];
+  const headings: DeliverableHeading[] = [];
+  const codeBlocks: DeliverableCodeBlock[] = [];
+  const images: string[] = [];
+  const links: string[] = [];
+  const rawHtml: string[] = [];
+  const proseFragments: string[] = [];
+
+  tokens.forEach((token, blockIndex) => {
+    if (token.type === "heading") {
+      const heading = token as Tokens.Heading;
+      headings.push({ level: heading.depth, title: tokenPlainText(heading.tokens).trim() || heading.text.trim(), blockIndex });
+    }
+  });
+
+  const visit = (token: Token): void => {
+    if (token.type === "code") {
+      const code = token as Tokens.Code;
+      const fenced = code.codeBlockStyle !== "indented" && /^[ \t]{0,3}(?:`{3,}|~{3,})/.test(code.raw);
+      codeBlocks.push({
+        raw: code.raw,
+        language: (code.lang ?? "").trim().split(/\s+/, 1)[0].toLowerCase(),
+        text: code.text,
+        fenced,
+        closed: !fenced || fencedCodeClosed(code.raw),
+      });
+      return;
+    }
+    if (token.type === "codespan" || token.type === "def") return;
+    if (token.type === "image") {
+      const image = token as Tokens.Image;
+      images.push(image.href);
+    } else if (token.type === "link") {
+      links.push((token as Tokens.Link).href);
+    } else if (token.type === "html") {
+      const html = (token as Tokens.HTML).text;
+      rawHtml.push(html);
+      images.push(...htmlAttributeValues(html, "img", "src"));
+      proseFragments.push(html);
+      return;
+    }
+
+    const children = tokenChildren(token);
+    if (children.length > 0) {
+      children.forEach(visit);
+      return;
+    }
+    if ("text" in token && typeof token.text === "string") proseFragments.push(token.text);
+  };
+  tokens.forEach(visit);
+
+  return {
+    body,
+    frontmatter,
+    tokens,
+    headings,
+    codeBlocks,
+    images: [...new Set(images)],
+    links: [...new Set(links)],
+    rawHtml,
+    proseFragments,
+  };
 }
 
 export function markdownImageTargets(markdown: string): string[] {
-  const scan = withoutInlineCode(withoutFencedCode(stripFrontmatter(markdown)));
-  const targets: string[] = [];
-  const references = new Map<string, string>();
-  const definitionRe = /^[ \t]{0,3}\[([^\]\n]+)\]:[ \t]*(?:<([^>\n]+)>|(\S+))/gm;
-  let match: RegExpExecArray | null;
-  while ((match = definitionRe.exec(scan)) !== null) {
-    references.set(normalizeReferenceLabel(match[1]), match[2] ?? match[3]);
-  }
-
-  const inlineRe = /!\[[^\]]*\]\(([^)\n]+)\)/g;
-  while ((match = inlineRe.exec(scan)) !== null) {
-    const target = inlineImageDestination(match[1]);
-    if (target) targets.push(target);
-  }
-
-  const referenceRe = /!\[([^\]]*)\]\[([^\]]*)\]/g;
-  while ((match = referenceRe.exec(scan)) !== null) {
-    const target = references.get(normalizeReferenceLabel(match[2] || match[1]));
-    if (target) targets.push(target);
-  }
-
-  const shortcutRe = /!\[([^\]\n]+)\](?![[(])/g;
-  while ((match = shortcutRe.exec(scan)) !== null) {
-    const target = references.get(normalizeReferenceLabel(match[1]));
-    if (target) targets.push(target);
-  }
-
-  const htmlImageRe = /<img\b[^>]*\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))[^>]*>/gi;
-  while ((match = htmlImageRe.exec(scan)) !== null) {
-    const target = match[1] ?? match[2] ?? match[3];
-    if (target) targets.push(target);
-  }
-  return [...new Set(targets)];
+  return tokenizeDeliverable(markdown).images;
 }
 
 function assetFinding(
@@ -992,143 +1075,176 @@ function assetFinding(
   return { severity, code, message, evidence };
 }
 
-async function validateDocumentAssets(
-  markdown: string,
+function decodeHtmlUriCharacters(value: string): string {
+  const codePoint = (raw: string, radix: number, original: string): string => {
+    const parsed = Number.parseInt(raw, radix);
+    return Number.isFinite(parsed) && parsed >= 0 && parsed <= 0x10ffff
+      ? String.fromCodePoint(parsed)
+      : original;
+  };
+  return value
+    .replace(/&#(\d+);?/g, (match, code: string) => codePoint(code, 10, match))
+    .replace(/&#x([\da-f]+);?/gi, (match, code: string) => codePoint(code, 16, match))
+    .replace(/&(colon|tab|newline);/gi, (_match, name: string) => name.toLowerCase() === "colon" ? ":" : name.toLowerCase() === "tab" ? "\t" : "\n");
+}
+
+function normalizedUri(value: string): string {
+  return decodeHtmlUriCharacters(value).trim().replace(/[\u0000-\u0020\u007f]+/g, "").toLowerCase();
+}
+
+const UNSAFE_URI_SCHEMES = new Set(["javascript", "vbscript", "data", "file", "knowledge-rail"]);
+
+function uriScheme(value: string): string | undefined {
+  return normalizedUri(value).match(/^([a-z][a-z0-9+.-]*):/)?.[1];
+}
+
+function svgFindings(svg: string, rawTarget: string): ReviewFinding[] {
+  if (!/^\uFEFF?\s*(?:<\?xml[^>]*>\s*)?<svg\b/i.test(svg)) return [];
+  const decodedSvg = decodeHtmlUriCharacters(svg);
+  const activeMarkup = /<!DOCTYPE|<!ENTITY|<script\b|<foreignObject\b|<(?:iframe|object|embed)\b|\son[a-z]+\s*=|@import|url\s*\(/i.test(decodedSvg);
+  const activeReference = htmlUriAttributeValues(decodedSvg).some((value) => {
+    const scheme = uriScheme(value);
+    return normalizedUri(value).startsWith("//") || scheme === "http" || scheme === "https" || Boolean(scheme && UNSAFE_URI_SCHEMES.has(scheme));
+  });
+  return activeMarkup || activeReference
+    ? [assetFinding("BLOCKER", "SVG_ACTIVE_CONTENT", "The referenced SVG contains active or externally loaded content.", rawTarget)]
+    : [];
+}
+
+async function validateDocumentAsset(
+  rawTarget: string,
   resolver?: DocumentAssetResolver
 ): Promise<ReviewFinding[]> {
-  const targets = markdownImageTargets(markdown);
-  if (targets.length === 0) return [];
+  const scheme = uriScheme(rawTarget);
+  if (scheme === "http" || scheme === "https") {
+    return [assetFinding("WARNING", "ASSET_REMOTE", "Remote images reduce offline portability and are not content-validated.", rawTarget)];
+  }
+  if (scheme && UNSAFE_URI_SCHEMES.has(scheme)) {
+    return [assetFinding("BLOCKER", "ASSET_UNSAFE_URI", "Image references must not use active, embedded, filesystem, or private resource URIs.", rawTarget)];
+  }
+  if (scheme || rawTarget.startsWith("#")) {
+    return [assetFinding("WARNING", "ASSET_NON_PORTABLE", "The image reference is not a portable workspace-relative asset.", rawTarget)];
+  }
+  if (rawTarget.includes("\\")) {
+    return [assetFinding("BLOCKER", "ASSET_PATH_INVALID", "Image paths must use portable forward slashes.", rawTarget)];
+  }
 
+  let target: string;
+  try {
+    target = decodeURIComponent(rawTarget.split(/[?#]/, 1)[0]);
+  } catch {
+    return [assetFinding("BLOCKER", "ASSET_PATH_INVALID", "The image path contains invalid URL encoding.", rawTarget)];
+  }
+  if (!target.startsWith("../assets/")) {
+    return [assetFinding("BLOCKER", "ASSET_PATH_INVALID", "Deliverable images must remain below docs/assets.", rawTarget)];
+  }
+
+  const relativePath = target.slice("../assets/".length);
+  const extension = nodePath.extname(relativePath).toLowerCase();
+  const validatedFormat = extension === ".svg" || extension === ".png";
+  const sniffExtensionless = extension === "";
   const findings: ReviewFinding[] = [];
-  for (const rawTarget of targets) {
-    if (/^https?:/i.test(rawTarget)) {
-      findings.push(assetFinding(
-        "WARNING",
-        "ASSET_REMOTE",
-        "Remote images reduce offline portability and are not content-validated.",
-        rawTarget
-      ));
-      continue;
-    }
-    if (/^(?:data:|file:|knowledge-rail:)/i.test(rawTarget)) {
-      findings.push(assetFinding(
-        "BLOCKER",
-        "ASSET_UNSAFE_URI",
-        "Image references must not use embedded, filesystem, or private resource URIs.",
-        rawTarget
-      ));
-      continue;
-    }
-    if (/^[A-Za-z][A-Za-z0-9+.-]*:|^#/i.test(rawTarget)) {
-      findings.push(assetFinding(
-        "WARNING",
-        "ASSET_NON_PORTABLE",
-        "The image reference is not a portable workspace-relative asset.",
-        rawTarget
-      ));
-      continue;
-    }
-    if (rawTarget.includes("\\")) {
-      findings.push(assetFinding("BLOCKER", "ASSET_PATH_INVALID", "Image paths must use portable forward slashes.", rawTarget));
-      continue;
-    }
+  if (!validatedFormat) {
+    findings.push(assetFinding(
+      "WARNING",
+      "ASSET_TYPE_UNSUPPORTED",
+      sniffExtensionless
+        ? "The extensionless local image is content-sniffed for SVG safety but has no portable declared format."
+        : "Only SVG and PNG assets receive content validation; this local image is checked for existence and size only.",
+      rawTarget
+    ));
+  }
+  if (!resolver) {
+    findings.push(assetFinding(
+      validatedFormat || sniffExtensionless ? "BLOCKER" : "WARNING",
+      "ASSET_UNVERIFIED",
+      "The local image could not be resolved for review.",
+      rawTarget
+    ));
+    return findings;
+  }
 
-    let target: string;
-    try {
-      target = decodeURIComponent(rawTarget.split(/[?#]/, 1)[0]);
-    } catch {
-      findings.push(assetFinding("BLOCKER", "ASSET_PATH_INVALID", "The image path contains invalid URL encoding.", rawTarget));
-      continue;
-    }
-    if (!target.startsWith("../assets/")) {
-      findings.push(assetFinding(
-        "BLOCKER",
-        "ASSET_PATH_INVALID",
-        "Deliverable images must remain below docs/assets.",
-        rawTarget
-      ));
-      continue;
-    }
+  let resolution: DocumentAssetResolution;
+  try {
+    resolution = await resolver({
+      relativePath,
+      readLimit: extension === ".png" ? 8 : extension === ".svg" || sniffExtensionless ? DOCUMENT_ASSET_MAX_BYTES : 0,
+    });
+  } catch (error: unknown) {
+    resolution = { status: "invalid", detail: error instanceof Error ? error.message : String(error) };
+  }
+  if (resolution.status !== "resolved") {
+    const isMissing = resolution.status === "missing";
+    findings.push(assetFinding(
+      isMissing && !validatedFormat && !sniffExtensionless ? "WARNING" : "BLOCKER",
+      isMissing ? "ASSET_MISSING" : resolution.status === "escape" ? "ASSET_PATH_ESCAPE" : "ASSET_PATH_INVALID",
+      isMissing
+        ? "A referenced local image does not exist."
+        : resolution.status === "escape"
+          ? "The image path resolves outside docs/assets."
+          : "The image path could not be resolved safely.",
+      resolution.detail ?? rawTarget
+    ));
+    return findings;
+  }
 
-    const relativePath = target.slice("../assets/".length);
-    const extension = target.slice(target.lastIndexOf(".")).toLowerCase();
-    const validatedFormat = extension === ".svg" || extension === ".png";
-    if (!validatedFormat) {
-      findings.push(assetFinding(
-        "WARNING",
-        "ASSET_TYPE_UNSUPPORTED",
-        "Only SVG and PNG assets receive content validation; this local image is checked for existence and size only.",
-        rawTarget
-      ));
+  if (resolution.byteLength > DOCUMENT_ASSET_MAX_BYTES) {
+    findings.push(assetFinding(
+      validatedFormat || sniffExtensionless ? "BLOCKER" : "WARNING",
+      "ASSET_TOO_LARGE",
+      "A referenced image exceeds the 5 MB review limit.",
+      rawTarget
+    ));
+    return findings;
+  }
+  if (extension === ".png") {
+    const signature = Buffer.from(resolution.bytes ?? []).subarray(0, 8).toString("hex");
+    if (signature !== "89504e470d0a1a0a") {
+      findings.push(assetFinding("BLOCKER", "ASSET_SIGNATURE_INVALID", "The referenced PNG has an invalid signature.", rawTarget));
     }
-    if (!resolver) {
-      findings.push(assetFinding(
-        validatedFormat ? "BLOCKER" : "WARNING",
-        "ASSET_UNVERIFIED",
-        "The local image could not be resolved for review.",
-        rawTarget
-      ));
-      continue;
-    }
+    return findings;
+  }
 
-    let resolution: DocumentAssetResolution;
-    try {
-      resolution = await resolver({
-        relativePath,
-        readLimit: extension === ".svg" ? 5 * 1024 * 1024 + 1 : extension === ".png" ? 8 : 0,
-      });
-    } catch (error: unknown) {
-      resolution = { status: "invalid", detail: error instanceof Error ? error.message : String(error) };
+  if (extension === ".svg") {
+    const svg = Buffer.from(resolution.bytes ?? []).toString("utf8");
+    if (!/^\uFEFF?\s*(?:<\?xml[^>]*>\s*)?<svg\b/i.test(svg)) {
+      findings.push(assetFinding("BLOCKER", "ASSET_SIGNATURE_INVALID", "The referenced SVG does not start with an SVG element.", rawTarget));
+    } else {
+      findings.push(...svgFindings(svg, rawTarget));
     }
-    if (resolution.status !== "resolved") {
-      const isMissing = resolution.status === "missing";
-      findings.push(assetFinding(
-        isMissing && !validatedFormat ? "WARNING" : "BLOCKER",
-        isMissing ? "ASSET_MISSING" : resolution.status === "escape" ? "ASSET_PATH_ESCAPE" : "ASSET_PATH_INVALID",
-        isMissing
-          ? "A referenced local image does not exist."
-          : resolution.status === "escape"
-            ? "The image path resolves outside docs/assets."
-            : "The image path could not be resolved safely.",
-        resolution.detail ?? rawTarget
-      ));
-      continue;
-    }
+    return findings;
+  }
 
-    if (resolution.byteLength > 5 * 1024 * 1024) {
-      findings.push(assetFinding(
-        validatedFormat ? "BLOCKER" : "WARNING",
-        "ASSET_TOO_LARGE",
-        "A referenced image exceeds the 5 MB review limit.",
-        rawTarget
-      ));
-      continue;
-    }
-    if (extension === ".png") {
-      const signature = Buffer.from(resolution.bytes ?? []).subarray(0, 8).toString("hex");
-      if (signature !== "89504e470d0a1a0a") {
-        findings.push(assetFinding("BLOCKER", "ASSET_SIGNATURE_INVALID", "The referenced PNG has an invalid signature.", rawTarget));
-      }
-      continue;
-    }
-    if (extension === ".svg") {
-      const svg = Buffer.from(resolution.bytes ?? []).toString("utf8");
-      if (!/^\uFEFF?\s*(?:<\?xml[^>]*>\s*)?<svg\b/i.test(svg)) {
-        findings.push(assetFinding("BLOCKER", "ASSET_SIGNATURE_INVALID", "The referenced SVG does not start with an SVG element.", rawTarget));
-        continue;
-      }
-      const activeSvg = /<!DOCTYPE|<!ENTITY|<script\b|<foreignObject\b|<(?:iframe|object|embed)\b|\son[a-z]+\s*=|(?:href|xlink:href)\s*=\s*["']\s*(?:https?:|data:|javascript:|\/\/)|@import|url\s*\(/i;
-      if (activeSvg.test(svg)) {
-        findings.push(assetFinding(
-          "BLOCKER",
-          "SVG_ACTIVE_CONTENT",
-          "The referenced SVG contains active or externally loaded content.",
-          rawTarget
-        ));
-      }
-    }
+  if (sniffExtensionless) {
+    findings.push(...svgFindings(Buffer.from(resolution.bytes ?? []).toString("utf8"), rawTarget));
   }
   return findings;
+}
+
+async function mapWithConcurrency<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  mapper: (value: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+  const worker = async (): Promise<void> => {
+    while (nextIndex < values.length) {
+      const index = nextIndex++;
+      results[index] = await mapper(values[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, worker));
+  return results;
+}
+
+async function validateDocumentAssets(
+  targets: readonly string[],
+  resolver?: DocumentAssetResolver
+): Promise<ReviewFinding[]> {
+  if (targets.length === 0) return [];
+  const batches = await mapWithConcurrency([...new Set(targets)], 4, (target) => validateDocumentAsset(target, resolver));
+  return batches.flat();
 }
 
 export async function reviewDocumentStructure(
@@ -1142,36 +1258,67 @@ export async function reviewDocumentStructure(
     : undefined;
   let contractCheckCount = 0;
   let contractChecksPassed = 0;
+  const tokenized = tokenizeDeliverable(markdown);
+  const reviewText = tokenized.proseFragments.join("\n");
   const placeholders: string[] = [];
-  const markdownWithoutCode = withoutFencedCode(stripFrontmatter(markdown));
-  const placeholderScan = markdownWithoutCode
-    .replace(/!\[[^\]\n]*\]\([^\n)]*\)/g, "")
-    .replace(/!?\[[^\]\n]+\]\[[^\]\n]*\]/g, "")
-    .replace(/^[ \t]{0,3}\[[^\]\n]+\]:[^\n]*$/gm, "")
-    .replace(/\[[^\]\n]+\]\([^\n)]*\)/g, "");
   const placeholderRe = /\[(?![ xX]\])([^\]\n]{3,})\](?!\()/g;
-  let placeholderMatch: RegExpExecArray | null;
-  while ((placeholderMatch = placeholderRe.exec(placeholderScan)) !== null) {
-    if (isTemplatePlaceholder(placeholderMatch[1])) {
-      placeholders.push(placeholderMatch[0]);
+  for (const fragment of tokenized.proseFragments) {
+    let placeholderMatch: RegExpExecArray | null;
+    while ((placeholderMatch = placeholderRe.exec(fragment)) !== null) {
+      if (isTemplatePlaceholder(placeholderMatch[1])) placeholders.push(placeholderMatch[0]);
     }
+    placeholderRe.lastIndex = 0;
+    placeholders.push(...(fragment.match(/\{\{[^}]+\}\}/g) ?? []));
   }
-  const mustachePlaceholders = placeholderScan.match(/\{\{[^}]+\}\}/g) ?? [];
-  placeholders.push(...mustachePlaceholders);
+  for (const destination of [...tokenized.links, ...tokenized.images]) {
+    placeholders.push(...(destination.match(/\{\{[^}]+\}\}/g) ?? []));
+  }
 
-  const rawHtmlScan = withoutCommonMarkAutolinks(withoutInlineCode(markdownWithoutCode));
-  if (/<\/?[A-Za-z][^>]*>/.test(rawHtmlScan)) {
+  if (tokenized.rawHtml.length > 0) {
     findings.push({
       severity: "WARNING",
       code: "RAW_HTML",
       message: "Raw HTML is preserved as source but is outside the portable Markdown profile.",
     });
   }
-  if (/knowledge-rail:\/\//i.test(markdownWithoutCode)) {
+  const activeHtml = tokenized.rawHtml.filter((html) => {
+    const decodedHtml = decodeHtmlUriCharacters(html);
+    const activeMarkup = /<\/?(?:script|iframe|object|embed)\b|\son[a-z]+\s*=/i.test(decodedHtml);
+    const activeReference = htmlUriAttributeValues(decodedHtml).some((value) => {
+      const scheme = uriScheme(value);
+      return Boolean(scheme && UNSAFE_URI_SCHEMES.has(scheme));
+    });
+    return activeMarkup || activeReference;
+  });
+  if (activeHtml.length > 0) {
+    findings.push({
+      severity: "BLOCKER",
+      code: "RAW_HTML_UNSAFE",
+      message: "Raw HTML contains active elements, event handlers, or executable URI content.",
+      evidence: activeHtml.slice(0, 3).join(", "),
+    });
+  }
+
+  const privateResourceUris = [reviewText, ...tokenized.links, ...tokenized.images]
+    .filter((value) => /knowledge-rail:\/\//i.test(normalizedUri(value)));
+  if (privateResourceUris.length > 0) {
     findings.push({
       severity: "BLOCKER",
       code: "PRIVATE_RESOURCE_URI",
       message: "Deliverables must not contain private knowledge-rail resource URIs.",
+    });
+  }
+
+  const unsafeLinks = tokenized.links.filter((destination) => {
+    const scheme = uriScheme(destination);
+    return Boolean(scheme && UNSAFE_URI_SCHEMES.has(scheme));
+  });
+  if (unsafeLinks.length > 0) {
+    findings.push({
+      severity: "BLOCKER",
+      code: "LINK_UNSAFE_URI",
+      message: "Links must not use active, embedded, filesystem, or private resource URIs.",
+      evidence: unsafeLinks.slice(0, 5).join(", "),
     });
   }
 
@@ -1184,8 +1331,8 @@ export async function reviewDocumentStructure(
     });
   }
 
-  const fenceMatches = markdown.match(/^```/gm) ?? [];
-  if (fenceMatches.length % 2 !== 0) {
+  const unclosedFences = tokenized.codeBlocks.filter((block) => block.fenced && !block.closed);
+  if (unclosedFences.length > 0) {
     findings.push({
       severity: "WARNING",
       code: "UNCLOSED_CODE_FENCE",
@@ -1195,26 +1342,31 @@ export async function reviewDocumentStructure(
 
   const mermaidWarnings: string[] = [];
   const mermaidSecurityIssues: string[] = [];
-  const mermaidBlockRe = /```mermaid\s*\r?\n([\s\S]*?)```/g;
-  let mermaidMatch: RegExpExecArray | null;
-  let mermaidBlockCount = 0;
-  while ((mermaidMatch = mermaidBlockRe.exec(markdown)) !== null) {
-    mermaidBlockCount += 1;
-    const body = mermaidMatch[1].trim();
+  const mermaidBlocks = tokenized.codeBlocks.filter((block) => block.fenced && block.language === "mermaid");
+  for (const block of mermaidBlocks) {
+    const body = block.text.trim();
+    const securityBody = decodeHtmlUriCharacters(body);
     const firstLine = body.split(/\r?\n/).find((line) => line.trim() !== "")?.trim() ?? "";
-    if (!/^(flowchart|graph|sequenceDiagram|erDiagram|classDiagram|stateDiagram|journey|gantt|pie|mindmap|timeline)\b/.test(firstLine)) {
+    if (!/^(flowchart|graph|sequenceDiagram|erDiagram|classDiagram|stateDiagram(?:-v2)?|journey|gantt|pie|mindmap|timeline)\b/.test(firstLine)) {
       mermaidWarnings.push(firstLine || "(empty block)");
     }
     if (body.length > 50_000) mermaidWarnings.push("block exceeds 50,000 characters");
-    if (/%%\s*\{|(?:^|\n)\s*(?:click|href)\s|javascript:/i.test(body)) {
-      mermaidSecurityIssues.push("block contains an active directive or JavaScript URI");
+    if (/%%\s*\{|(?:^|[;\r\n])\s*(?:click|href|call|link)\b|https?:|javascript:|vbscript:|data:/i.test(securityBody)) {
+      mermaidSecurityIssues.push("block contains an active directive or URI");
+    }
+    if (/<\/?(?:script|iframe|object|embed)\b|\son[a-z]+\s*=/i.test(securityBody)) {
+      mermaidSecurityIssues.push("block contains active HTML syntax");
     }
     if (/<[^>]+>|data:/i.test(body)) {
       mermaidWarnings.push("block contains HTML-like or data URI syntax that requires renderer-specific verification");
     }
   }
-  const asciiDiagramRe = /```(?!mermaid|json|bash|shell|ts|typescript|js|javascript|yaml|yml|http|text)\s*\r?\n[\s\S]*(?:──|-->|<--|\+[-+]{2,}|\|.*\|)[\s\S]*?```/g;
-  const asciiDiagrams = markdown.match(asciiDiagramRe) ?? [];
+  const knownNonDiagramLanguages = new Set(["mermaid", "json", "bash", "shell", "sh", "ts", "typescript", "js", "javascript", "yaml", "yml", "http", "text"]);
+  const asciiDiagrams = tokenized.codeBlocks.filter((block) =>
+    block.fenced
+    && !knownNonDiagramLanguages.has(block.language)
+    && /(?:──|-->|<--|\+[-+]{2,}|\|.*\|)/m.test(block.text)
+  );
 
   if (mermaidSecurityIssues.length > 0) {
     findings.push({
@@ -1232,15 +1384,15 @@ export async function reviewDocumentStructure(
       evidence: mermaidWarnings.slice(0, 5).join(", "),
     });
   }
-  const imageLinkCount = markdownImageTargets(markdown).length;
-  if (options.diagramMode === "none" && mermaidBlockCount > 0) {
+  const imageLinkCount = tokenized.images.length;
+  if (options.diagramMode === "none" && mermaidBlocks.length > 0) {
     findings.push({
       severity: "WARNING",
       code: "DIAGRAM_MODE_MISMATCH",
       message: "The document contains Mermaid source although diagram_mode is none.",
     });
   }
-  if (options.diagramMode === "external_asset" && mermaidBlockCount > 0 && imageLinkCount === 0) {
+  if (options.diagramMode === "external_asset" && mermaidBlocks.length > 0 && imageLinkCount === 0) {
     findings.push({
       severity: "WARNING",
       code: "DIAGRAM_MODE_MISMATCH",
@@ -1259,7 +1411,7 @@ export async function reviewDocumentStructure(
   const languageIssues: string[] = [];
   if (language.includes("ital")) {
     for (const [index, rule] of ITALIAN_LANGUAGE_PATTERNS.entries()) {
-      if (rule.pattern.test(markdownWithoutCode)) {
+      if (rule.pattern.test(reviewText)) {
         languageIssues.push(ITALIAN_LANGUAGE_SUGGESTIONS[index] ?? rule.suggestion);
       }
       rule.pattern.lastIndex = 0;
@@ -1277,7 +1429,7 @@ export async function reviewDocumentStructure(
   const clientFacingIssues: string[] = [];
   if (options.clientFacing ?? contract?.defaultClientFacing ?? true) {
     for (const rule of CLIENT_INTERNAL_PATTERNS) {
-      if (rule.pattern.test(markdownWithoutCode)) {
+      if (rule.pattern.test(reviewText)) {
         clientFacingIssues.push(rule.label);
       }
       rule.pattern.lastIndex = 0;
@@ -1293,7 +1445,7 @@ export async function reviewDocumentStructure(
   }
 
   const missingSections: string[] = [];
-  const headings = markdownHeadings(markdown);
+  const headings = tokenized.headings;
   const h1Headings = headings.filter((heading) => heading.level === 1);
   const h2Headings = headings.filter((heading) => heading.level === 2);
   contractCheckCount += 2;
@@ -1346,8 +1498,12 @@ export async function reviewDocumentStructure(
   const coverage: DocumentReviewResult["coverage"] = [];
   const minimumSectionChars = contract?.minimumSectionChars ?? 12;
   for (const heading of h2Headings) {
-    const body = sectionBody(markdown, heading);
-    const plainBody = body.replace(/```[\s\S]*?```/g, "").trim();
+    const nextHeading = headings.find((candidate) =>
+      candidate.blockIndex > heading.blockIndex && candidate.level <= heading.level
+    );
+    const sectionTokens = tokenized.tokens.slice(heading.blockIndex + 1, nextHeading?.blockIndex ?? tokenized.tokens.length);
+    const body = sectionTokens.map((token) => token.raw).join("").trim();
+    const plainBody = tokenPlainText(sectionTokens).trim();
     if (plainBody.length < minimumSectionChars) {
       weakSections.push(heading.title);
     }
@@ -1370,7 +1526,7 @@ export async function reviewDocumentStructure(
     for (const rule of contract.contentRules) {
       contractCheckCount += 1;
       const matches = rule.patterns.reduce((count, pattern) => {
-        const matched = markdown.match(new RegExp(pattern, "gi"));
+        const matched = tokenized.body.match(new RegExp(pattern, "gi"));
         return count + (matched?.length ?? 0);
       }, 0);
       if (matches >= (rule.minimumMatches ?? 1)) {
@@ -1385,7 +1541,7 @@ export async function reviewDocumentStructure(
     }
   }
 
-  findings.push(...await validateDocumentAssets(markdown, options.assetResolver));
+  findings.push(...await validateDocumentAssets(tokenized.images, options.assetResolver));
 
   const blockerCount = findings.filter((finding) => finding.severity === "BLOCKER").length;
   if (blockerCount === 0) {
@@ -1407,7 +1563,7 @@ export async function reviewDocumentStructure(
     missingSections,
     weakSections,
     placeholderCount: placeholders.length,
-    mermaidIssueCount: mermaidWarnings.length + mermaidSecurityIssues.length + asciiDiagrams.length + (fenceMatches.length % 2),
+    mermaidIssueCount: mermaidWarnings.length + mermaidSecurityIssues.length + asciiDiagrams.length + unclosedFences.length,
     clientFacingIssueCount: clientFacingIssues.length,
     languageIssueCount: languageIssues.length,
     coverage,

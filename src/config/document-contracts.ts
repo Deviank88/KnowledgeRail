@@ -17,6 +17,9 @@ export const DOCUMENT_TYPES = [
 
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 export const PUBLIC_DOCUMENT_PRESETS: ReadonlySet<string> = new Set(DOCUMENT_TYPES);
+const PRESET_DOCUMENT_TYPES: ReadonlySet<string> = new Set(
+  DOCUMENT_TYPES.filter((documentType) => documentType !== "custom")
+);
 
 /**
  * Human-readable output follows the current user's language unless the caller
@@ -45,10 +48,11 @@ export interface DocumentContract {
 
 const noExtraRules: readonly DocumentContentRule[] = [];
 
-export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>> = {
+type DocumentContractDefinition = Omit<DocumentContract, "kind">;
+
+const DOCUMENT_CONTRACT_DEFINITIONS: Readonly<Record<DocumentType, DocumentContractDefinition>> = {
   functional_spec: {
     type: "functional_spec",
-    kind: "preset",
     label: "Functional specification",
     purpose: "Make scope, behavior, requirements and acceptance criteria unambiguous and verifiable.",
     defaultLanguage: USER_REQUEST_LANGUAGE,
@@ -63,7 +67,6 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
   },
   functional_analysis: {
     type: "functional_analysis",
-    kind: "preset",
     label: "Functional analysis",
     purpose: "Describe business needs, actors, processes, rules, requirements and acceptance criteria without prescribing implementation details.",
     defaultLanguage: USER_REQUEST_LANGUAGE,
@@ -78,7 +81,6 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
   },
   technical_analysis: {
     type: "technical_analysis",
-    kind: "preset",
     label: "Technical analysis",
     purpose: "Explain the current state, proposed implementation, interfaces, data, constraints, risks and verification strategy.",
     defaultLanguage: USER_REQUEST_LANGUAGE,
@@ -93,7 +95,6 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
   },
   architecture_doc: {
     type: "architecture_doc",
-    kind: "preset",
     label: "Architecture document",
     purpose: "Explain boundaries, components, data, deployment, security, observability and decisions.",
     defaultLanguage: USER_REQUEST_LANGUAGE,
@@ -108,7 +109,6 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
   },
   project_brief: {
     type: "project_brief",
-    kind: "preset",
     label: "Project brief",
     purpose: "Give stakeholders a concise view of the problem, solution, users, success and constraints.",
     defaultLanguage: USER_REQUEST_LANGUAGE,
@@ -123,7 +123,6 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
   },
   user_manual: {
     type: "user_manual",
-    kind: "preset",
     label: "User manual",
     purpose: "Help end users understand prerequisites, complete common tasks and recover from common problems.",
     defaultLanguage: USER_REQUEST_LANGUAGE,
@@ -138,7 +137,6 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
   },
   onboarding_guide: {
     type: "onboarding_guide",
-    kind: "preset",
     label: "Onboarding guide",
     purpose: "Let a new contributor set up, run, test and troubleshoot the project independently.",
     defaultLanguage: USER_REQUEST_LANGUAGE,
@@ -153,7 +151,6 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
   },
   api_reference: {
     type: "api_reference",
-    kind: "preset",
     label: "API reference",
     purpose: "Provide implementable authentication, endpoint, payload, response and error contracts.",
     defaultLanguage: USER_REQUEST_LANGUAGE,
@@ -175,7 +172,6 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
   },
   adr: {
     type: "adr",
-    kind: "preset",
     label: "Architecture decision record",
     purpose: "Preserve the context, chosen decision, alternatives and consequences of one decision.",
     defaultLanguage: USER_REQUEST_LANGUAGE,
@@ -190,7 +186,6 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
   },
   runbook: {
     type: "runbook",
-    kind: "preset",
     label: "Operational runbook",
     purpose: "Guide operators through detection, diagnosis, mitigation, rollback and escalation.",
     defaultLanguage: USER_REQUEST_LANGUAGE,
@@ -205,7 +200,6 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
   },
   test_plan: {
     type: "test_plan",
-    kind: "preset",
     label: "Test plan",
     purpose: "Define scope, environments, test cases, expected results, evidence and exit criteria.",
     defaultLanguage: USER_REQUEST_LANGUAGE,
@@ -220,7 +214,6 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
   },
   incident_report: {
     type: "incident_report",
-    kind: "preset",
     label: "Incident report",
     purpose: "Record impact, timeline, root cause, response, corrective actions and owners.",
     defaultLanguage: USER_REQUEST_LANGUAGE,
@@ -236,7 +229,6 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
   },
   release_notes: {
     type: "release_notes",
-    kind: "preset",
     label: "Release notes",
     purpose: "Explain user-visible changes, fixes, compatibility, upgrade steps and known issues.",
     defaultLanguage: USER_REQUEST_LANGUAGE,
@@ -251,7 +243,6 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
   },
   custom: {
     type: "custom",
-    kind: "custom",
     label: "Custom document",
     purpose: "Produce a structured evidence-backed document with an explicit audience and objective.",
     defaultLanguage: USER_REQUEST_LANGUAGE,
@@ -262,8 +253,25 @@ export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>
   },
 };
 
+export const DOCUMENT_CONTRACTS: Readonly<Record<DocumentType, DocumentContract>> = Object.fromEntries(
+  DOCUMENT_TYPES.map((documentType) => [
+    documentType,
+    {
+      ...DOCUMENT_CONTRACT_DEFINITIONS[documentType],
+      kind: PRESET_DOCUMENT_TYPES.has(documentType) ? "preset" : "custom",
+    },
+  ])
+) as unknown as Readonly<Record<DocumentType, DocumentContract>>;
+
 export function isDocumentType(documentType: string): documentType is DocumentType {
   return PUBLIC_DOCUMENT_PRESETS.has(documentType);
+}
+
+export function hasDocumentPreset<T>(
+  documentType: string | undefined,
+  presets: Readonly<Record<string, T>>
+): documentType is DocumentType {
+  return Boolean(documentType && isDocumentType(documentType) && Object.hasOwn(presets, documentType));
 }
 
 function customDocumentLabel(documentType: string): string {
@@ -275,7 +283,7 @@ function customDocumentLabel(documentType: string): string {
 }
 
 export function documentContract(documentType: string): DocumentContract {
-  if (isDocumentType(documentType) && Object.hasOwn(DOCUMENT_CONTRACTS, documentType)) {
+  if (hasDocumentPreset(documentType, DOCUMENT_CONTRACTS)) {
     return DOCUMENT_CONTRACTS[documentType];
   }
   return {

@@ -1,4 +1,4 @@
-import { isDocumentType } from "./document-contracts.js";
+import { hasDocumentPreset } from "./document-contracts.js";
 
 export const EDITORIAL_EVIDENCE_KINDS = [
   "requirement",
@@ -168,7 +168,7 @@ export function sectionEvidencePlan(
   sectionTitle: string,
   override?: Partial<SectionEvidencePlan>
 ): SectionEvidencePlan {
-  const fallback = documentType && isDocumentType(documentType) && Object.hasOwn(DOCUMENT_DEFAULTS, documentType)
+  const fallback = hasDocumentPreset(documentType, DOCUMENT_DEFAULTS)
     ? DOCUMENT_DEFAULTS[documentType]
     : DOCUMENT_DEFAULTS.custom;
   const matched = COMMON_RULES.find((rule) => rule.title.test(sectionTitle))?.plan ?? fallback;
