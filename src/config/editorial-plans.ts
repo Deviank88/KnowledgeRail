@@ -1,3 +1,5 @@
+import { isDocumentType } from "./document-contracts.js";
+
 export const EDITORIAL_EVIDENCE_KINDS = [
   "requirement",
   "implementation",
@@ -166,7 +168,9 @@ export function sectionEvidencePlan(
   sectionTitle: string,
   override?: Partial<SectionEvidencePlan>
 ): SectionEvidencePlan {
-  const fallback = DOCUMENT_DEFAULTS[documentType ?? "custom"] ?? DOCUMENT_DEFAULTS.custom;
+  const fallback = documentType && isDocumentType(documentType) && Object.hasOwn(DOCUMENT_DEFAULTS, documentType)
+    ? DOCUMENT_DEFAULTS[documentType]
+    : DOCUMENT_DEFAULTS.custom;
   const matched = COMMON_RULES.find((rule) => rule.title.test(sectionTitle))?.plan ?? fallback;
   return normalizeSectionEvidencePlan({
     require: override?.require ?? matched.require,

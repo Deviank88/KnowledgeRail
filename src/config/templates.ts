@@ -1,3 +1,5 @@
+import { isDocumentType } from "./document-contracts.js";
+
 export const DEFAULT_INDEX_MD = `# Wiki Index
 
 > Automatically updated catalog of all wiki pages.
@@ -291,7 +293,7 @@ Documents are saved under \`docs/deliverables/\`. They are not wiki pages and **
 - In client-facing documents, do not mention the wiki, context packs, agents, prompts, MCP tools, \`src/\`, \`tests/\`, \`docs/\` paths, or internal process details.
 - When the wiki is insufficient but code clarifies behavior, first update the wiki with a verified page or section and then regenerate the document.
 - Use tables and verifiable criteria when they aid validation.
-- Diagrams default to none. Use Mermaid or a relative external SVG/PNG only when the user selected that representation; do not use ASCII diagrams or monospace trees.
+- Diagrams are optional and no representation is enforced when the choice is omitted. Use Mermaid or a relative external SVG/PNG only when the user selected that representation; do not use ASCII diagrams or monospace trees.
 
 *Schema version 4 — Update this file when conventions evolve.*
 `;
@@ -302,7 +304,7 @@ const DOCUMENT_QUALITY_RULES =
   "leave no unresolved placeholders; do not invent details absent from the wiki; " +
   "if the wiki is incomplete but code clarifies behavior, update the wiki before regenerating the document; " +
   "do not mention the wiki, context packs, agents, prompts, MCP tools, or internal paths in client-facing documents; " +
-  "diagrams are optional and default to none; use Mermaid or a relative external asset only when the user selected it; " +
+  "diagrams are optional and no representation is enforced when the choice is omitted; use Mermaid or a relative external asset only when the user selected it; " +
   "do not use ASCII art, text trees, or monospace diagrams.";
 
 export const DOCUMENT_PERSONAS: Record<string, string> = {
@@ -1087,3 +1089,17 @@ All responses use JSON:
 [State release checks and evidence.]
 `,
 };
+
+export function documentPersona(documentType: string): string {
+  if (isDocumentType(documentType) && Object.hasOwn(DOCUMENT_PERSONAS, documentType)) {
+    return DOCUMENT_PERSONAS[documentType];
+  }
+  return DOCUMENT_PERSONAS.custom;
+}
+
+export function documentTemplate(documentType: string): string | undefined {
+  if (isDocumentType(documentType) && Object.hasOwn(DOCUMENT_TEMPLATES, documentType)) {
+    return DOCUMENT_TEMPLATES[documentType];
+  }
+  return undefined;
+}

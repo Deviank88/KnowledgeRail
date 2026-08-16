@@ -8,7 +8,7 @@ KnowledgeRail is a local-first MCP server that turns project documentation and s
 
 It is designed for agents that need to understand, change, review, or document a codebase without loading the whole repository into the model context. Retrieval is bounded, provenance is preserved, missing evidence is reported explicitly, and difficult queries widen progressively instead of silently losing relevant information.
 
-> **Current status:** stable release `2.0.0`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
+> **Current status:** stable release `2.0.1`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
 
 ## What it provides
 
@@ -39,7 +39,7 @@ KnowledgeRail ships no browser or document renderer. Mermaid source remains ordi
 Run this from any directory inside the project you opened in VS Code, Cursor, a terminal, or another context-aware coding client:
 
 ```bash
-npx -y knowledge-rail@2.0.0
+npx -y knowledge-rail@2.0.1
 ```
 
 No project path is needed in the persistent MCP configuration. KnowledgeRail discovers the opened project independently for each process, so project X and project Y can be used at the same time by different agent sessions.
@@ -73,7 +73,7 @@ Use the standard `stdio` server shape once. Do not hard-code one repository:
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.0.0"]
+      "args": ["-y", "knowledge-rail@2.0.1"]
     }
   }
 }
@@ -105,7 +105,7 @@ A desktop chat does not open a filesystem folder, so it cannot safely infer a pr
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.0.0", "desktop"]
+      "args": ["-y", "knowledge-rail@2.0.1", "desktop"]
     }
   }
 }
@@ -118,10 +118,10 @@ In a new chat, ask KnowledgeRail to list workspaces, choose one entry, and confi
 Projects opened successfully by an IDE/terminal are added to the local catalog automatically without changing their clean eight-tool workflow. Operators can also manage catalog metadata locally:
 
 ```bash
-npx -y knowledge-rail@2.0.0 workspace list
-npx -y knowledge-rail@2.0.0 workspace register
-npx -y knowledge-rail@2.0.0 workspace register /absolute/project/path
-npx -y knowledge-rail@2.0.0 workspace unregister ws_example
+npx -y knowledge-rail@2.0.1 workspace list
+npx -y knowledge-rail@2.0.1 workspace register
+npx -y knowledge-rail@2.0.1 workspace register /absolute/project/path
+npx -y knowledge-rail@2.0.1 workspace unregister ws_example
 ```
 
 Registration never copies, uploads, scans the disk, or deletes project files. `workspace register` without a path discovers only upward from cwd.
@@ -131,7 +131,7 @@ Registration never copies, uploads, scans the disk, or deletes project files. `w
 Start one gateway for many concurrent local clients and workspaces:
 
 ```bash
-npx -y knowledge-rail@2.0.0 --transport http
+npx -y knowledge-rail@2.0.1 --transport http
 ```
 
 The default endpoint is `http://127.0.0.1:3333/mcp`; liveness only is available at `/healthz`. MCP requests require the random credential stored in the OS-protected per-user KnowledgeRail state directory. The desktop adapter reads it automatically, so it never belongs in project configuration or a repository.
@@ -263,7 +263,7 @@ Document generation starts with `knowledge_document_context action="plan"`. Foll
 
 Built-in presets cover functional specifications and analyses, technical analyses, architecture documents, project briefs, user manuals, onboarding guides, API references, ADRs, runbooks, test plans, incident reports, and release notes. They are not a closed taxonomy: any non-empty `document_type` is valid, and `required_sections` lets the user or their LLM define the outline. Each preset supplies a purpose, default language and audience, minimum useful content, and type-specific checks; callers can override the outline, language, and client-facing status.
 
-Diagrams are opt-in and default to `none`. With `mermaid`, the user's LLM writes a fenced Mermaid block directly in the Markdown; [Obsidian supports Mermaid code blocks](https://obsidian.md/help/advanced-syntax#Diagram), as do other compatible viewers. With `external_asset`, the caller supplies an SVG/PNG in `docs/assets/` and links it from the deliverable as `../assets/name.svg` or `../assets/name.png`; review validates confinement, signature, size, and active SVG content. Because KnowledgeRail has no asset-write action, chat-only clients without filesystem access should offer only `none` and `mermaid`.
+Diagrams are opt-in. Omitting `diagram_mode` means that review applies no diagram-mode constraint; clients that want an explicit choice must propagate `none`, `mermaid`, or `external_asset` through planning and review. With `mermaid`, the user's LLM writes a fenced Mermaid block directly in the Markdown; [Obsidian supports Mermaid code blocks](https://obsidian.md/help/advanced-syntax#Diagram), as do other compatible viewers. With `external_asset`, the caller supplies an SVG/PNG in `docs/assets/` and links it from the deliverable as `../assets/name.svg` or `../assets/name.png`; review validates confinement, signature, size, and active SVG content. Remote images and other local image formats receive portability warnings instead of security blockers. Because KnowledgeRail has no asset-write action, chat-only clients without filesystem access should offer only `none` and `mermaid`.
 
 The generated document is an output of agent memory, not its replacement. Confirmed facts belong in `wiki/`; source artifacts remain in `docs/`; delivery-ready Markdown belongs in `docs/deliverables/`.
 

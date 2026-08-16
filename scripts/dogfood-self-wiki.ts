@@ -895,7 +895,7 @@ async function main(): Promise<void> {
       include_wiki_update_plan: false,
     });
     const reviewText = textContent(review);
-    assert.match(reviewText, /^- \*\*INFO NESSUN_BLOCCANTE:/m);
+    assert.match(reviewText, /^- \*\*INFO NO_BLOCKERS:/m);
     assert.doesNotMatch(reviewText, /^- \*\*(?:BLOCKER|WARNING) /m);
     assert.equal(review.structuredContent?.readyForDelivery, true);
     assert.equal(review.structuredContent?.nextAction, null);

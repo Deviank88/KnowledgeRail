@@ -49,6 +49,7 @@ function validDocument(documentType: DocumentType, omitLastSection = false): str
 
 export interface DocumentContractEvaluation {
   documentTypes: DocumentType[];
+  assetSecurityRejected: boolean;
   metrics: {
     ContractRegistryCoverage: number;
     TemplateCoverage: number;
@@ -70,8 +71,8 @@ function ratio(count: number, total: number): number {
   return total === 0 ? 0 : count / total;
 }
 
-export function evaluateDocumentContracts(): DocumentContractEvaluation {
-  const results = DOCUMENT_TYPES.map((documentType) => {
+export async function evaluateDocumentContracts(): Promise<DocumentContractEvaluation> {
+  const results = await Promise.all(DOCUMENT_TYPES.map(async (documentType) => {
     const contract = DOCUMENT_CONTRACTS[documentType];
     const template = DOCUMENT_TEMPLATES[documentType];
     const options = {
@@ -80,11 +81,11 @@ export function evaluateDocumentContracts(): DocumentContractEvaluation {
       clientFacing: contract.defaultClientFacing,
       includeWikiUpdatePlan: false,
     };
-    const valid = reviewDocumentStructure(validDocument(documentType), template, options);
+    const valid = await reviewDocumentStructure(validDocument(documentType), template, options);
     const invalidMarkdown = documentType === "custom"
       ? "# Invalid custom document\n\nThis document has no section contract."
       : validDocument(documentType, true);
-    const invalid = reviewDocumentStructure(invalidMarkdown, template, options);
+    const invalid = await reviewDocumentStructure(invalidMarkdown, template, options);
     return {
       documentType,
       validReadyForDelivery: valid.readyForDelivery,
@@ -92,7 +93,22 @@ export function evaluateDocumentContracts(): DocumentContractEvaluation {
       contractChecksPassed: valid.contractChecksPassed,
       contractCheckCount: valid.contractCheckCount,
     };
-  });
+  }));
+  const hostileSvg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+  const hostileAssetReview = await reviewDocumentStructure(
+    "# Asset security fixture\n\n## Diagram\n\nThis section references a caller-owned asset for security validation.\n\n![Flow](../assets/hostile.svg)",
+    undefined,
+    {
+      documentType: "custom",
+      assetResolver: async () => ({
+        status: "resolved",
+        byteLength: hostileSvg.byteLength,
+        bytes: hostileSvg,
+      }),
+    }
+  );
+  const assetSecurityRejected = !hostileAssetReview.readyForDelivery &&
+    hostileAssetReview.findings.some((finding) => finding.code === "SVG_ACTIVE_CONTENT");
   const typedDocuments = DOCUMENT_TYPES.filter((type) => type !== "custom");
   const metrics = {
     ContractRegistryCoverage: ratio(
@@ -116,8 +132,9 @@ export function evaluateDocumentContracts(): DocumentContractEvaluation {
       results.length
     ),
     DeliveryReadinessAccuracy: ratio(
-      results.filter((result) => result.validReadyForDelivery && result.invalidRejected).length,
-      results.length
+      results.filter((result) => result.validReadyForDelivery && result.invalidRejected).length +
+        (assetSecurityRejected ? 1 : 0),
+      results.length + 1
     ),
   };
   process.stdout.write(
@@ -125,9 +142,9 @@ export function evaluateDocumentContracts(): DocumentContractEvaluation {
     `templates=${metrics.TemplateCoverage.toFixed(4)} personas=${metrics.PersonaCoverage.toFixed(4)} ` +
     `valid=${metrics.ValidDocumentAcceptanceRate.toFixed(4)} invalid=${metrics.InvalidDocumentRejectionRate.toFixed(4)}\n`
   );
-  return { documentTypes: [...DOCUMENT_TYPES], metrics, results };
+  return { documentTypes: [...DOCUMENT_TYPES], assetSecurityRejected, metrics, results };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.stdout.write(`${JSON.stringify(evaluateDocumentContracts(), null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify(await evaluateDocumentContracts(), null, 2)}\n`);
 }

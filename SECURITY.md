@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes are provided for the latest `1.x` release line. Pre-release users should test the exact reviewed commit on the default development branch.
+Security fixes are provided for the latest `2.x` release line. Pre-release users should test the exact reviewed commit on the default development branch.
 
 ## Reporting a vulnerability
 
@@ -25,4 +25,4 @@ Workspace IDs and bindings are capabilities, not display-only metadata. Do not p
 
 The gateway validates canonical roots again when a binding is used. Missing, malformed, expired, released, wrong-principal, read-only, unavailable, or substituted workspace bindings fail before path access. Resource links are binding-qualified and revalidated at read time. Please report any case where one concurrent workspace can observe or mutate another as a security vulnerability.
 
-Keep secrets in environment variables, never in wiki pages, source documents, MCP configuration committed to Git, logs, or issue reports. KnowledgeRail ships no browser renderer. Mermaid is validated as source, and referenced SVG/PNG assets must remain below `docs/assets`; active SVG content, remote references, path escapes, invalid signatures, and oversized assets are review blockers.
+Keep secrets in environment variables, never in wiki pages, source documents, MCP configuration committed to Git, logs, or issue reports. KnowledgeRail ships no browser renderer. Mermaid is validated as source, and referenced SVG/PNG assets must remain below `docs/assets`; active SVG content, unsafe URI schemes, path escapes, invalid signatures, and oversized SVG/PNG assets are review blockers. Remote references and other local image formats are reported as portability warnings; those formats do not receive SVG/PNG signature or active-content guarantees.

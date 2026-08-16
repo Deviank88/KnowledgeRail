@@ -3,7 +3,7 @@ import * as nodePath from "node:path";
 import { createHash } from "node:crypto";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { DOCUMENT_PERSONAS, DOCUMENT_TEMPLATES } from "../config/templates.js";
+import { documentPersona, documentTemplate } from "../config/templates.js";
 import {
   documentContract,
   isDocumentType,
@@ -18,9 +18,8 @@ import {
   isDiagramRelevantSection,
   parseTemplateSections,
   reviewDocumentStructure,
+  type DocumentAssetResolver,
   type DiagramMode,
-  type DocumentReviewResult,
-  type ReviewFinding,
 } from "../core/document-workflow.js";
 import { atomicWriteText } from "../core/fs-service.js";
 import {
@@ -29,7 +28,7 @@ import {
   resolveRealWithin,
   wikiDir,
 } from "../core/paths.js";
-import { ensureDir, readFileSafe, stripFrontmatter } from "../core/utils.js";
+import { ensureDir, readFileSafe } from "../core/utils.js";
 import { errorResult } from "./helpers.js";
 import { toolName, type ProtocolEra } from "../mcp/tool-names.js";
 
@@ -40,7 +39,7 @@ const RequiredSectionsSchema = z.array(
 ).max(30).optional()
   .describe("Optional caller-defined H2 outline. When supplied it overrides the preset template.");
 const DiagramModeSchema = z.enum(DIAGRAM_MODES).optional()
-  .describe("Optional diagram preference: none (default), Mermaid source in Markdown, or a caller-owned relative SVG/PNG asset.");
+  .describe("Optional diagram preference: none, Mermaid source in Markdown, or a caller-owned relative SVG/PNG asset; omission leaves representation unenforced.");
 const DocumentFilenameSchema = z.string().trim().min(4).max(255).regex(/^[^\r\n]+\.md$/i)
   .describe("Markdown filename ending in .md; deliverables are stored directly below docs/deliverables.");
 
@@ -74,7 +73,7 @@ function templateFor(
   const today = new Date().toISOString().slice(0, 10);
   const raw = requiredSections && requiredSections.length > 0
     ? explicitTemplate(documentType, projectName, requiredSections)
-    : DOCUMENT_TEMPLATES[documentType];
+    : documentTemplate(documentType);
   return raw
     ?.replace(/\{\{PROJECT_NAME\}\}/g, projectName ?? "{{PROJECT_NAME}}")
     .replace(/\{\{DATE\}\}/g, today);
@@ -96,134 +95,42 @@ function reviewOptionsFor(
     clientFacing: overrides.clientFacing ?? contract.defaultClientFacing,
     includeWikiUpdatePlan: overrides.includeWikiUpdatePlan ?? true,
     diagramMode: overrides.diagramMode,
+    assetResolver: createDocumentAssetResolver(),
   };
 }
 
-function markdownImageTargets(markdown: string): string[] {
-  const targets: string[] = [];
-  const imageRe = /!\[[^\]]*\]\(([^)]+)\)/g;
-  let match: RegExpExecArray | null;
-  while ((match = imageRe.exec(markdown)) !== null) {
-    const raw = match[1].trim();
-    const target = raw.startsWith("<")
-      ? raw.slice(1, raw.indexOf(">"))
-      : raw.split(/\s+(?=["'])/)[0];
-    if (target) targets.push(target);
-  }
-  return [...new Set(targets)];
-}
-
-function assetFinding(code: string, message: string, evidence: string): ReviewFinding {
-  return { severity: "BLOCKER", code, message, evidence };
-}
-
-async function validateReferencedAssets(markdown: string): Promise<ReviewFinding[]> {
-  const findings: ReviewFinding[] = [];
-  const assetsRoot = await docsCategoryDirReal("assets");
-  for (const rawTarget of markdownImageTargets(markdown)) {
-    if (/^(?:https?:|data:|file:|knowledge-rail:|#)/i.test(rawTarget)) {
-      findings.push(assetFinding(
-        "ASSET_NON_PORTABLE",
-        "Image references must use workspace-confined relative paths.",
-        rawTarget
-      ));
-      continue;
-    }
-    if (rawTarget.includes("\\")) {
-      findings.push(assetFinding("ASSET_PATH_INVALID", "Image paths must use portable forward slashes.", rawTarget));
-      continue;
-    }
-
-    let target: string;
-    try {
-      target = decodeURIComponent(rawTarget.split(/[?#]/, 1)[0]);
-    } catch {
-      findings.push(assetFinding("ASSET_PATH_INVALID", "The image path contains invalid URL encoding.", rawTarget));
-      continue;
-    }
-
-    const extension = nodePath.extname(target).toLowerCase();
-    if (![".svg", ".png"].includes(extension)) {
-      findings.push(assetFinding(
-        "ASSET_TYPE_UNSUPPORTED",
-        "External diagram assets must be SVG or PNG.",
-        rawTarget
-      ));
-      continue;
-    }
-
-    if (!target.startsWith("../assets/")) {
-      findings.push(assetFinding(
-        "ASSET_PATH_INVALID",
-        "Deliverable images must use a relative ../assets/name.svg or ../assets/name.png path.",
-        rawTarget
-      ));
-      continue;
-    }
-
+function createDocumentAssetResolver(): DocumentAssetResolver {
+  let assetsRoot: Promise<string> | undefined;
+  return async ({ relativePath, readLimit }) => {
+    assetsRoot ??= docsCategoryDirReal("assets");
     let abs: string;
     try {
-      abs = await resolveRealWithin(assetsRoot, target.slice("../assets/".length));
+      abs = await resolveRealWithin(await assetsRoot, relativePath);
     } catch (error: unknown) {
-      findings.push(assetFinding(
-        "ASSET_PATH_ESCAPE",
-        "The image path resolves outside docs/assets.",
-        error instanceof Error ? error.message : rawTarget
-      ));
-      continue;
+      return { status: "escape", detail: error instanceof Error ? error.message : String(error) };
     }
 
-    let bytes: Buffer;
+    let stat: Awaited<ReturnType<typeof fs.stat>>;
     try {
-      bytes = await fs.readFile(abs);
-    } catch {
-      findings.push(assetFinding("ASSET_MISSING", "A referenced local image does not exist.", rawTarget));
-      continue;
+      stat = await fs.stat(abs);
+    } catch (error: unknown) {
+      return (error as NodeJS.ErrnoException).code === "ENOENT"
+        ? { status: "missing" }
+        : { status: "invalid", detail: error instanceof Error ? error.message : String(error) };
     }
-    if (bytes.byteLength > 5 * 1024 * 1024) {
-      findings.push(assetFinding("ASSET_TOO_LARGE", "A referenced image exceeds the 5 MB review limit.", rawTarget));
-      continue;
-    }
-
-    if (extension === ".png") {
-      const signature = bytes.subarray(0, 8).toString("hex");
-      if (signature !== "89504e470d0a1a0a") {
-        findings.push(assetFinding("ASSET_SIGNATURE_INVALID", "The referenced PNG has an invalid signature.", rawTarget));
-      }
-      continue;
+    if (!stat.isFile()) return { status: "invalid", detail: "Asset target is not a regular file." };
+    if (readLimit <= 0 || stat.size > 5 * 1024 * 1024) {
+      return { status: "resolved", byteLength: stat.size };
     }
 
-    const svg = bytes.toString("utf8");
-    if (!/^\s*(?:<\?xml[^>]*>\s*)?<svg\b/i.test(svg)) {
-      findings.push(assetFinding("ASSET_SIGNATURE_INVALID", "The referenced SVG does not start with an SVG element.", rawTarget));
-      continue;
+    const handle = await fs.open(abs, "r");
+    try {
+      const bytes = Buffer.alloc(Math.min(readLimit, stat.size));
+      const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
+      return { status: "resolved", byteLength: stat.size, bytes: bytes.subarray(0, bytesRead) };
+    } finally {
+      await handle.close();
     }
-    const activeSvg = /<!DOCTYPE|<!ENTITY|<script\b|<foreignObject\b|<(?:iframe|object|embed)\b|\son[a-z]+\s*=|(?:href|xlink:href)\s*=\s*["']\s*(?:https?:|data:|javascript:|\/\/)|@import|url\s*\(/i;
-    if (activeSvg.test(svg)) {
-      findings.push(assetFinding(
-        "SVG_ACTIVE_CONTENT",
-        "The referenced SVG contains active or externally loaded content.",
-        rawTarget
-      ));
-    }
-  }
-  return findings;
-}
-
-function mergeReviewFindings(
-  review: DocumentReviewResult,
-  additional: readonly ReviewFinding[]
-): DocumentReviewResult {
-  if (additional.length === 0) return review;
-  const findings = review.findings
-    .filter((finding) => finding.code !== "NESSUN_BLOCCANTE")
-    .concat(additional);
-  const blockerCount = findings.filter((finding) => finding.severity === "BLOCKER").length;
-  return {
-    ...review,
-    readyForDelivery: blockerCount === 0,
-    blockerCount,
-    findings,
   };
 }
 
@@ -273,7 +180,7 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
     });
     const diagramChoice = {
       required: false,
-      default: "none" as const,
+      default: null,
       options: [...DIAGRAM_MODES],
       optionDetails: [
         { mode: "none", requiresExistingAsset: false, requiresFilesystemAccess: false },
@@ -287,16 +194,16 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
       ],
       opportunities,
       selected: diagram_mode ?? null,
-      effective: diagram_mode ?? "none",
+      effective: diagram_mode ?? null,
     };
     return {
       content: [{
         type: "text" as const,
         text: plan + "\n\n## Diagram choice\n\n" +
           (opportunities.length > 0
-            ? "A diagram may help in: " + opportunities.join(", ") + ". Ask the user only if useful; the default is none."
-            : "No section currently creates a strong diagram opportunity; the default is none.") +
-          "\nSelected mode: " + (diagram_mode ?? "none") + "." +
+            ? "A diagram may help in: " + opportunities.join(", ") + ". Ask the user only if useful; omitting diagram_mode applies no enforcement."
+            : "No section currently creates a strong diagram opportunity; the EN/IT heading heuristic is advisory only and omitting diagram_mode applies no enforcement.") +
+          "\nSelected mode: " + (diagram_mode ?? "not selected") + ". Propagate an explicit choice to section, write, and review calls to enforce it." +
           "\nexternal_asset requires an existing local SVG/PNG and filesystem access; chat-only clients should offer none or mermaid.",
       }],
       structuredContent: {
@@ -308,7 +215,7 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
           callerDefinedStructure: Boolean(required_sections?.length),
         },
         contract,
-        editorPersona: DOCUMENT_PERSONAS[document_type] ?? DOCUMENT_PERSONAS.custom,
+        editorPersona: documentPersona(document_type),
         requiredSections: sections.map((section) => section.title),
         diagramChoice,
       },
@@ -423,12 +330,11 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
       includeWikiUpdatePlan: false,
       diagramMode: diagram_mode,
     });
-    let review = reviewDocumentStructure(
-      stripFrontmatter(content),
+    const review = await reviewDocumentStructure(
+      content,
       templateFor(document_type, project_name, required_sections),
       reviewOptions
     );
-    review = mergeReviewFindings(review, await validateReferencedAssets(content));
     await atomicWriteText(abs, content);
     const sizeKB = (Buffer.byteLength(content, "utf-8") / 1024).toFixed(1);
     return {
@@ -445,6 +351,7 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
       structuredContent: {
         path: "docs/deliverables/" + name,
         documentType: document_type,
+        effectiveDiagramMode: review.effectiveDiagramMode,
         readyForDelivery: review.readyForDelivery,
         blockerCount: review.blockerCount,
         findings: review.findings,
@@ -484,12 +391,11 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
       includeWikiUpdatePlan: include_wiki_update_plan,
       diagramMode: diagram_mode,
     });
-    let review = reviewDocumentStructure(
-      stripFrontmatter(content),
+    const review = await reviewDocumentStructure(
+      content,
       templateFor(document_type, project_name, required_sections),
       reviewOptions
     );
-    review = mergeReviewFindings(review, await validateReferencedAssets(content));
     const reviewedContentSha256 = contentSha256(content);
     return {
       content: [{
@@ -499,6 +405,7 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
       }],
       structuredContent: {
         documentType: document_type,
+        effectiveDiagramMode: review.effectiveDiagramMode,
         readyForDelivery: review.readyForDelivery,
         contentSha256: reviewedContentSha256,
         blockerCount: review.blockerCount,
