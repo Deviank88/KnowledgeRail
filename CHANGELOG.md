@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-08-17
+
+### Fixed
+
+- Replaced regex-based Markdown scrubbing in document review with one exact-pinned CommonMark/GFM tokenizer pass shared by headings, fences, placeholders, links, images, raw HTML, Mermaid blocks, and section checks.
+- Excluded leading frontmatter and fenced examples from body checks while correctly handling tilde fences, malformed fence-like prose, cross-paragraph backticks, and resolved shortcut-reference images.
+- Restored placeholder detection in link and image destinations and fully inspected extensionless local assets that contain SVG data.
+- Centralized document-profile classification, asset-size limits, and bounded concurrent asset review without changing the Markdown-first tool surface.
+
+### Security
+
+- Restored blocking findings for `javascript:`, `vbscript:`, `data:`, filesystem, and private image/link URIs, including entity-encoded variants.
+- Blocked inline Mermaid interaction directives, URLs, init directives, executable URI schemes, event handlers, and active HTML elements regardless of statement position.
+- Added adversarial delivery-readiness fixtures for all confirmed review bypasses and kept every quality threshold unchanged.
+
 ## [2.0.1] - 2026-08-17
 
 ### Fixed
@@ -63,7 +78,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Initial local-first MCP server with persistent evidence-backed knowledge, bounded retrieval, document workflows, and eight public `knowledge_*` tools.
 - Multi-workspace loopback HTTP gateway, opaque per-chat bindings, desktop adapter, and portable npm/npx distribution.
 
-[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.1...HEAD
+[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.2...HEAD
+[2.0.2]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/Deviank88/KnowledgeRail/compare/v1.0.2...v2.0.0
 [1.0.2]: https://github.com/Deviank88/KnowledgeRail/compare/v1.0.1...v1.0.2

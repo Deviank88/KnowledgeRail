@@ -1,6 +1,6 @@
 {
   "name": "knowledge-rail",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "mcpName": "io.github.Deviank88/knowledge-rail",
   "description": "Local-first MCP 2.0 server for persistent, evidence-backed project knowledge and task context",
   "license": "Apache-2.0",
@@ -90,6 +90,7 @@
     "@modelcontextprotocol/server": "^2.0.0",
     "fast-glob": "^3.3.3",
     "jszip": "^3.10.1",
+    "marked": "18.0.9",
     "pdf-to-png-converter": "3.14.0",
     "zod": "^4.4.3"
   },

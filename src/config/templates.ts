@@ -1,4 +1,4 @@
-import { isDocumentType } from "./document-contracts.js";
+import { hasDocumentPreset } from "./document-contracts.js";
 
 export const DEFAULT_INDEX_MD = `# Wiki Index
 
@@ -1091,14 +1091,14 @@ All responses use JSON:
 };
 
 export function documentPersona(documentType: string): string {
-  if (isDocumentType(documentType) && Object.hasOwn(DOCUMENT_PERSONAS, documentType)) {
+  if (hasDocumentPreset(documentType, DOCUMENT_PERSONAS)) {
     return DOCUMENT_PERSONAS[documentType];
   }
   return DOCUMENT_PERSONAS.custom;
 }
 
 export function documentTemplate(documentType: string): string | undefined {
-  if (isDocumentType(documentType) && Object.hasOwn(DOCUMENT_TEMPLATES, documentType)) {
+  if (hasDocumentPreset(documentType, DOCUMENT_TEMPLATES)) {
     return DOCUMENT_TEMPLATES[documentType];
   }
   return undefined;

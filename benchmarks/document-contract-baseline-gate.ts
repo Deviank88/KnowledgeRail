@@ -35,6 +35,11 @@ async function main(): Promise<void> {
   check("InvalidDocumentRejectionRate", metrics.InvalidDocumentRejectionRate >= baseline.minimumInvalidDocumentRejectionRate, metrics.InvalidDocumentRejectionRate);
   check("DeliveryReadinessAccuracy", metrics.DeliveryReadinessAccuracy >= baseline.minimumDeliveryReadinessAccuracy, metrics.DeliveryReadinessAccuracy);
   check("assetSecurityRejected", !baseline.requireAssetSecurityCase || report.assetSecurityRejected, report.assetSecurityRejected);
+  check(
+    "securityCasesRejected",
+    report.securityCases.every((result) => result.rejected),
+    `${report.securityCases.filter((result) => result.rejected).length}/${report.securityCases.length}`
+  );
 
   if (failures.length > 0) throw new Error(`Document contract gate failed:\n- ${failures.join("\n- ")}`);
   process.stdout.write(`\nDocument contract gate passed (baseline v${baseline.version}).\n`);

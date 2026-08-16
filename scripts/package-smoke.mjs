@@ -106,6 +106,19 @@ try {
   const installedBin = path.join(installDirectory, "node_modules", "knowledge-rail", "dist", "index.js");
   const installedPackageRoot = path.dirname(path.dirname(installedBin));
   const installedPackage = JSON.parse(await fs.readFile(path.join(installedPackageRoot, "package.json"), "utf8"));
+  if (installedPackage.dependencies?.marked !== "18.0.9") {
+    throw new Error("Packed runtime must exact-pin marked@18.0.9.");
+  }
+  const installedMarkedPackage = JSON.parse(await fs.readFile(
+    path.join(installDirectory, "node_modules", "marked", "package.json"),
+    "utf8"
+  ));
+  if (installedMarkedPackage.version !== "18.0.9") {
+    throw new Error(`Packed runtime installed unexpected marked version ${installedMarkedPackage.version}.`);
+  }
+  if (Object.keys(installedMarkedPackage.dependencies ?? {}).length > 0) {
+    throw new Error("Pinned marked runtime unexpectedly gained transitive dependencies.");
+  }
   for (const forbiddenDependency of ["@mermaid-js/mermaid-cli", "docx", "puppeteer", "puppeteer-core"]) {
     if (installedPackage.dependencies?.[forbiddenDependency]) {
       throw new Error("Packed runtime declares forbidden renderer dependency " + forbiddenDependency + ".");
