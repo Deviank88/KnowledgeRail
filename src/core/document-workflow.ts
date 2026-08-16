@@ -1098,6 +1098,13 @@ function uriScheme(value: string): string | undefined {
   return normalizedUri(value).match(/^([a-z][a-z0-9+.-]*):/)?.[1];
 }
 
+function containsAsciiDiagramSyntax(value: string): boolean {
+  return value.includes("──")
+    || value.includes("-->")
+    || value.includes("<--")
+    || /(?:\+[-+]{2,}|\|.*\|)/m.test(value);
+}
+
 function svgFindings(svg: string, rawTarget: string): ReviewFinding[] {
   if (!/^\uFEFF?\s*(?:<\?xml[^>]*>\s*)?<svg\b/i.test(svg)) return [];
   const decodedSvg = decodeHtmlUriCharacters(svg);
@@ -1365,7 +1372,7 @@ export async function reviewDocumentStructure(
   const asciiDiagrams = tokenized.codeBlocks.filter((block) =>
     block.fenced
     && !knownNonDiagramLanguages.has(block.language)
-    && /(?:──|-->|<--|\+[-+]{2,}|\|.*\|)/m.test(block.text)
+    && containsAsciiDiagramSyntax(block.text)
   );
 
   if (mermaidSecurityIssues.length > 0) {
