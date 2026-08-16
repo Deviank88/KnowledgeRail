@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-08-17
+
+### Fixed
+
+- Guarded document-profile resolution against prototype keys and internal templates; every non-preset name now follows the same custom-profile contract.
+- Moved image validation into core document review and covered inline, reference-style, and HTML image sources while ignoring fenced examples and frontmatter.
+- Kept high-confidence Mermaid and local SVG/PNG security findings as blockers while treating ambiguous syntax, remote images, and legacy image formats as portability warnings.
+- Made diagram-mode enforcement explicitly opt-in and made requested diagram evidence packs independent of English or Italian heading heuristics.
+- Renamed review finding codes to stable English identifiers, including `NO_BLOCKERS`, `MERMAID_INVALID`, `ASCII_DIAGRAM`, `WEAK_SECTIONS`, and related sibling codes.
+
 ## [2.0.0] - 2026-08-16
 
 ### Added
@@ -53,7 +63,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Initial local-first MCP server with persistent evidence-backed knowledge, bounded retrieval, document workflows, and eight public `knowledge_*` tools.
 - Multi-workspace loopback HTTP gateway, opaque per-chat bindings, desktop adapter, and portable npm/npx distribution.
 
-[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/Deviank88/KnowledgeRail/compare/v1.0.2...v2.0.0
 [1.0.2]: https://github.com/Deviank88/KnowledgeRail/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/Deviank88/KnowledgeRail/compare/v1.0.0...v1.0.1

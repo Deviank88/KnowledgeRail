@@ -11,6 +11,7 @@ interface DocumentContractBaseline {
   minimumValidDocumentAcceptanceRate: number;
   minimumInvalidDocumentRejectionRate: number;
   minimumDeliveryReadinessAccuracy: number;
+  requireAssetSecurityCase: boolean;
 }
 
 async function main(): Promise<void> {
@@ -18,7 +19,7 @@ async function main(): Promise<void> {
     path.join(process.cwd(), "benchmarks", "fixtures", "document-contract-baseline-v4.json"),
     "utf8"
   )) as DocumentContractBaseline;
-  const report = evaluateDocumentContracts();
+  const report = await evaluateDocumentContracts();
   const metrics = report.metrics;
   const failures: string[] = [];
   const check = (label: string, passed: boolean, actual: unknown) => {
@@ -33,6 +34,7 @@ async function main(): Promise<void> {
   check("ValidDocumentAcceptanceRate", metrics.ValidDocumentAcceptanceRate >= baseline.minimumValidDocumentAcceptanceRate, metrics.ValidDocumentAcceptanceRate);
   check("InvalidDocumentRejectionRate", metrics.InvalidDocumentRejectionRate >= baseline.minimumInvalidDocumentRejectionRate, metrics.InvalidDocumentRejectionRate);
   check("DeliveryReadinessAccuracy", metrics.DeliveryReadinessAccuracy >= baseline.minimumDeliveryReadinessAccuracy, metrics.DeliveryReadinessAccuracy);
+  check("assetSecurityRejected", !baseline.requireAssetSecurityCase || report.assetSecurityRejected, report.assetSecurityRejected);
 
   if (failures.length > 0) throw new Error(`Document contract gate failed:\n- ${failures.join("\n- ")}`);
   process.stdout.write(`\nDocument contract gate passed (baseline v${baseline.version}).\n`);

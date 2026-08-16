@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "expectedDocumentTypes": [
     "functional_spec",
     "functional_analysis",
@@ -21,5 +21,6 @@
   "minimumPersonaCoverage": 1,
   "minimumValidDocumentAcceptanceRate": 1,
   "minimumInvalidDocumentRejectionRate": 1,
-  "minimumDeliveryReadinessAccuracy": 1
+  "minimumDeliveryReadinessAccuracy": 1,
+  "requireAssetSecurityCase": true
 }

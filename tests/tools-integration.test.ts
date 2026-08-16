@@ -619,19 +619,34 @@ test("document tools: open profiles, section context, Markdown write, terminal r
   assert.equal(documentPlan.structuredContent?.documentType, "safety_case");
   assert.equal((documentPlan.structuredContent?.documentProfile as { builtInPreset?: boolean }).builtInPreset, false);
   assert.deepEqual(documentPlan.structuredContent?.requiredSections, ["Claim", "Evidence"]);
+  const customPersona = documentPlan.structuredContent?.editorPersona;
+  for (const documentType of ["constructor", "__proto__", "toString", "_legacy_functional_spec"]) {
+    const unknownPlan = await tools.get("knowledge_plan_document")!({
+      document_type: documentType,
+      project_name: "Alpha",
+    });
+    assert.equal(unknownPlan.isError, undefined, documentType);
+    assert.equal((unknownPlan.structuredContent?.documentProfile as { builtInPreset?: boolean }).builtInPreset, false);
+    assert.equal(typeof unknownPlan.structuredContent?.editorPersona, "string");
+    assert.equal(unknownPlan.structuredContent?.editorPersona, customPersona);
+    assert.deepEqual(unknownPlan.structuredContent?.requiredSections, []);
+    assert.equal(unknownPlan.content[0].text.includes("Documento Funzionale di Progetto"), false);
+  }
 
   const diagramPlan = await tools.get("knowledge_plan_document")!({
     document_type: "architecture_doc",
     project_name: "Alpha",
   });
   const diagramChoice = diagramPlan.structuredContent?.diagramChoice as {
-    default?: string;
+    default?: string | null;
     selected?: string | null;
+    effective?: string | null;
     opportunities?: string[];
     optionDetails?: Array<{ mode?: string; requiresFilesystemAccess?: boolean }>;
   };
-  assert.equal(diagramChoice.default, "none");
+  assert.equal(diagramChoice.default, null);
   assert.equal(diagramChoice.selected, null);
+  assert.equal(diagramChoice.effective, null);
   assert.equal((diagramChoice.opportunities?.length ?? 0) > 0, true);
   assert.equal(
     diagramChoice.optionDetails?.find((option) => option.mode === "external_asset")?.requiresFilesystemAccess,
@@ -677,8 +692,9 @@ test("document tools: open profiles, section context, Markdown write, terminal r
     document_type: "custom",
   });
   assert.equal(docReview.content[0].text.includes("Document review"), true);
-  assert.equal(docReview.content[0].text.includes("NESSUN_BLOCCANTE"), true);
+  assert.equal(docReview.content[0].text.includes("NO_BLOCKERS"), true);
   assert.equal(docReview.structuredContent?.readyForDelivery, true);
+  assert.equal(docReview.structuredContent?.effectiveDiagramMode, null);
   assert.match(String(docReview.structuredContent?.contentSha256), /^[a-f0-9]{64}$/);
   const firstHash = String(docReview.structuredContent?.contentSha256);
   await tools.get("knowledge_write_document")!({
@@ -726,6 +742,26 @@ test("document tools: open profiles, section context, Markdown write, terminal r
     ),
     true
   );
+  for (const [filename, image] of [
+    ["hostile-reference.md", "![Flow][diagram]\n\n[diagram]: ../assets/hostile.svg"],
+    ["hostile-html.md", '<img src="../assets/hostile.svg" alt="Flow">'],
+  ] as const) {
+    const bypassWrite = await tools.get("knowledge_write_document")!({
+      filename,
+      title: "Hostile asset form",
+      document_type: "custom",
+      content: `# Hostile asset form\n\n## Diagram\n\nThis caller-owned diagram must pass the same security review.\n\n${image}`,
+      overwrite: true,
+    });
+    assert.equal(
+      (bypassWrite.structuredContent?.findings as Array<{ code?: string }>).some(
+        (finding) => finding.code === "SVG_ACTIVE_CONTENT"
+      ),
+      true,
+      filename
+    );
+    assert.equal(bypassWrite.structuredContent?.readyForDelivery, false);
+  }
   const missingAssetWrite = await tools.get("knowledge_write_document")!({
     filename: "missing-asset.md",
     title: "Missing asset",
@@ -739,6 +775,49 @@ test("document tools: open profiles, section context, Markdown write, terminal r
       (finding) => finding.code === "ASSET_MISSING"
     ),
     true
+  );
+  const referenceEscapeWrite = await tools.get("knowledge_write_document")!({
+    filename: "reference-escape.md",
+    title: "Reference escape",
+    document_type: "custom",
+    content: "# Reference escape\n\n## Diagram\n\nThe referenced path must remain inside the asset directory.\n\n![Flow][diagram]\n\n[diagram]: ../assets/../outside.svg",
+    overwrite: true,
+  });
+  assert.equal(
+    (referenceEscapeWrite.structuredContent?.findings as Array<{ code?: string }>).some(
+      (finding) => finding.code === "ASSET_PATH_ESCAPE"
+    ),
+    true
+  );
+
+  await fs.writeFile(path.join(assetsDir, "screen.jpg"), Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  const legacyImagesWrite = await tools.get("knowledge_write_document")!({
+    filename: "legacy-images.md",
+    title: "Legacy images",
+    document_type: "custom",
+    content: "# Legacy images\n\n## Screenshots\n\nThis existing deliverable keeps its screenshot and remote build badge.\n\n![Screen](../assets/screen.jpg)\n![Build](https://img.shields.io/badge/build-passing.svg)",
+    overwrite: true,
+  });
+  assert.equal(legacyImagesWrite.structuredContent?.readyForDelivery, true);
+  assert.deepEqual(
+    (legacyImagesWrite.structuredContent?.findings as Array<{ code?: string; severity?: string }>).filter(
+      (finding) => finding.severity === "WARNING"
+    ).map((finding) => finding.code).sort(),
+    ["ASSET_REMOTE", "ASSET_TYPE_UNSUPPORTED"]
+  );
+
+  const fencedExampleWrite = await tools.get("knowledge_write_document")!({
+    filename: "fenced-example.md",
+    title: "Fenced example",
+    document_type: "custom",
+    content: "# Fenced example\n\n## Markdown syntax\n\nThis section documents an image example without embedding it.\n\n```markdown\n![x](https://example.com/s.png)\n```",
+    overwrite: true,
+  });
+  assert.equal(
+    (fencedExampleWrite.structuredContent?.findings as Array<{ code?: string }>).some(
+      (finding) => finding.code?.startsWith("ASSET_")
+    ),
+    false
   );
   const escapingAssetWrite = await tools.get("knowledge_write_document")!({
     filename: "escaping-asset.md",

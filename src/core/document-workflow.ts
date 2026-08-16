@@ -1,4 +1,4 @@
-import { DOCUMENT_PERSONAS, DOCUMENT_TEMPLATES } from "../config/templates.js";
+import { documentPersona, documentTemplate } from "../config/templates.js";
 import {
   documentContract,
   DOCUMENT_TYPES,
@@ -18,6 +18,7 @@ import { readSourceCoverageLedger, sourceCoverageMetrics } from "./ingestion/cov
 import type { WikiPageRecord } from "./page-record.js";
 import { getWikiPageRecords } from "./retrieval-index.js";
 import { tokenizeSearchText, type RetrievalProfile } from "./text-analysis.js";
+import { stripFrontmatter } from "./utils.js";
 import { WIKI_PAGE_TYPES, type WikiPageType } from "./wiki-validation.js";
 
 export { DOCUMENT_TYPES, type DocumentType } from "../config/document-contracts.js";
@@ -96,7 +97,7 @@ export interface SectionContextResult {
   documentType?: string;
   writerLanguage?: string;
   diagramRelevant: boolean;
-  diagramMode: DiagramMode;
+  diagramMode: DiagramMode | null;
   diagramEvidencePack?: DiagramEvidencePack;
   pages: SectionContextPage[];
   totalIncludedChars: number;
@@ -124,6 +125,7 @@ export interface ReviewFinding {
 
 export interface DocumentReviewResult {
   documentType?: string;
+  effectiveDiagramMode: DiagramMode | null;
   readyForDelivery: boolean;
   blockerCount: number;
   contractCheckCount: number;
@@ -144,6 +146,7 @@ export interface ReviewOptions {
   language?: string;
   clientFacing?: boolean;
   includeWikiUpdatePlan?: boolean;
+  assetResolver?: DocumentAssetResolver;
 }
 
 export interface DocumentPlanOptions {
@@ -180,6 +183,21 @@ export interface DiagramEvidencePack {
   gaps: string[];
 }
 
+export interface DocumentAssetRequest {
+  relativePath: string;
+  readLimit: number;
+}
+
+export type DocumentAssetResolution =
+  | { status: "resolved"; byteLength: number; bytes?: Uint8Array }
+  | { status: "missing"; detail?: string }
+  | { status: "escape"; detail?: string }
+  | { status: "invalid"; detail?: string };
+
+export type DocumentAssetResolver = (
+  request: DocumentAssetRequest
+) => Promise<DocumentAssetResolution>;
+
 const DIAGRAM_RELEVANT_SECTION =
   /architett|architect|component|system context|data|entit|schema|fluss|process|workflow|sequence|integraz|integrat|interface|api|deployment|infrastrutt|infrastruct|topolog|dipenden|dependenc/i;
 
@@ -199,10 +217,10 @@ export interface KnowledgeUpdateOptions {
 }
 
 const CLIENT_INTERNAL_PATTERNS: Array<{ code: string; pattern: RegExp; label: string }> = [
-  { code: "RIFERIMENTO_WIKI", pattern: /\bwiki\b|wiki[_-][a-z_]+|wiki\//i, label: "references to the wiki or wiki tools" },
-  { code: "RIFERIMENTO_CONTEXT_PACK", pattern: /context pack|pagina sorgente|pagine sorgenti|fonti frontmatter/i, label: "references to context packs or the evidence-gathering process" },
-  { code: "RIFERIMENTO_AGENT", pattern: /\bagent\b|\bLLM\b|prompt|sub-agent|writer assegnato/i, label: "references to agents, LLMs, or prompts" },
-  { code: "RIFERIMENTO_PERCORSI_INTERNI", pattern: /\b(src|tests|docs|wiki)[\\/][\w./-]+/i, label: "internal paths exposed to the client" },
+  { code: "WIKI_REFERENCE", pattern: /\bwiki\b|wiki[_-][a-z_]+|wiki\//i, label: "references to the wiki or wiki tools" },
+  { code: "CONTEXT_PACK_REFERENCE", pattern: /context pack|pagina sorgente|pagine sorgenti|fonti frontmatter/i, label: "references to context packs or the evidence-gathering process" },
+  { code: "AGENT_REFERENCE", pattern: /\bagent\b|\bLLM\b|prompt|sub-agent|writer assegnato/i, label: "references to agents, LLMs, or prompts" },
+  { code: "INTERNAL_PATH_REFERENCE", pattern: /\b(src|tests|docs|wiki)[\\/][\w./-]+/i, label: "internal paths exposed to the client" },
 ];
 const ITALIAN_LANGUAGE_PATTERNS: Array<{ pattern: RegExp; suggestion: string }> = [
   { pattern: /(^|[\s(["])qual['’]è(?=$|[\s),.;:!?])/gi, suggestion: "Usare `qual è` senza apostrofo." },
@@ -318,9 +336,6 @@ export function parseTemplateSections(template: string, maxSections?: number): T
   return sections;
 }
 
-const DEFAULT_EDITOR_PERSONA =
-  "You are a senior technical editor. Coordinate specialist writers, protect document completeness and consistency, and report gaps instead of inventing content.";
-
 export async function buildDocumentPlan(
   wikiRoot: string,
   options: DocumentPlanOptions
@@ -328,8 +343,8 @@ export async function buildDocumentPlan(
   const today = new Date().toISOString().slice(0, 10);
   const contract = documentContract(options.documentType);
   const outputLanguage = options.language?.trim() || contract.defaultLanguage;
-  const rawTemplate = options.template ?? DOCUMENT_TEMPLATES[options.documentType];
-  const persona = DOCUMENT_PERSONAS[options.documentType] ?? DEFAULT_EDITOR_PERSONA;
+  const rawTemplate = options.template ?? documentTemplate(options.documentType);
+  const persona = documentPersona(options.documentType);
   const template = rawTemplate
     ? rawTemplate
         .replace(/\{\{PROJECT_NAME\}\}/g, options.projectName ?? "{{PROJECT_NAME}}")
@@ -392,7 +407,7 @@ export async function buildDocumentPlan(
     `- When evidence is missing, write a traceable gap instead of inventing content.`,
     `- Expand relevant budget-excluded pages with \`knowledge_page action="read"\` and verify requirements/decisions across sections.`,
     `- For code evidence use \`knowledge_code\` first; a raw scan is an explicit fallback and must be recorded.`,
-    `- Diagrams are optional and default to none. Use Mermaid or a relative external asset only when the user selected that representation; never use ASCII art.`,
+    `- Diagrams are optional and no representation is enforced when the choice is omitted. Use Mermaid or a relative external asset only when the user selected that representation; never use ASCII art.`,
     `- Write all human-readable titles, headings, and prose in ${outputLanguage}. The English reference template and editor instructions are structural guidance, not an English-output requirement.`,
     ``,
     `## Sections to assign to writers`,
@@ -736,8 +751,8 @@ export async function createSectionContext(
   };
   const includedPaths = new Set(pages.map((page) => page.relPath));
   const omittedPaths = candidatePaths.filter((candidate) => !includedPaths.has(candidate)).slice(0, 8);
-  const diagramRelevant = isDiagramRelevantSection(options.sectionTitle);
-  const diagramMode = options.diagramMode ?? "none";
+  const diagramMode = options.diagramMode ?? null;
+  const diagramRelevant = diagramMode === "mermaid" || diagramMode === "external_asset";
   return {
     documentType: options.documentType,
     writerLanguage: options.writerLanguage ?? (
@@ -745,7 +760,7 @@ export async function createSectionContext(
     ),
     diagramRelevant,
     diagramMode,
-    ...(diagramRelevant && diagramMode !== "none"
+    ...(diagramRelevant
       ? { diagramEvidencePack: await buildDiagramEvidencePack(options.wikiRoot, pages) }
       : {}),
     pages,
@@ -810,7 +825,9 @@ export function formatSectionContext(
       ? ["- Diagram choice: Mermaid. If a diagram adds material clarity, write a complete fenced Mermaid block grounded only in the diagram evidence pack."]
       : result.diagramMode === "external_asset"
         ? ["- Diagram choice: external asset. If a diagram adds material clarity, reference a caller-owned relative SVG/PNG asset; KnowledgeRail does not generate it."]
-        : ["- Diagram choice: none. Do not add a diagram unless the user changes the selection."]),
+        : result.diagramMode === "none"
+          ? ["- Diagram choice: none. Do not add a diagram unless the user changes the selection."]
+          : ["- Diagram choice: not selected. No representation is enforced; ask only when a diagram would materially help, then propagate diagram_mode explicitly."]),
     "- Do not use ASCII art or placeholders.",
     "",
   ];
@@ -885,11 +902,240 @@ export function formatSectionContext(
   return `${bounded}${marker}`;
 }
 
-export function reviewDocumentStructure(
+function withoutFencedCode(markdown: string): string {
+  const output: string[] = [];
+  let fence: { marker: "`" | "~"; length: number } | null = null;
+  for (const line of markdown.split(/\r?\n/)) {
+    if (fence) {
+      const close = line.match(/^[ \t]{0,3}(`{3,}|~{3,})[ \t]*$/);
+      if (close && close[1][0] === fence.marker && close[1].length >= fence.length) fence = null;
+      output.push("");
+      continue;
+    }
+    const open = line.match(/^[ \t]{0,3}(`{3,}|~{3,})(.*)$/);
+    if (open) {
+      fence = { marker: open[1][0] as "`" | "~", length: open[1].length };
+      output.push("");
+      continue;
+    }
+    output.push(line);
+  }
+  return output.join("\n");
+}
+
+function withoutInlineCode(markdown: string): string {
+  return markdown.replace(/(`+)[\s\S]*?\1/g, "");
+}
+
+function withoutCommonMarkAutolinks(markdown: string): string {
+  return markdown.replace(
+    /<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\s]*|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+)>/g,
+    ""
+  );
+}
+
+function normalizeReferenceLabel(label: string): string {
+  return label.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function inlineImageDestination(raw: string): string | null {
+  const target = raw.trim();
+  if (target.startsWith("<")) {
+    const end = target.indexOf(">");
+    return end > 1 ? target.slice(1, end) : null;
+  }
+  return target.split(/\s+(?=["'])/, 1)[0] || null;
+}
+
+export function markdownImageTargets(markdown: string): string[] {
+  const scan = withoutInlineCode(withoutFencedCode(stripFrontmatter(markdown)));
+  const targets: string[] = [];
+  const references = new Map<string, string>();
+  const definitionRe = /^[ \t]{0,3}\[([^\]\n]+)\]:[ \t]*(?:<([^>\n]+)>|(\S+))/gm;
+  let match: RegExpExecArray | null;
+  while ((match = definitionRe.exec(scan)) !== null) {
+    references.set(normalizeReferenceLabel(match[1]), match[2] ?? match[3]);
+  }
+
+  const inlineRe = /!\[[^\]]*\]\(([^)\n]+)\)/g;
+  while ((match = inlineRe.exec(scan)) !== null) {
+    const target = inlineImageDestination(match[1]);
+    if (target) targets.push(target);
+  }
+
+  const referenceRe = /!\[([^\]]*)\]\[([^\]]*)\]/g;
+  while ((match = referenceRe.exec(scan)) !== null) {
+    const target = references.get(normalizeReferenceLabel(match[2] || match[1]));
+    if (target) targets.push(target);
+  }
+
+  const shortcutRe = /!\[([^\]\n]+)\](?![[(])/g;
+  while ((match = shortcutRe.exec(scan)) !== null) {
+    const target = references.get(normalizeReferenceLabel(match[1]));
+    if (target) targets.push(target);
+  }
+
+  const htmlImageRe = /<img\b[^>]*\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))[^>]*>/gi;
+  while ((match = htmlImageRe.exec(scan)) !== null) {
+    const target = match[1] ?? match[2] ?? match[3];
+    if (target) targets.push(target);
+  }
+  return [...new Set(targets)];
+}
+
+function assetFinding(
+  severity: ReviewFinding["severity"],
+  code: string,
+  message: string,
+  evidence: string
+): ReviewFinding {
+  return { severity, code, message, evidence };
+}
+
+async function validateDocumentAssets(
+  markdown: string,
+  resolver?: DocumentAssetResolver
+): Promise<ReviewFinding[]> {
+  const targets = markdownImageTargets(markdown);
+  if (targets.length === 0) return [];
+
+  const findings: ReviewFinding[] = [];
+  for (const rawTarget of targets) {
+    if (/^https?:/i.test(rawTarget)) {
+      findings.push(assetFinding(
+        "WARNING",
+        "ASSET_REMOTE",
+        "Remote images reduce offline portability and are not content-validated.",
+        rawTarget
+      ));
+      continue;
+    }
+    if (/^(?:data:|file:|knowledge-rail:)/i.test(rawTarget)) {
+      findings.push(assetFinding(
+        "BLOCKER",
+        "ASSET_UNSAFE_URI",
+        "Image references must not use embedded, filesystem, or private resource URIs.",
+        rawTarget
+      ));
+      continue;
+    }
+    if (/^[A-Za-z][A-Za-z0-9+.-]*:|^#/i.test(rawTarget)) {
+      findings.push(assetFinding(
+        "WARNING",
+        "ASSET_NON_PORTABLE",
+        "The image reference is not a portable workspace-relative asset.",
+        rawTarget
+      ));
+      continue;
+    }
+    if (rawTarget.includes("\\")) {
+      findings.push(assetFinding("BLOCKER", "ASSET_PATH_INVALID", "Image paths must use portable forward slashes.", rawTarget));
+      continue;
+    }
+
+    let target: string;
+    try {
+      target = decodeURIComponent(rawTarget.split(/[?#]/, 1)[0]);
+    } catch {
+      findings.push(assetFinding("BLOCKER", "ASSET_PATH_INVALID", "The image path contains invalid URL encoding.", rawTarget));
+      continue;
+    }
+    if (!target.startsWith("../assets/")) {
+      findings.push(assetFinding(
+        "BLOCKER",
+        "ASSET_PATH_INVALID",
+        "Deliverable images must remain below docs/assets.",
+        rawTarget
+      ));
+      continue;
+    }
+
+    const relativePath = target.slice("../assets/".length);
+    const extension = target.slice(target.lastIndexOf(".")).toLowerCase();
+    const validatedFormat = extension === ".svg" || extension === ".png";
+    if (!validatedFormat) {
+      findings.push(assetFinding(
+        "WARNING",
+        "ASSET_TYPE_UNSUPPORTED",
+        "Only SVG and PNG assets receive content validation; this local image is checked for existence and size only.",
+        rawTarget
+      ));
+    }
+    if (!resolver) {
+      findings.push(assetFinding(
+        validatedFormat ? "BLOCKER" : "WARNING",
+        "ASSET_UNVERIFIED",
+        "The local image could not be resolved for review.",
+        rawTarget
+      ));
+      continue;
+    }
+
+    let resolution: DocumentAssetResolution;
+    try {
+      resolution = await resolver({
+        relativePath,
+        readLimit: extension === ".svg" ? 5 * 1024 * 1024 + 1 : extension === ".png" ? 8 : 0,
+      });
+    } catch (error: unknown) {
+      resolution = { status: "invalid", detail: error instanceof Error ? error.message : String(error) };
+    }
+    if (resolution.status !== "resolved") {
+      const isMissing = resolution.status === "missing";
+      findings.push(assetFinding(
+        isMissing && !validatedFormat ? "WARNING" : "BLOCKER",
+        isMissing ? "ASSET_MISSING" : resolution.status === "escape" ? "ASSET_PATH_ESCAPE" : "ASSET_PATH_INVALID",
+        isMissing
+          ? "A referenced local image does not exist."
+          : resolution.status === "escape"
+            ? "The image path resolves outside docs/assets."
+            : "The image path could not be resolved safely.",
+        resolution.detail ?? rawTarget
+      ));
+      continue;
+    }
+
+    if (resolution.byteLength > 5 * 1024 * 1024) {
+      findings.push(assetFinding(
+        validatedFormat ? "BLOCKER" : "WARNING",
+        "ASSET_TOO_LARGE",
+        "A referenced image exceeds the 5 MB review limit.",
+        rawTarget
+      ));
+      continue;
+    }
+    if (extension === ".png") {
+      const signature = Buffer.from(resolution.bytes ?? []).subarray(0, 8).toString("hex");
+      if (signature !== "89504e470d0a1a0a") {
+        findings.push(assetFinding("BLOCKER", "ASSET_SIGNATURE_INVALID", "The referenced PNG has an invalid signature.", rawTarget));
+      }
+      continue;
+    }
+    if (extension === ".svg") {
+      const svg = Buffer.from(resolution.bytes ?? []).toString("utf8");
+      if (!/^\uFEFF?\s*(?:<\?xml[^>]*>\s*)?<svg\b/i.test(svg)) {
+        findings.push(assetFinding("BLOCKER", "ASSET_SIGNATURE_INVALID", "The referenced SVG does not start with an SVG element.", rawTarget));
+        continue;
+      }
+      const activeSvg = /<!DOCTYPE|<!ENTITY|<script\b|<foreignObject\b|<(?:iframe|object|embed)\b|\son[a-z]+\s*=|(?:href|xlink:href)\s*=\s*["']\s*(?:https?:|data:|javascript:|\/\/)|@import|url\s*\(/i;
+      if (activeSvg.test(svg)) {
+        findings.push(assetFinding(
+          "BLOCKER",
+          "SVG_ACTIVE_CONTENT",
+          "The referenced SVG contains active or externally loaded content.",
+          rawTarget
+        ));
+      }
+    }
+  }
+  return findings;
+}
+
+export async function reviewDocumentStructure(
   markdown: string,
   template?: string,
   options: ReviewOptions = {}
-): DocumentReviewResult {
+): Promise<DocumentReviewResult> {
   const findings: ReviewFinding[] = [];
   const contract: DocumentContract | undefined = options.documentType
     ? documentContract(options.documentType)
@@ -897,18 +1143,24 @@ export function reviewDocumentStructure(
   let contractCheckCount = 0;
   let contractChecksPassed = 0;
   const placeholders: string[] = [];
-  const markdownWithoutCode = markdown.replace(/```[\s\S]*?```/g, "");
+  const markdownWithoutCode = withoutFencedCode(stripFrontmatter(markdown));
+  const placeholderScan = markdownWithoutCode
+    .replace(/!\[[^\]\n]*\]\([^\n)]*\)/g, "")
+    .replace(/!?\[[^\]\n]+\]\[[^\]\n]*\]/g, "")
+    .replace(/^[ \t]{0,3}\[[^\]\n]+\]:[^\n]*$/gm, "")
+    .replace(/\[[^\]\n]+\]\([^\n)]*\)/g, "");
   const placeholderRe = /\[(?![ xX]\])([^\]\n]{3,})\](?!\()/g;
   let placeholderMatch: RegExpExecArray | null;
-  while ((placeholderMatch = placeholderRe.exec(markdownWithoutCode)) !== null) {
+  while ((placeholderMatch = placeholderRe.exec(placeholderScan)) !== null) {
     if (isTemplatePlaceholder(placeholderMatch[1])) {
       placeholders.push(placeholderMatch[0]);
     }
   }
-  const mustachePlaceholders = markdownWithoutCode.match(/\{\{[^}]+\}\}/g) ?? [];
+  const mustachePlaceholders = placeholderScan.match(/\{\{[^}]+\}\}/g) ?? [];
   placeholders.push(...mustachePlaceholders);
 
-  if (/<\/?[A-Za-z][^>]*>/.test(markdownWithoutCode)) {
+  const rawHtmlScan = withoutCommonMarkAutolinks(withoutInlineCode(markdownWithoutCode));
+  if (/<\/?[A-Za-z][^>]*>/.test(rawHtmlScan)) {
     findings.push({
       severity: "WARNING",
       code: "RAW_HTML",
@@ -926,7 +1178,7 @@ export function reviewDocumentStructure(
   if (placeholders.length > 0) {
     findings.push({
       severity: "BLOCKER",
-      code: "PLACEHOLDER_RESIDUO",
+      code: "UNRESOLVED_PLACEHOLDER",
       message: `${placeholders.length} unresolved placeholder(s) remain.`,
       evidence: [...new Set(placeholders)].slice(0, 8).join(", "),
     });
@@ -935,13 +1187,14 @@ export function reviewDocumentStructure(
   const fenceMatches = markdown.match(/^```/gm) ?? [];
   if (fenceMatches.length % 2 !== 0) {
     findings.push({
-      severity: "BLOCKER",
-      code: "FENCE_NON_CHIUSA",
+      severity: "WARNING",
+      code: "UNCLOSED_CODE_FENCE",
       message: "The document contains an unclosed fenced code block.",
     });
   }
 
-  const mermaidIssues: string[] = [];
+  const mermaidWarnings: string[] = [];
+  const mermaidSecurityIssues: string[] = [];
   const mermaidBlockRe = /```mermaid\s*\r?\n([\s\S]*?)```/g;
   let mermaidMatch: RegExpExecArray | null;
   let mermaidBlockCount = 0;
@@ -950,31 +1203,36 @@ export function reviewDocumentStructure(
     const body = mermaidMatch[1].trim();
     const firstLine = body.split(/\r?\n/).find((line) => line.trim() !== "")?.trim() ?? "";
     if (!/^(flowchart|graph|sequenceDiagram|erDiagram|classDiagram|stateDiagram|journey|gantt|pie|mindmap|timeline)\b/.test(firstLine)) {
-      mermaidIssues.push(firstLine || "(empty block)");
+      mermaidWarnings.push(firstLine || "(empty block)");
     }
-    if (body.length > 50_000) mermaidIssues.push("block exceeds 50,000 characters");
-    if (/%%\s*\{|(?:^|\s)(?:click|href)\s|https?:\/\/|<[^>]+>|javascript:|data:/i.test(body)) {
-      mermaidIssues.push("block contains a forbidden directive, URL, or HTML");
+    if (body.length > 50_000) mermaidWarnings.push("block exceeds 50,000 characters");
+    if (/%%\s*\{|(?:^|\n)\s*(?:click|href)\s|javascript:/i.test(body)) {
+      mermaidSecurityIssues.push("block contains an active directive or JavaScript URI");
     }
-    const pairs: Array<[string, string]> = [["[", "]"], ["(", ")"], ["{", "}"]];
-    for (const [open, close] of pairs) {
-      const opens = [...body].filter((character) => character === open).length;
-      const closes = [...body].filter((character) => character === close).length;
-      if (opens !== closes) mermaidIssues.push("block contains unbalanced delimiters");
+    if (/<[^>]+>|data:/i.test(body)) {
+      mermaidWarnings.push("block contains HTML-like or data URI syntax that requires renderer-specific verification");
     }
   }
   const asciiDiagramRe = /```(?!mermaid|json|bash|shell|ts|typescript|js|javascript|yaml|yml|http|text)\s*\r?\n[\s\S]*(?:──|-->|<--|\+[-+]{2,}|\|.*\|)[\s\S]*?```/g;
   const asciiDiagrams = markdown.match(asciiDiagramRe) ?? [];
 
-  if (mermaidIssues.length > 0) {
+  if (mermaidSecurityIssues.length > 0) {
     findings.push({
       severity: "BLOCKER",
-      code: "MERMAID_INVALIDO",
-      message: "One or more Mermaid blocks are empty, unsupported, unbalanced, oversized, or contain active/external content.",
-      evidence: mermaidIssues.slice(0, 5).join(", "),
+      code: "MERMAID_UNSAFE",
+      message: "One or more Mermaid blocks contain active directives or unsafe URI content.",
+      evidence: mermaidSecurityIssues.slice(0, 5).join(", "),
     });
   }
-  const imageLinkCount = (markdown.match(/!\[[^\]]*\]\([^)]+\)/g) ?? []).length;
+  if (mermaidWarnings.length > 0) {
+    findings.push({
+      severity: "WARNING",
+      code: "MERMAID_INVALID",
+      message: "One or more Mermaid blocks require renderer-specific syntax or size verification.",
+      evidence: mermaidWarnings.slice(0, 5).join(", "),
+    });
+  }
+  const imageLinkCount = markdownImageTargets(markdown).length;
   if (options.diagramMode === "none" && mermaidBlockCount > 0) {
     findings.push({
       severity: "WARNING",
@@ -992,7 +1250,7 @@ export function reviewDocumentStructure(
   if (asciiDiagrams.length > 0) {
     findings.push({
       severity: "WARNING",
-      code: "DIAGRAMMA_ASCII",
+      code: "ASCII_DIAGRAM",
       message: "Possible ASCII diagrams were found; convert them to Mermaid when they represent flows or architecture.",
     });
   }
@@ -1010,7 +1268,7 @@ export function reviewDocumentStructure(
   if (languageIssues.length > 0) {
     findings.push({
       severity: "WARNING",
-      code: "REVISIONE_LINGUA",
+      code: "LANGUAGE_REVIEW",
       message: `${languageIssues.length} possible language issue(s) were found for the requested language (${options.language ?? contract?.defaultLanguage ?? "English"}).`,
       evidence: uniqueStrings(languageIssues).slice(0, 8).join(" "),
     });
@@ -1077,7 +1335,7 @@ export function reviewDocumentStructure(
     if (missingSections.length > 0) {
       findings.push({
         severity: "BLOCKER",
-        code: "SEZIONI_MANCANTI",
+        code: "MISSING_SECTIONS",
         message: `${missingSections.length} template section(s) are missing.`,
         evidence: missingSections.slice(0, 10).join(", "),
       });
@@ -1101,8 +1359,8 @@ export function reviewDocumentStructure(
   }
   if (weakSections.length > 0) {
     findings.push({
-      severity: contract && contract.type !== "custom" ? "BLOCKER" : "WARNING",
-      code: "SEZIONI_DEBOLI",
+      severity: contract?.kind === "preset" ? "BLOCKER" : "WARNING",
+      code: "WEAK_SECTIONS",
       message: `Some sections do not meet the contract minimum of ${minimumSectionChars} useful characters.`,
       evidence: weakSections.slice(0, 10).join(", "),
     });
@@ -1127,17 +1385,20 @@ export function reviewDocumentStructure(
     }
   }
 
-  if (findings.length === 0) {
+  findings.push(...await validateDocumentAssets(markdown, options.assetResolver));
+
+  const blockerCount = findings.filter((finding) => finding.severity === "BLOCKER").length;
+  if (blockerCount === 0) {
     findings.push({
       severity: "INFO",
-      code: "NESSUN_BLOCCANTE",
+      code: "NO_BLOCKERS",
       message: "No blocking structural problems were found.",
     });
   }
 
-  const blockerCount = findings.filter((finding) => finding.severity === "BLOCKER").length;
   return {
     documentType: options.documentType,
+    effectiveDiagramMode: options.diagramMode ?? null,
     readyForDelivery: blockerCount === 0,
     blockerCount,
     contractCheckCount,
@@ -1146,7 +1407,7 @@ export function reviewDocumentStructure(
     missingSections,
     weakSections,
     placeholderCount: placeholders.length,
-    mermaidIssueCount: mermaidIssues.length + asciiDiagrams.length + (fenceMatches.length % 2),
+    mermaidIssueCount: mermaidWarnings.length + mermaidSecurityIssues.length + asciiDiagrams.length + (fenceMatches.length % 2),
     clientFacingIssueCount: clientFacingIssues.length,
     languageIssueCount: languageIssues.length,
     coverage,
@@ -1162,9 +1423,9 @@ function actionQueryForFinding(finding: ReviewFinding): string {
 }
 
 function suggestedPageTypeForFinding(finding: ReviewFinding): WikiPageType {
-  if (finding.code.includes("SEZION")) return "analysis";
-  if (finding.code.includes("MERMAID") || finding.code.includes("DIAGRAMMA")) return "concept";
-  if (finding.code.includes("LINGUA") || finding.code.includes("CLIENT")) return "analysis";
+  if (finding.code.includes("SECTION")) return "analysis";
+  if (finding.code.includes("MERMAID") || finding.code.includes("DIAGRAM")) return "concept";
+  if (finding.code.includes("LANGUAGE") || finding.code.includes("CLIENT")) return "analysis";
   return "overview";
 }
 
