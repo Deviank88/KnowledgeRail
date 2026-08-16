@@ -22,6 +22,12 @@ import { logger } from "../core/logger.js";
 
 const STATIC_CATALOG_TTL_MS = 5 * 60 * 1_000;
 
+export const USER_OUTPUT_LANGUAGE_POLICY =
+  "Write and update human-readable wiki pages and deliverables in the language of the user's current request. " +
+  "An explicit language request overrides inference; when editing existing content, preserve its language unless " +
+  "the user asks for translation. If the language cannot be inferred safely, ask before writing instead of " +
+  "defaulting to English. Keep tool names, schemas, control files, and operational messages in English.";
+
 export function mcpAgentInstructions(era: ProtocolEra): string {
   void era;
   return (
@@ -31,7 +37,8 @@ export function mcpAgentInstructions(era: ProtocolEra): string {
     "Follow the structured nextAction returned by each operation. Materialize only relevant " +
     "knowledge-rail:// or code:// links with resources/read when available; otherwise use " +
     "knowledge_page action=read for knowledge-rail:// links. If coverage remains insufficient after " +
-    "the suggested widening, preserve evidenceGaps as explicit unknowns instead of guessing."
+    "the suggested widening, preserve evidenceGaps as explicit unknowns instead of guessing. " +
+    USER_OUTPUT_LANGUAGE_POLICY
   );
 }
 
@@ -101,7 +108,7 @@ export function buildServer(
     },
     {
       instructions: profile.kind === "catalog"
-        ? "This is a context-free desktop chat. First call knowledge_workspace list, ask the user which workspace to use, then select it with explicit confirmation. Keep the returned opaque workspace_binding only in this conversation and include it in every domain call. Never invent an ID or filesystem path. Prefer a new chat when changing customer workspace."
+        ? "This is a context-free desktop chat. First call knowledge_workspace list, ask the user which workspace to use, then select it with explicit confirmation. Keep the returned opaque workspace_binding only in this conversation and include it in every domain call. Never invent an ID or filesystem path. Prefer a new chat when changing customer workspace. " + USER_OUTPUT_LANGUAGE_POLICY
         : mcpAgentInstructions(context.era),
       // These catalogs are registration metadata and do not depend on wiki
       // contents. Modern clients may safely reuse them, reducing repeated

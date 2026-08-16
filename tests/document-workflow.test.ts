@@ -5,11 +5,16 @@ import * as path from "node:path";
 import { test } from "node:test";
 import { DOCUMENT_TEMPLATES } from "../src/config/templates.js";
 import {
+  documentContract,
+  USER_REQUEST_LANGUAGE,
+} from "../src/config/document-contracts.js";
+import {
   WIKI_PAGE_DIRECTORIES,
   WIKI_PAGE_DIRECTORY_BY_TYPE,
 } from "../src/config/workspace-layout.js";
 import {
   createSectionContext,
+  buildDocumentPlan,
   formatReviewResult,
   prepareKnowledgeUpdateDraft,
   parseTemplateSections,
@@ -56,6 +61,27 @@ test("parseTemplateSections extracts top-level document sections with optional l
     sections.map((section) => section.title),
     ["1. Purpose and Objectives", "2. Context and Motivation", "3. Functional Requirements"]
   );
+});
+
+test("document planning propagates an open-ended user output language", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-language-plan-"));
+  for (const language of ["italiano", "français", "português"]) {
+    const plan = await buildDocumentPlan(root, {
+      documentType: "custom",
+      objective: "Produce user-readable knowledge.",
+      language,
+    });
+    assert.match(plan, new RegExp(`Output language:\\*\\* ${language}`));
+    assert.equal(plan.includes(`Write all human-readable titles, headings, and prose in ${language}.`), true);
+    assert.match(plan, /not an English-output requirement/);
+  }
+
+  const inferred = await buildDocumentPlan(root, {
+    documentType: "custom",
+    objective: "Produce user-readable knowledge.",
+  });
+  assert.equal(documentContract("custom").defaultLanguage, USER_REQUEST_LANGUAGE);
+  assert.match(inferred, /Output language:\*\* the user's request language/);
 });
 
 test("workspace layout covers every canonical wiki page type without eager page directories", () => {

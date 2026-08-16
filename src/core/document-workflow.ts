@@ -2,6 +2,7 @@ import { DOCUMENT_PERSONAS, DOCUMENT_TEMPLATES } from "../config/templates.js";
 import {
   documentContract,
   DOCUMENT_TYPES,
+  USER_REQUEST_LANGUAGE,
   type DocumentContract,
   type DocumentType,
 } from "../config/document-contracts.js";
@@ -145,6 +146,7 @@ export interface DocumentPlanOptions {
   projectName?: string;
   objective?: string;
   audience?: string;
+  language?: string;
   maxSections?: number;
 }
 
@@ -288,6 +290,7 @@ export async function buildDocumentPlan(
 ): Promise<string> {
   const today = new Date().toISOString().slice(0, 10);
   const contract = documentContract(options.documentType);
+  const outputLanguage = options.language?.trim() || contract.defaultLanguage;
   const rawTemplate = DOCUMENT_TEMPLATES[options.documentType];
   const persona = DOCUMENT_PERSONAS[options.documentType] ?? DEFAULT_EDITOR_PERSONA;
   const template = rawTemplate
@@ -332,7 +335,7 @@ export async function buildDocumentPlan(
     `> **Objective:** ${options.objective ?? "Produce a complete, consistent document that can be validated against the wiki."}`,
     `> **Audience:** ${options.audience ?? "Project stakeholders and the operations team."}`,
     `> **Contract:** ${contract.label} — ${contract.purpose}`,
-    `> **Default language:** ${contract.defaultLanguage}`,
+    `> **Output language:** ${outputLanguage}`,
     `> **Default destination:** ${contract.defaultClientFacing ? "client-facing" : "internal/technical"}`,
     `> **Available wiki pages:** ${inventory.length}`,
     `> **Inventory by type:** ${[...counts.entries()].map(([type, count]) => `${type}: ${count}`).join(", ") || "n/a"}`,
@@ -353,6 +356,7 @@ export async function buildDocumentPlan(
     `- Expand relevant budget-excluded pages with \`knowledge_page action="read"\` and verify requirements/decisions across sections.`,
     `- For code evidence use \`knowledge_code\` first; a raw scan is an explicit fallback and must be recorded.`,
     `- Use Mermaid only when a diagram clarifies flows, architecture, data, or sequences; never use ASCII art.`,
+    `- Write all human-readable titles, headings, and prose in ${outputLanguage}. The English reference template and editor instructions are structural guidance, not an English-output requirement.`,
     ``,
     `## Sections to assign to writers`,
     ``,
@@ -669,7 +673,7 @@ export function formatSectionContext(
     "## Writer instructions",
     "- Use only the evidence in this context pack and report gaps instead of inventing content.",
     "- Every factual claim must preserve the provenance shown by the evidence URI or sources.",
-    `- Write in the requested language (${result.writerLanguage ?? "document language"}) using a professional, concrete, polished register.`,
+    `- Write in the requested language (${result.writerLanguage ?? USER_REQUEST_LANGUAGE}) using a professional, concrete, polished register; the surrounding English instructions are internal guidance only.`,
     "- Add Mermaid diagrams only when they clarify flows, architecture, or relationships.",
     "- Do not use ASCII art or placeholders.",
     "",

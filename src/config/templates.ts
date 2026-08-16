@@ -51,8 +51,10 @@ export const DEFAULT_SCHEMA_MD = `# Wiki Schema and Conventions
 
 ## Language
 
-**Write all wiki pages in English by default.**
-Frontmatter fields (\`title\`, \`tags\`, and so on) retain their technical formats (for example ISO dates and lowercase-with-hyphens tags). A caller may explicitly request another document language when needed, but model-facing instructions and generated control files remain in English.
+**Write new wiki content in the language of the user's current request.**
+An explicit language request overrides inference. When editing an existing page, preserve its language unless the user asks for a translation. If the user's language cannot be inferred safely, ask before writing instead of silently defaulting to English. This policy is open-ended: any natural language understood by the consuming model is valid.
+
+Frontmatter fields (\`title\`, \`tags\`, and so on) retain their technical formats (for example ISO dates and lowercase-with-hyphens tags). Model-facing instructions, stable identifiers, and generated control files remain in English; this does not constrain the language of human-readable wiki pages or deliverables.
 
 ---
 
@@ -278,7 +280,7 @@ Documents are saved under \`docs/deliverables/\`. They are not wiki pages and **
 
 ### Document quality rules
 
-- Use the language, audience, and technical depth from the document contract or explicit overrides.
+- Use the explicit output language when supplied; otherwise use the language of the user's current request. Translate human-facing template headings and prose instead of treating an English reference template as an English-output requirement.
 - Do not leave placeholders such as \`[Describe...]\`, \`[Name]\`, or \`{{PROJECT_NAME}}\` in the final document.
 - Do not invent details absent from the wiki; report gaps, assumptions, or data to confirm.
 - In client-facing documents, do not mention the wiki, context packs, agents, prompts, MCP tools, \`src/\`, \`tests/\`, \`docs/\` paths, or internal process details.
@@ -290,7 +292,8 @@ Documents are saved under \`docs/deliverables/\`. They are not wiki pages and **
 `;
 
 const DOCUMENT_QUALITY_RULES =
-  "Cross-cutting rules: use the language and register required by the document contract; " +
+  "Cross-cutting rules: use the explicit output language when supplied, otherwise the language of the user's current request; " +
+  "translate human-facing headings and prose even when the structural reference template is in English; " +
   "leave no unresolved placeholders; do not invent details absent from the wiki; " +
   "if the wiki is incomplete but code clarifies behavior, update the wiki before regenerating the document; " +
   "do not mention the wiki, context packs, agents, prompts, MCP tools, or internal paths in client-facing documents; " +

@@ -23,6 +23,7 @@ const PlanDocumentPromptSchema = z.object({
   project_name: z.string().optional(),
   objective: z.string().optional(),
   audience: z.string().optional(),
+  language: z.string().optional().describe("Output language; defaults to the user's current request language."),
 });
 
 const DevReportPromptSchema = z.object({
@@ -40,6 +41,7 @@ const KnowledgeUpdatePromptSchema = z.object({
   knowledge_context: z.string().optional(),
   code_context: z.string().optional(),
   sources: z.string().optional().describe("Comma-separated sources"),
+  language: z.string().optional().describe("Wiki output language; defaults to the user's current request language."),
 });
 
 export function registerWikiPrompts(
@@ -69,13 +71,14 @@ export function registerWikiPrompts(
         "Generate an editorial plan (sections, writers, context packs, checklist) for a document in docs/deliverables.",
       argsSchema: schemas.document,
     },
-    async ({ document_type, project_name, objective, audience }) =>
+    async ({ document_type, project_name, objective, audience, language }) =>
       promptText(
         await buildDocumentPlan(wikiDir(), {
           documentType: document_type,
           projectName: project_name,
           objective,
           audience,
+          language,
         })
       )
   );
@@ -106,7 +109,7 @@ export function registerWikiPrompts(
       description: "Generate a valid wiki draft from a gap and the available evidence.",
       argsSchema: schemas.update,
     },
-    ({ finding, target_page_path, page_type, title, knowledge_context, code_context, sources }) => {
+    ({ finding, target_page_path, page_type, title, knowledge_context, code_context, sources, language }) => {
       const draft = prepareKnowledgeUpdateDraft({
         finding,
         targetPagePath: target_page_path,
@@ -117,6 +120,7 @@ export function registerWikiPrompts(
         sources: sources?.split(",").map((source) => source.trim()).filter(Boolean),
       });
       return promptText([
+        `Output language: ${language?.trim() || "the user's current request language"}. Translate all human-readable headings and prose in the draft before writing; keep technical frontmatter values stable.`,
         `Suggested path: ${draft.path}`,
         "Apply the draft with knowledge_page action=write and record the decision with action=append_log.",
         "```markdown",

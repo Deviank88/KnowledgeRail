@@ -265,6 +265,8 @@ Built-in contracts cover functional specifications, architecture documents, proj
 
 The generated document is an output of agent memory, not its replacement. Confirmed facts belong in `wiki/`; source artifacts remain in `docs/`; delivery-ready Markdown and DOCX files belong in `docs/deliverables/`.
 
+KnowledgeRail keeps its MCP catalog, prompts, stable identifiers, operational messages, and generated control files in English. This is an internal interoperability choice, not an output-language restriction: human-readable wiki pages and deliverables follow the language of the user's current request, an explicit language override takes precedence, and edits preserve the existing page language unless translation is requested. The policy has no locale allowlist.
+
 ## Optional OCR and semantic retrieval
 
 Text, Markdown, JSON, YAML, CSV/TSV, XLSX, and PPTX normalization works locally. Images and PDFs require either an Ollama-compatible OCR service or a configured native OCR endpoint.

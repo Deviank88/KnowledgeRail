@@ -5,6 +5,11 @@ import * as path from "node:path";
 import { test } from "node:test";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { getWikiRoot, setWikiRoot } from "../src/core/paths.js";
+import { DEFAULT_SCHEMA_MD } from "../src/config/templates.js";
+import {
+  MCP_AGENT_INSTRUCTIONS,
+  USER_OUTPUT_LANGUAGE_POLICY,
+} from "../src/mcp/server.js";
 import { AGENT_TOOL_NAMES } from "../src/mcp/tool-names.js";
 import { registerAgentTools } from "../src/tools/agent-tools.js";
 
@@ -37,6 +42,16 @@ test("public catalog exposes exactly eight domain tools and no menu or operation
   assert.equal(tools.size, 8);
   assert.equal(tools.has("knowledge_menu"), false);
   assert.equal([...tools.keys()].some((name) => name.startsWith("wiki_")), false);
+});
+
+test("English MCP metadata does not force English wiki output", () => {
+  for (const policy of [DEFAULT_SCHEMA_MD, USER_OUTPUT_LANGUAGE_POLICY, MCP_AGENT_INSTRUCTIONS]) {
+    assert.match(policy, /language of the user(?:'s current request|'s request)/i);
+    assert.match(policy, /preserve (?:its|the existing page) language/i);
+    assert.match(policy, /ask before writing/i);
+  }
+  assert.doesNotMatch(DEFAULT_SCHEMA_MD, /Write all wiki pages in English by default/i);
+  assert.match(USER_OUTPUT_LANGUAGE_POLICY, /tool names, schemas, control files, and operational messages in English/i);
 });
 
 test("action schemas reject incomplete calls before an operation can mutate state", () => {
