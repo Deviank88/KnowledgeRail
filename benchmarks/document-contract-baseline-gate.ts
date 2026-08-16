@@ -10,7 +10,7 @@ interface DocumentContractBaseline {
   minimumPersonaCoverage: number;
   minimumValidDocumentAcceptanceRate: number;
   minimumInvalidDocumentRejectionRate: number;
-  minimumExportReadinessAccuracy: number;
+  minimumDeliveryReadinessAccuracy: number;
 }
 
 async function main(): Promise<void> {
@@ -32,7 +32,7 @@ async function main(): Promise<void> {
   check("PersonaCoverage", metrics.PersonaCoverage >= baseline.minimumPersonaCoverage, metrics.PersonaCoverage);
   check("ValidDocumentAcceptanceRate", metrics.ValidDocumentAcceptanceRate >= baseline.minimumValidDocumentAcceptanceRate, metrics.ValidDocumentAcceptanceRate);
   check("InvalidDocumentRejectionRate", metrics.InvalidDocumentRejectionRate >= baseline.minimumInvalidDocumentRejectionRate, metrics.InvalidDocumentRejectionRate);
-  check("ExportReadinessAccuracy", metrics.ExportReadinessAccuracy >= baseline.minimumExportReadinessAccuracy, metrics.ExportReadinessAccuracy);
+  check("DeliveryReadinessAccuracy", metrics.DeliveryReadinessAccuracy >= baseline.minimumDeliveryReadinessAccuracy, metrics.DeliveryReadinessAccuracy);
 
   if (failures.length > 0) throw new Error(`Document contract gate failed:\n- ${failures.join("\n- ")}`);
   process.stdout.write(`\nDocument contract gate passed (baseline v${baseline.version}).\n`);

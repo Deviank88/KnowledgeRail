@@ -244,7 +244,7 @@ const ROUTING_GOLDENS = [
   ["Gather evidence for the Security section of the document", "knowledge_document_context", "section"],
   ["Save this architecture proposal as a Markdown deliverable", "knowledge_document", "write"],
   ["Check whether the deliverable satisfies its required sections", "knowledge_document", "review"],
-  ["Produce the client-ready Word version of the reviewed deliverable", "knowledge_document", "export"],
+  ["Review an evidence-backed compliance note for final delivery readiness", "knowledge_document", "review"],
   ["Bootstrap KnowledgeRail in this repository", "knowledge_admin", "init"],
   ["Validate the knowledge base for broken links and orphan pages", "knowledge_admin", "lint"],
   ["Upgrade the stored knowledge format without losing project data", "knowledge_admin", "migrate"],
@@ -441,7 +441,7 @@ export async function evaluateToolSurface(
       action: "review", filename: "agent-surface.md", document_type: "custom",
     });
     traces.push(nextOf(plan)?.action === "section" && nextOf(written)?.action === "review" &&
-      ["write", "export"].includes(String(nextOf(reviewed)?.action)));
+      nextOf(reviewed) === null && structuredOf(reviewed).state === "document_reviewed");
 
     await fs.mkdir(path.join(projectRoot, "src"), { recursive: true });
     await fs.writeFile(path.join(projectRoot, "src", "lease.ts"), "export function renewLease(): boolean { return true; }\n", "utf8");

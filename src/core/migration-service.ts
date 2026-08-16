@@ -362,7 +362,7 @@ export function migrateSchemaText(schema: string): string {
     ["knowledge_section_context", "knowledge_document_context action=section"],
     ["knowledge_write_document", "knowledge_document action=write"],
     ["knowledge_review_document", "knowledge_document action=review"],
-    ["knowledge_export_docx", "knowledge_document action=export"],
+    ["knowledge_export_docx", "knowledge_document action=review (terminal; export removed)"],
     ["knowledge_init", "knowledge_admin action=init"],
     ["wiki_init", "knowledge_admin action=init"],
     ["wiki_write_page", "knowledge_page action=write"],

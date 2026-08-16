@@ -40,7 +40,7 @@ Add a deterministic evaluator and a separate baseline gate under `benchmarks/`, 
 - `src/core/semantic`: optional embedding provider and bounded ANN retrieval.
 - `src/core`: canonical page records, retrieval, graph, migrations, concurrency, durability, and state lifecycle.
 - `src/config`: workspace layout, contracts, editorial plans, and generated templates.
-- `src/docx`: Markdown parsing and bounded DOCX/Mermaid rendering.
+- `src/core/document-workflow.ts` and `src/tools/document-tools.ts`: open document profiles, bounded evidence packs, Markdown writes, and terminal review.
 - `tests`: behavior, security, compatibility, cross-process, and packaging regression tests.
 - `benchmarks`: deterministic quality gates and performance diagnostics.
 

@@ -7,8 +7,8 @@ import {
   type ServerContext,
 } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { DOCUMENT_TYPES } from "../config/document-contracts.js";
 import { EDITORIAL_EVIDENCE_KINDS } from "../config/editorial-plans.js";
+import { DIAGRAM_MODES } from "../core/document-workflow.js";
 import { resolveEvidenceClaims } from "../core/ingestion/evidence-linker.js";
 import {
   reconcileEvidenceCoverage,
@@ -231,7 +231,11 @@ const CodeSchema = CodeEvidenceInputSchema;
 
 const DocumentContextSchema = z.object({
   action: z.enum(["plan", "section"]).describe("plan=design outline; section=collect evidence."),
-  document_type: z.enum(DOCUMENT_TYPES),
+  document_type: z.string().trim().min(1).max(128).regex(/^[^\r\n]+$/),
+  required_sections: z.array(
+    z.string().trim().min(1).max(160).regex(/^[^\r\n]+$/)
+  ).max(30).optional(),
+  diagram_mode: z.enum(DIAGRAM_MODES).optional(),
   project_name: z.string().optional(),
   objective: z.string().optional(),
   audience: z.string().optional(),
@@ -256,29 +260,24 @@ const DocumentContextSchema = z.object({
 });
 
 const DocumentSchema = z.object({
-  action: z.enum(["write", "review", "export"])
-    .describe("write=save Markdown; review=check required sections; export=render Word/DOCX."),
-  filename: z.string(),
-  document_type: z.enum(DOCUMENT_TYPES),
+  action: z.enum(["write", "review"])
+    .describe("write=save Markdown; review=terminal delivery-readiness check."),
+  filename: z.string().trim().min(4).max(255).regex(/^[^\r\n]+\.md$/i),
+  document_type: z.string().trim().min(1).max(128).regex(/^[^\r\n]+$/),
+  required_sections: z.array(
+    z.string().trim().min(1).max(160).regex(/^[^\r\n]+$/)
+  ).max(30).optional(),
+  diagram_mode: z.enum(DIAGRAM_MODES).optional(),
   title: z.string().optional(),
   content: z.string().optional(),
   project_name: z.string().optional(),
   language: z.string().optional(),
   client_facing: z.boolean().optional(),
   include_wiki_update_plan: z.boolean().default(true),
-  client: z.string().optional(),
-  category_label: z.string().optional(),
-  subtitle: z.string().default(""),
-  version: z.string().default("1.0"),
-  date: z.string().optional(),
-  status: z.string().default("Reviewed"),
   overwrite: z.boolean().default(false),
 }).superRefine((value, context) => {
   if (value.action === "write" && (!value.title || !value.content)) {
     context.addIssue({ code: "custom", message: "action=write requires title and content." });
-  }
-  if (value.action === "export" && (!value.client || !value.project_name)) {
-    context.addIssue({ code: "custom", message: "action=export requires client and project_name." });
   }
 });
 
@@ -339,7 +338,6 @@ export const AGENT_STATES = [
   "document_written",
   "document_reviewed",
   "document_needs_revision",
-  "document_exported",
   "workspace_initialized",
   "lint_complete",
   "migration_plan_complete",
@@ -799,7 +797,7 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.documentContext, {
-    description: "Plan a typed document or gather section evidence.",
+    description: "Plan any document profile or gather section evidence.",
     inputSchema: schemas.documentContext,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -816,6 +814,7 @@ export function registerAgentTools(
             action: "section",
             document_type: args.document_type,
             ...(args.language ? { language: args.language } : {}),
+            ...(args.diagram_mode ? { diagram_mode: args.diagram_mode } : {}),
           },
         } : null,
         args.action === "section" ? "Materialize selected evidence and preserve explicit GAP markers." : undefined,
@@ -826,21 +825,17 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.document, {
-    description: "Write, review or export a typed deliverable.",
+    description: "Write or review an evidence-backed Markdown deliverable.",
     inputSchema: schemas.document,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
   }, async (args, context) => {
     try {
-      const keys = { write: "writeDocument", review: "reviewDocument", export: "exportDocx" } as const;
+      const keys = { write: "writeDocument", review: "reviewDocument" } as const;
       const operationArgs = omit(
         args,
         args.action === "review" ? ["action"] : ["action", "include_wiki_update_plan"]
       );
-      if (args.action === "export") {
-        delete operationArgs.project_name;
-        operationArgs.project = args.project_name;
-      }
       const result = await call(
         keys[args.action],
         operationArgs,
@@ -849,25 +844,39 @@ export function registerAgentTools(
       if (args.action === "write") {
         return withGuidance(result, "document_written", {
           tool: "knowledge_document", action: "review", requiredArguments: ["action", "filename", "document_type"],
-          suggestedArguments: { action: "review", filename: args.filename, document_type: args.document_type },
+          suggestedArguments: {
+            action: "review",
+            filename: args.filename,
+            document_type: args.document_type,
+            ...(args.project_name ? { project_name: args.project_name } : {}),
+            ...(args.language ? { language: args.language } : {}),
+            ...(args.client_facing !== undefined ? { client_facing: args.client_facing } : {}),
+            ...(args.required_sections ? { required_sections: args.required_sections } : {}),
+            ...(args.diagram_mode ? { diagram_mode: args.diagram_mode } : {}),
+          },
         });
       }
-      if (args.action === "review") {
+      {
         const structured = isCallToolResult(result) && result.structuredContent && typeof result.structuredContent === "object"
           ? result.structuredContent as Record<string, unknown>
           : {};
-        const ready = structured.readyForExport === true;
-        return withGuidance(result, ready ? "document_reviewed" : "document_needs_revision", ready ? {
-          tool: "knowledge_document", action: "export",
-          requiredArguments: ["action", "filename", "document_type", "client", "project_name"],
-          suggestedArguments: { action: "export", filename: args.filename, document_type: args.document_type },
-        } : {
+        const ready = structured.readyForDelivery === true;
+        return withGuidance(result, ready ? "document_reviewed" : "document_needs_revision", ready ? null : {
           tool: "knowledge_document", action: "write",
           requiredArguments: ["action", "filename", "title", "document_type", "content", "overwrite"],
-          suggestedArguments: { action: "write", filename: args.filename, document_type: args.document_type, overwrite: true },
+          suggestedArguments: {
+            action: "write",
+            filename: args.filename,
+            document_type: args.document_type,
+            ...(args.required_sections ? { required_sections: args.required_sections } : {}),
+            ...(args.diagram_mode ? { diagram_mode: args.diagram_mode } : {}),
+            ...(args.project_name ? { project_name: args.project_name } : {}),
+            ...(args.language ? { language: args.language } : {}),
+            ...(args.client_facing !== undefined ? { client_facing: args.client_facing } : {}),
+            overwrite: true,
+          },
         }, undefined, true);
       }
-      return withGuidance(result, "document_exported", null);
     } catch (error: unknown) {
       return withGuidance(errorResult(error), "blocked", null);
     }

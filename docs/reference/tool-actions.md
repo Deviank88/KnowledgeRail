@@ -13,7 +13,7 @@ Every successful domain operation returns `structuredContent.state` and `structu
 - Input-schema errors: missing, malformed, out-of-range, or action-incompatible arguments.
 - Workspace errors: unavailable, read-only, expired, released, or wrong-principal bindings.
 - Filesystem-boundary errors: traversal, absolute patterns, symlink escapes, or missing controlled files.
-- Contract errors: invalid wiki frontmatter, incomplete evidence coverage, or document export blockers.
+- Contract errors: invalid wiki frontmatter, incomplete evidence coverage, or document review blockers.
 - Concurrency/recovery errors: lock ownership, stale-operation recovery, or migration/move rollback failures.
 
 ## `knowledge_admin`
@@ -82,39 +82,37 @@ Actions/modes: `task`, `list`, `search`, `graph`.
 
 ## `knowledge_document`
 
-Write, review or export a typed deliverable.
+Write or review an evidence-backed Markdown deliverable.
 
-Actions/modes: `write`, `review`, `export`.
+Actions/modes: `write`, `review`.
 
 | Parameter | Type / values | Required | Default | Description |
 |---|---|---:|---|---|
-| `action` | `write` &#124; `review` &#124; `export` | yes | — | write=save Markdown; review=check required sections; export=render Word/DOCX. |
+| `action` | `write` &#124; `review` | yes | — | write=save Markdown; review=terminal delivery-readiness check. |
 | `filename` | string | yes | — | — |
-| `document_type` | `functional_spec` &#124; `architecture_doc` &#124; `project_brief` &#124; `onboarding_guide` &#124; `api_reference` &#124; `adr` &#124; `runbook` &#124; `test_plan` &#124; `incident_report` &#124; `release_notes` &#124; `custom` | yes | — | — |
+| `document_type` | string | yes | — | — |
+| `required_sections` | array<string> | no | — | — |
+| `diagram_mode` | `none` &#124; `mermaid` &#124; `external_asset` | no | — | — |
 | `title` | string | no | — | — |
 | `content` | string | no | — | — |
 | `project_name` | string | no | — | — |
 | `language` | string | no | — | — |
 | `client_facing` | boolean | no | — | — |
 | `include_wiki_update_plan` | boolean | no | `true` | — |
-| `client` | string | no | — | — |
-| `category_label` | string | no | — | — |
-| `subtitle` | string | no | `""` | — |
-| `version` | string | no | `"1.0"` | — |
-| `date` | string | no | — | — |
-| `status` | string | no | `"Reviewed"` | — |
 | `overwrite` | boolean | no | `false` | — |
 
 ## `knowledge_document_context`
 
-Plan a typed document or gather section evidence.
+Plan any document profile or gather section evidence.
 
 Actions/modes: `plan`, `section`.
 
 | Parameter | Type / values | Required | Default | Description |
 |---|---|---:|---|---|
 | `action` | `plan` &#124; `section` | yes | — | plan=design outline; section=collect evidence. |
-| `document_type` | `functional_spec` &#124; `architecture_doc` &#124; `project_brief` &#124; `onboarding_guide` &#124; `api_reference` &#124; `adr` &#124; `runbook` &#124; `test_plan` &#124; `incident_report` &#124; `release_notes` &#124; `custom` | yes | — | — |
+| `document_type` | string | yes | — | — |
+| `required_sections` | array<string> | no | — | — |
+| `diagram_mode` | `none` &#124; `mermaid` &#124; `external_asset` | no | — | — |
 | `project_name` | string | no | — | — |
 | `objective` | string | no | — | — |
 | `audience` | string | no | — | — |

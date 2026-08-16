@@ -44,10 +44,6 @@ jobs:
         run: npm ci
 
       - name: Typecheck and tests
-        env:
-          # GitHub-hosted Ubuntu runners block Chromium's user-namespace sandbox via AppArmor.
-          # The runner is already isolated; production keeps Chromium's sandbox enabled by default.
-          KNOWLEDGE_RAIL_MERMAID_NO_SANDBOX: "true"
         run: npm run verify
 
   installed-package:

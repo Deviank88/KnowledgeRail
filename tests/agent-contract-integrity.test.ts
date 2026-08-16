@@ -405,26 +405,29 @@ test("public report, recovery and document actions preserve guidance through com
       filename: "contract-fixture.md",
       title: "Contract fixture",
       document_type: "custom",
+      required_sections: ["Purpose"],
+      diagram_mode: "none",
       content,
       overwrite: true,
     }, {});
     assert.equal(written.structuredContent?.state, "document_written");
+    assert.deepEqual(
+      (written.structuredContent?.nextAction as { suggestedArguments?: Record<string, unknown> }).suggestedArguments?.required_sections,
+      ["Purpose"]
+    );
     const reviewed = await tools.get("knowledge_document")!.handler({
       action: "review",
       filename: "contract-fixture.md",
       document_type: "custom",
+      required_sections: ["Purpose"],
+      diagram_mode: "none",
       include_wiki_update_plan: false,
     }, {});
     assert.equal(reviewed.structuredContent?.state, "document_reviewed");
-    const exported = await tools.get("knowledge_document")!.handler({
-      action: "export",
-      filename: "contract-fixture.md",
-      document_type: "custom",
-      client: "Test client",
-      project_name: "KnowledgeRail",
-      overwrite: true,
-    }, {});
-    assert.equal(exported.structuredContent?.state, "document_exported");
-    await fs.access(path.join(projectRoot, "docs", "deliverables", "contract-fixture.docx"));
+    assert.equal(reviewed.structuredContent?.nextAction, null);
+    assert.match(String(reviewed.structuredContent?.contentSha256), /^[a-f0-9]{64}$/);
+    await assert.rejects(
+      fs.access(path.join(projectRoot, "docs", "deliverables", "contract-fixture.docx"))
+    );
   });
 });

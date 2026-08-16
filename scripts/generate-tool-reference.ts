@@ -143,7 +143,7 @@ const output = [
   "- Input-schema errors: missing, malformed, out-of-range, or action-incompatible arguments.",
   "- Workspace errors: unavailable, read-only, expired, released, or wrong-principal bindings.",
   "- Filesystem-boundary errors: traversal, absolute patterns, symlink escapes, or missing controlled files.",
-  "- Contract errors: invalid wiki frontmatter, incomplete evidence coverage, or document export blockers.",
+  "- Contract errors: invalid wiki frontmatter, incomplete evidence coverage, or document review blockers.",
   "- Concurrency/recovery errors: lock ownership, stale-operation recovery, or migration/move rollback failures.",
   "",
   ...tools.map(renderTool),

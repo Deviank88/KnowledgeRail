@@ -34,8 +34,6 @@ jobs:
         run: npm run release:verify -- "$GITHUB_REF_NAME"
 
       - name: Typecheck and tests
-        env:
-          KNOWLEDGE_RAIL_MERMAID_NO_SANDBOX: "true"
         run: npm run verify
 
       - name: Deterministic quality gates

@@ -60,9 +60,11 @@ test("action schemas reject incomplete calls before an operation can mutate stat
   const page = tools.get("knowledge_page")!.config.inputSchema;
   const ingest = tools.get("knowledge_ingest")!.config.inputSchema;
   const code = tools.get("knowledge_code")!.config.inputSchema;
+  const document = tools.get("knowledge_document")!.config.inputSchema;
 
   assert.equal(page.safeParse({ action: "edit", path: "a.md" }).success, false);
   assert.equal(page.safeParse({ action: "read", path: "a.md", resource_uri: "knowledge-rail://page/a.md" }).success, false);
+  assert.equal(document.safeParse({ action: "review", filename: "report.docx", document_type: "custom" }).success, false);
   assert.equal(ingest.safeParse({ action: "apply_claims", normalized_filename: "a.md", segment_id: "seg-x" }).success, false);
   assert.equal(ingest.safeParse({ action: "record_segment", normalized_filename: "a.md", segment_id: "seg-x" }).success, false);
   assert.equal(code.safeParse({ action: "record_fallback", query: "x" }).success, false);

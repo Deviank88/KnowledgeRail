@@ -36,7 +36,6 @@ export const TOOL_NAMES = {
   sectionContext: { modern: "knowledge_section_context", legacy: "wiki_get_section_context" },
   writeDocument: { modern: "knowledge_write_document", legacy: "wiki_write_document" },
   reviewDocument: { modern: "knowledge_review_document", legacy: "wiki_review_document" },
-  exportDocx: { modern: "knowledge_export_docx", legacy: "wiki_export_docx" },
   init: { modern: "knowledge_init", legacy: "wiki_init" },
   writePage: { modern: "wiki_write_page", legacy: "wiki_write_page" },
   editPage: { modern: "wiki_edit_page", legacy: "wiki_edit_page" },

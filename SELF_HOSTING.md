@@ -55,12 +55,12 @@ A future remote mode can preserve the same request-scoped workspace contract whi
 1. OAuth 2.1 resource-server behavior with audience validation and explicit read/write/admin scopes.
 2. A tenant-aware storage interface backed by durable object storage and transactional metadata rather than arbitrary server-local paths.
 3. Distributed concurrency control, optimistic versions, idempotency keys, and deterministic conflict handling.
-4. Durable queues for OCR, indexing, ingestion, DOCX, and Mermaid/Chromium workloads.
+4. Durable queues for OCR, indexing, ingestion, and other long-running evidence workloads.
 5. Tenant-scoped caches and index snapshots that can be rebuilt safely by any instance.
 6. Rate limits, quotas, structured audit records, redacted telemetry, backups, restore tests, and incident procedures.
 7. End-to-end tests proving cross-tenant isolation, cancellation, retry safety, and behavior across rolling versions.
 
-A serverless container is a more realistic first remote target than an edge function because current document workflows use Node filesystem APIs, Chromium, PDF conversion, and potentially long-running operations. None of this future work is implied by the local gateway.
+A serverless container is a more realistic first remote target than an edge function because current workflows use Node filesystem APIs, local indexing, PDF ingestion, and potentially long-running operations. None of this future work is implied by the local gateway.
 
 ## Remote-ready definition
 

@@ -8,7 +8,7 @@ KnowledgeRail is a local-first MCP server that turns project documentation and s
 
 It is designed for agents that need to understand, change, review, or document a codebase without loading the whole repository into the model context. Retrieval is bounded, provenance is preserved, missing evidence is reported explicitly, and difficult queries widen progressively instead of silently losing relevant information.
 
-> **Current status:** stable release `1.0.1`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
+> **Current status:** stable release `2.0.0`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
 
 ## What it provides
 
@@ -18,7 +18,7 @@ It is designed for agents that need to understand, change, review, or document a
 - Complete source ingestion through bounded segments, a coverage ledger, and durable Evidence IR.
 - A deterministic TypeScript/JavaScript code index with symbol and reference lookup.
 - Incremental graph, retrieval, and semantic indexes stored beside the project wiki.
-- Contract-driven Markdown deliverables and gated DOCX export with Mermaid diagrams.
+- Contract-driven Markdown deliverables with terminal review, content hashes, and optional caller-authored diagrams.
 - Conservative migration of existing v1/v2/v3 wikis.
 - Automatic per-process workspace binding for IDEs and terminal agents.
 - A local HTTP gateway that keeps concurrent clients and projects isolated per request.
@@ -32,14 +32,14 @@ KnowledgeRail does not call an LLM itself. The connected MCP client chooses and 
 - npm
 - macOS, Windows, or Linux
 
-Mermaid CLI and its compatible Chromium runtime are installed with the package. A separate global Mermaid installation is not required.
+KnowledgeRail ships no browser or document renderer. Mermaid source remains ordinary Markdown and is rendered only by viewers that support it.
 
 ## Quick start with npx
 
 Run this from any directory inside the project you opened in VS Code, Cursor, a terminal, or another context-aware coding client:
 
 ```bash
-npx -y knowledge-rail@1.0.1
+npx -y knowledge-rail@2.0.0
 ```
 
 No project path is needed in the persistent MCP configuration. KnowledgeRail discovers the opened project independently for each process, so project X and project Y can be used at the same time by different agent sessions.
@@ -73,7 +73,7 @@ Use the standard `stdio` server shape once. Do not hard-code one repository:
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@1.0.1"]
+      "args": ["-y", "knowledge-rail@2.0.0"]
     }
   }
 }
@@ -105,7 +105,7 @@ A desktop chat does not open a filesystem folder, so it cannot safely infer a pr
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@1.0.1", "desktop"]
+      "args": ["-y", "knowledge-rail@2.0.0", "desktop"]
     }
   }
 }
@@ -118,10 +118,10 @@ In a new chat, ask KnowledgeRail to list workspaces, choose one entry, and confi
 Projects opened successfully by an IDE/terminal are added to the local catalog automatically without changing their clean eight-tool workflow. Operators can also manage catalog metadata locally:
 
 ```bash
-npx -y knowledge-rail@1.0.1 workspace list
-npx -y knowledge-rail@1.0.1 workspace register
-npx -y knowledge-rail@1.0.1 workspace register /absolute/project/path
-npx -y knowledge-rail@1.0.1 workspace unregister ws_example
+npx -y knowledge-rail@2.0.0 workspace list
+npx -y knowledge-rail@2.0.0 workspace register
+npx -y knowledge-rail@2.0.0 workspace register /absolute/project/path
+npx -y knowledge-rail@2.0.0 workspace unregister ws_example
 ```
 
 Registration never copies, uploads, scans the disk, or deletes project files. `workspace register` without a path discovers only upward from cwd.
@@ -131,7 +131,7 @@ Registration never copies, uploads, scans the disk, or deletes project files. `w
 Start one gateway for many concurrent local clients and workspaces:
 
 ```bash
-npx -y knowledge-rail@1.0.1 --transport http
+npx -y knowledge-rail@2.0.0 --transport http
 ```
 
 The default endpoint is `http://127.0.0.1:3333/mcp`; liveness only is available at `/healthz`. MCP requests require the random credential stored in the OS-protected per-user KnowledgeRail state directory. The desktop adapter reads it automatically, so it never belongs in project configuration or a repository.
@@ -151,8 +151,8 @@ Platform state locations are `%LOCALAPPDATA%\KnowledgeRail` on Windows, `~/Libra
 ### Operating-system notes
 
 - **Windows:** if an MCP host does not resolve npm command shims, use `"command": "npx.cmd"`; escape backslashes in JSON paths (`C:\\Tools\\KnowledgeRail\\dist\\index.js`). PowerShell operator commands use the same CLI arguments shown above. Drive-letter case and junction/real paths are canonicalized before binding.
-- **macOS:** the first Chromium/Mermaid use may be subject to normal Gatekeeper/browser permissions. The state directory is inside `Library/Application Support`, not the opened repository.
-- **Linux:** `XDG_STATE_HOME` is honored. Headless CI/container environments may need `KNOWLEDGE_RAIL_MERMAID_NO_SANDBOX=true`, but ordinary workstations should retain Chromium sandboxing.
+- **macOS:** the state directory is inside `Library/Application Support`, not the opened repository.
+- **Linux:** `XDG_STATE_HOME` is honored. No browser sandbox configuration is required.
 - **WSL and containers:** run the MCP process in the same filesystem environment as the project. A Windows Claude Desktop process and a WSL-only localhost/state directory are distinct unless an explicit bridge is configured.
 
 ## Agent workflow
@@ -166,8 +166,8 @@ KnowledgeRail exposes eight stable tools. Agents choose a domain directly and us
 | `knowledge_files` | List, read, and normalize controlled source files. |
 | `knowledge_ingest` | `start`, `next`, `apply_claims`, `record_segment`, `source_status`, `evidence_status`, `finalize`, report, and recovery actions. |
 | `knowledge_code` | Maintain and query deterministic code evidence. |
-| `knowledge_document_context` | Plan a typed document and compile section-specific evidence. |
-| `knowledge_document` | Write, review, and export deliverables. |
+| `knowledge_document_context` | Plan any document profile and compile section-specific evidence. |
+| `knowledge_document` | Write and review Markdown deliverables. |
 | `knowledge_admin` | Initialize, lint, and migrate KnowledgeRail data. |
 
 Every successful operation returns a machine-readable `state` and either one `nextAction` or `null`. `nextAction` identifies the next tool, action, required arguments, and safe suggested arguments. Optional `guidance` and `resultText` complete the shared output envelope. Clients that only render text also receive concise `Next:` and `Guidance:` lines when applicable.
@@ -193,7 +193,7 @@ For a normal task, the agent calls `knowledge_context mode="task"` with a concre
 
 Durable knowledge lives as Markdown under `wiki/`. Direct page operations preserve caller-owned content byte-for-byte. Larger source sets use `knowledge_ingest`: normalized sources are processed in bounded segments, claims are recorded in durable Evidence IR, coverage is reconciled, and finalization is blocked until every segment is represented or explicitly classified. Derived retrieval and graph indexes are refreshed from this canonical state rather than replacing it.
 
-Document production is a separate evidence-backed workflow. `knowledge_document_context` first creates a typed plan and a bounded evidence pack for each section. `knowledge_document` then writes and reviews the deliverable against the selected contract; export re-runs that review and is refused while blockers remain. This keeps generated documents traceable to project memory without treating the deliverable itself as canonical memory.
+Document production is a separate evidence-backed workflow. `knowledge_document_context` first creates a plan and a bounded evidence pack for each section. `knowledge_document` then writes and reviews the Markdown against the selected contract. A passing review is terminal and returns the SHA-256 of the exact inspected content; conversion or branded rendering belongs to the user's own LLM and tooling. This keeps generated documents traceable to project memory without treating the deliverable itself as canonical memory.
 
 All public actions validate their own required arguments before reading or mutating state. The shared `state`/`nextAction` envelope makes progress explicit, but a suggested next action never grants permission to perform a consequential write: the connected client retains its normal approval policy. Compatibility with older MCP clients changes only the transport adapter, not these eight tool names or their behavior.
 
@@ -211,7 +211,7 @@ knowledge_context {
 
 On MCP `2026-07-28`, `knowledge_context` returns selected `knowledge-rail://` resource links. The client materializes only the passages it needs with `resources/read`; clients that do not expose resource reads can use `knowledge_page action="read"` with the exact URI. When evidence was omitted only because of the budget, `nextAction` provides the next bounded widening request. Semantic, stale, or unresolved gaps are returned without a futile widening loop and must remain explicit unknowns.
 
-The consolidated catalog is deliberately action-oriented, but validation remains action-specific. For example, `knowledge_page action="edit"` is rejected without `path`, `old_string`, and `new_string`; ingestion cannot finalize before complete coverage; document export re-runs the contract review.
+The consolidated catalog is deliberately action-oriented, but validation remains action-specific. For example, `knowledge_page action="edit"` is rejected without `path`, `old_string`, and `new_string`; ingestion cannot finalize before complete coverage; document review reports blockers and delivery readiness for the exact inspected Markdown.
 
 Caller-owned page, file, and code bodies are never rewritten to modernize historical tool names. If a canonical `SCHEMA.md` still refers to a retired operation, `knowledge_admin action="migrate"` can propose the corresponding current operation for explicit review; reads remain byte-preserving.
 
@@ -259,11 +259,13 @@ These directories may contain private project information. Decide deliberately w
 
 ## Document memory and deliverables
 
-Document generation starts with `knowledge_document_context action="plan"`. Follow its `nextAction` to compile a separate bounded evidence pack for every section, then use `knowledge_document action="write"` and `action="review"`. `action="export"` re-reviews the current Markdown and refuses export while any contract blocker remains.
+Document generation starts with `knowledge_document_context action="plan"`. Follow its `nextAction` to compile a separate bounded evidence pack for every section, then use `knowledge_document action="write"` and `action="review"`. Review is terminal when no blocker remains and returns `contentSha256` so the caller can bind the verdict to the exact Markdown bytes inspected. It writes no manifest or sidecar and makes no certification claim.
 
-Built-in contracts cover functional specifications, architecture documents, project briefs, onboarding guides, API references, ADRs, runbooks, test plans, incident reports, and release notes. `custom` remains available for a document with an explicit structure. Each contract defines purpose, default language and audience, required sections, minimum useful content, and type-specific checks; callers can override language and client-facing status without disabling structural validation.
+Built-in presets cover functional specifications and analyses, technical analyses, architecture documents, project briefs, user manuals, onboarding guides, API references, ADRs, runbooks, test plans, incident reports, and release notes. They are not a closed taxonomy: any non-empty `document_type` is valid, and `required_sections` lets the user or their LLM define the outline. Each preset supplies a purpose, default language and audience, minimum useful content, and type-specific checks; callers can override the outline, language, and client-facing status.
 
-The generated document is an output of agent memory, not its replacement. Confirmed facts belong in `wiki/`; source artifacts remain in `docs/`; delivery-ready Markdown and DOCX files belong in `docs/deliverables/`.
+Diagrams are opt-in and default to `none`. With `mermaid`, the user's LLM writes a fenced Mermaid block directly in the Markdown; [Obsidian supports Mermaid code blocks](https://obsidian.md/help/advanced-syntax#Diagram), as do other compatible viewers. With `external_asset`, the caller supplies an SVG/PNG in `docs/assets/` and links it from the deliverable as `../assets/name.svg` or `../assets/name.png`; review validates confinement, signature, size, and active SVG content. Because KnowledgeRail has no asset-write action, chat-only clients without filesystem access should offer only `none` and `mermaid`.
+
+The generated document is an output of agent memory, not its replacement. Confirmed facts belong in `wiki/`; source artifacts remain in `docs/`; delivery-ready Markdown belongs in `docs/deliverables/`.
 
 KnowledgeRail keeps its MCP catalog, prompts, stable identifiers, operational messages, and generated control files in English. This is an internal interoperability choice, not an output-language restriction: human-readable wiki pages and deliverables follow the language of the user's current request, an explicit language override takes precedence, and edits preserve the existing page language unless translation is requested. The policy has no locale allowlist.
 
@@ -291,8 +293,6 @@ KNOWLEDGE_RAIL_EMBEDDING_DIMENSIONS=1536
 ```
 
 Optional embedding variables are `KNOWLEDGE_RAIL_EMBEDDING_API_KEY`, `KNOWLEDGE_RAIL_EMBEDDING_MODEL_VERSION`, and `KNOWLEDGE_RAIL_EMBEDDING_TIMEOUT_MS`.
-
-For Mermaid rendering, `KNOWLEDGE_RAIL_MERMAID_NO_SANDBOX=true` is intended only for controlled CI/container environments that cannot launch Chromium with its sandbox. Do not enable it by default on a workstation or shared host.
 
 ## Compatibility
 
