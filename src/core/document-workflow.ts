@@ -17,33 +17,10 @@ import { readSourceCoverageLedger, sourceCoverageMetrics } from "./ingestion/cov
 import type { WikiPageRecord } from "./page-record.js";
 import { getWikiPageRecords } from "./retrieval-index.js";
 import { tokenizeSearchText, type RetrievalProfile } from "./text-analysis.js";
+import { WIKI_PAGE_TYPES, type WikiPageType } from "./wiki-validation.js";
 
 export { DOCUMENT_TYPES, type DocumentType } from "../config/document-contracts.js";
-
-export const WIKI_PAGE_TYPES = [
-  "entity",
-  "concept",
-  "summary",
-  "comparison",
-  "overview",
-  "analysis",
-  "meeting_note",
-  "client_source",
-  "candidate_request",
-  "request",
-  "requirement",
-  "implementation",
-  "test_result",
-  "decision",
-  "release",
-  "risk",
-  "data_model",
-  "automation",
-  "integration",
-  "api",
-] as const;
-
-export type WikiPageType = (typeof WIKI_PAGE_TYPES)[number];
+export { WIKI_PAGE_TYPES, type WikiPageType } from "./wiki-validation.js";
 
 export interface WikiPageInventoryEntry {
   relPath: string;
@@ -183,10 +160,10 @@ export interface KnowledgeUpdateOptions {
 }
 
 const CLIENT_INTERNAL_PATTERNS: Array<{ code: string; pattern: RegExp; label: string }> = [
-  { code: "RIFERIMENTO_WIKI", pattern: /\bwiki\b|wiki[_-][a-z_]+|wiki\//i, label: "riferimenti alla wiki o a tool wiki" },
-  { code: "RIFERIMENTO_CONTEXT_PACK", pattern: /context pack|pagina sorgente|pagine sorgenti|fonti frontmatter/i, label: "riferimenti a context pack o processo di raccolta fonti" },
-  { code: "RIFERIMENTO_AGENT", pattern: /\bagent\b|\bLLM\b|prompt|sub-agent|writer assegnato/i, label: "riferimenti ad agent, LLM o prompt" },
-  { code: "RIFERIMENTO_PERCORSI_INTERNI", pattern: /\b(src|tests|docs|wiki)[\\/][\w./-]+/i, label: "percorsi interni esposti al cliente" },
+  { code: "RIFERIMENTO_WIKI", pattern: /\bwiki\b|wiki[_-][a-z_]+|wiki\//i, label: "references to the wiki or wiki tools" },
+  { code: "RIFERIMENTO_CONTEXT_PACK", pattern: /context pack|pagina sorgente|pagine sorgenti|fonti frontmatter/i, label: "references to context packs or the evidence-gathering process" },
+  { code: "RIFERIMENTO_AGENT", pattern: /\bagent\b|\bLLM\b|prompt|sub-agent|writer assegnato/i, label: "references to agents, LLMs, or prompts" },
+  { code: "RIFERIMENTO_PERCORSI_INTERNI", pattern: /\b(src|tests|docs|wiki)[\\/][\w./-]+/i, label: "internal paths exposed to the client" },
 ];
 const ITALIAN_LANGUAGE_PATTERNS: Array<{ pattern: RegExp; suggestion: string }> = [
   { pattern: /(^|[\s(["])qual['’]è(?=$|[\s),.;:!?])/gi, suggestion: "Usare `qual è` senza apostrofo." },
@@ -198,6 +175,16 @@ const ITALIAN_LANGUAGE_PATTERNS: Array<{ pattern: RegExp; suggestion: string }> 
   { pattern: /(^|[\s(["])sè stesso(?=$|[\s),.;:!?])/gi, suggestion: "Usare `se stesso`." },
   { pattern: /(^|[\s(["])dà luogo(?=$|[\s),.;:!?])/gi, suggestion: "Valutare `da luogo` solo se `da` è preposizione; mantenere `dà` solo come verbo dare." },
 ];
+const ITALIAN_LANGUAGE_SUGGESTIONS = [
+  "Use Italian `qual è` without an apostrophe.",
+  "Use Italian `un po'`.",
+  "Use Italian `perché`.",
+  "Use Italian `poiché`.",
+  "Use Italian `affinché`.",
+  "Use Italian `nonché`.",
+  "Use Italian `se stesso`.",
+  "Use Italian `da luogo` only when `da` is a preposition; retain `dà` only as the verb.",
+] as const;
 
 function normalizeText(input: string): string {
   return input
@@ -293,7 +280,7 @@ export function parseTemplateSections(template: string, maxSections?: number): T
 }
 
 const DEFAULT_EDITOR_PERSONA =
-  "Sei un redattore tecnico senior. Coordina writer specialistici, proteggi completezza e coerenza del documento, e segnala lacune invece di inventare contenuti.";
+  "You are a senior technical editor. Coordinate specialist writers, protect document completeness and consistency, and report gaps instead of inventing content.";
 
 export async function buildDocumentPlan(
   wikiRoot: string,
@@ -323,61 +310,61 @@ export async function buildDocumentPlan(
             const evidencePlan = sectionEvidencePlan(options.documentType, section.title);
             return [
               `### ${idx + 1}. ${section.title}`,
-              `- **Writer assegnato:** specialista della sezione "${section.title}".`,
-              `- **Evidence obbligatoria:** ${evidencePlan.require.join(", ") || "nessuna"}.`,
-              `- **Evidence preferita:** ${evidencePlan.prefer.join(", ") || "nessuna"}.`,
-              `- **Context pack:** chiamare \`knowledge_document_context action="section"\` con \`document_type="${options.documentType}"\`, \`section_title="${section.title}"\`, \`query="${query}"\`, \`retrieval_profile="coverage"\`.`,
-              "- **Output atteso:** markdown pronto per assemblaggio, senza placeholder, con evidenze concrete e lacune esplicite.",
+              `- **Assigned writer:** specialist for section "${section.title}".`,
+              `- **Required evidence:** ${evidencePlan.require.join(", ") || "none"}.`,
+              `- **Preferred evidence:** ${evidencePlan.prefer.join(", ") || "none"}.`,
+              `- **Context pack:** call \`knowledge_document_context action="section"\` with \`document_type="${options.documentType}"\`, \`section_title="${section.title}"\`, \`query="${query}"\`, \`retrieval_profile="coverage"\`.`,
+              "- **Expected output:** assembly-ready Markdown with no placeholders, concrete evidence, and explicit gaps.",
             ].join("\n");
           })
           .join("\n\n")
-      : "- Documento custom: il redattore deve definire prima le sezioni, poi richiedere context pack mirati per ciascuna.";
+      : "- Custom document: define sections first, then request a targeted context pack for each section.";
 
   const templateBlock = template
-    ? ["## Template di riferimento", "", "```markdown", template, "```"].join("\n")
-    : "## Template di riferimento\n\nNessun template predefinito per `custom`.";
+    ? ["## Reference template", "", "```markdown", template, "```"].join("\n")
+    : "## Reference template\n\nNo predefined template for `custom`.";
 
   return [
-    `# Piano editoriale documento`,
+    `# Document editorial plan`,
     ``,
-    `> **Tipo:** ${options.documentType}`,
-    `> **Progetto:** ${options.projectName ?? "{{PROJECT_NAME}}"}`,
-    `> **Obiettivo:** ${options.objective ?? "Produrre un documento completo, coerente e validabile dalla wiki."}`,
-    `> **Audience:** ${options.audience ?? "Stakeholder di progetto e team operativo."}`,
-    `> **Contratto:** ${contract.label} — ${contract.purpose}`,
-    `> **Lingua predefinita:** ${contract.defaultLanguage}`,
-    `> **Destinazione predefinita:** ${contract.defaultClientFacing ? "client-facing" : "interna/tecnica"}`,
-    `> **Pagine wiki disponibili:** ${inventory.length}`,
-    `> **Inventario per tipo:** ${[...counts.entries()].map(([type, count]) => `${type}: ${count}`).join(", ") || "n/d"}`,
+    `> **Type:** ${options.documentType}`,
+    `> **Project:** ${options.projectName ?? "{{PROJECT_NAME}}"}`,
+    `> **Objective:** ${options.objective ?? "Produce a complete, consistent document that can be validated against the wiki."}`,
+    `> **Audience:** ${options.audience ?? "Project stakeholders and the operations team."}`,
+    `> **Contract:** ${contract.label} — ${contract.purpose}`,
+    `> **Default language:** ${contract.defaultLanguage}`,
+    `> **Default destination:** ${contract.defaultClientFacing ? "client-facing" : "internal/technical"}`,
+    `> **Available wiki pages:** ${inventory.length}`,
+    `> **Inventory by type:** ${[...counts.entries()].map(([type, count]) => `${type}: ${count}`).join(", ") || "n/a"}`,
     ``,
-    `## Ruolo del redattore`,
+    `## Editor role`,
     ``,
     persona,
     ``,
-    `Il redattore non scrive tutto in una singola passata: assegna le sezioni ai writer, richiede context pack mirati, assembla il documento e poi attiva la review.`,
+    `The editor does not write everything in one pass: assign sections to writers, request targeted context packs, assemble the document, and then run review.`,
     ``,
-    `## Strategia context pack`,
-    `- Il template è un evidence plan: ogni sezione dichiara evidence obbligatoria e preferita.`,
-    `- Il context pack deve contenere la matrice required/found/missing/source coverage/contradictions.`,
-    `- Se lo stato della matrice è \`GAP\`, riportare il gap senza completarlo con inferenze non supportate.`,
-    `- Per contesti lunghi usare \`knowledge_document_context action="section"\` con query mirate e budget esplicito.`,
-    `- Ogni writer deve ricevere solo le pagine rilevanti per la propria sezione, con budget esplicito di caratteri.`,
-    `- Se mancano evidenze, il writer deve scrivere una lacuna tracciabile invece di inventare.`,
-    `- Espandere con \`knowledge_page action="read"\` le pagine pertinenti segnalate come escluse dal budget e verificare requisiti/decisioni tra sezioni.`,
-    `- Per evidence di codice usare prima \`knowledge_code\`; una scansione raw è solo fallback esplicito e deve essere registrata.`,
-    `- Usare Mermaid solo quando il diagramma chiarisce flussi, architetture, dati o sequenze; mai ASCII art.`,
+    `## Context-pack strategy`,
+    `- The template is an evidence plan: each section declares required and preferred evidence.`,
+    `- The context pack must contain a required/found/missing/source-coverage/contradictions matrix.`,
+    `- If the matrix state is \`GAP\`, report the gap without filling it with unsupported inference.`,
+    `- For long contexts use \`knowledge_document_context action="section"\` with targeted queries and an explicit budget.`,
+    `- Each writer receives only the pages relevant to their section, with an explicit character budget.`,
+    `- When evidence is missing, write a traceable gap instead of inventing content.`,
+    `- Expand relevant budget-excluded pages with \`knowledge_page action="read"\` and verify requirements/decisions across sections.`,
+    `- For code evidence use \`knowledge_code\` first; a raw scan is an explicit fallback and must be recorded.`,
+    `- Use Mermaid only when a diagram clarifies flows, architecture, data, or sequences; never use ASCII art.`,
     ``,
-    `## Sezioni da assegnare ai writer`,
+    `## Sections to assign to writers`,
     ``,
     sectionLines,
     ``,
-    `## Checklist redazionale`,
-    `- Tutte le sezioni previste sono presenti e coerenti fra loro.`,
-    `- Nessun placeholder come \`[Descrivere...]\` o \`{{PROJECT_NAME}}\` rimane nel documento finale.`,
-    `- Tabelle, requisiti, criteri di accettazione e rischi sono concreti e verificabili.`,
-    `- Le informazioni dubbie sono marcate come lacune o assunzioni, non presentate come fatti.`,
-    `- Prima della consegna chiamare \`knowledge_document action="review"\` sul file salvato.`,
-    `- Se la review trova lacune o inesattezze, usare il prompt \`prepare_knowledge_update\` e aggiornare la wiki prima di rigenerare il documento.`,
+    `## Editorial checklist`,
+    `- Every planned section is present and consistent with the others.`,
+    `- No placeholder such as \`[Describe...]\` or \`{{PROJECT_NAME}}\` remains in the final document.`,
+    `- Tables, requirements, acceptance criteria, and risks are concrete and verifiable.`,
+    `- Uncertain information is marked as a gap or assumption, not presented as fact.`,
+    `- Before delivery, call \`knowledge_document action="review"\` on the saved file.`,
+    `- If review finds gaps or inaccuracies, use \`prepare_knowledge_update\` and update the wiki before regenerating the document.`,
     ``,
     templateBlock,
   ].join("\n");
@@ -516,12 +503,12 @@ async function sectionSourceCoverage(
 function compilerGraphSummary(task: TaskContext, includedPaths: readonly string[]): string {
   const finalAttempt = task.retrieval.attempts.at(-1);
   return [
-    "## Sintesi graph-based",
+    "## Graph-based summary",
     "",
-    `- Strategia: ${task.retrieval.strategy}, widening W${task.retrieval.wideningLevel}.`,
-    `- Evidenze materializzate: ${includedPaths.length}; nodi visitati: ${finalAttempt?.visitedNodes ?? 0}; ` +
-      `archi visitati: ${finalAttempt?.visitedEdges ?? 0}.`,
-    `- Full graph scan: no; fallback: ${task.retrieval.fallbackUsed ? "sì" : "no"}.`,
+    `- Strategy: ${task.retrieval.strategy}, widening W${task.retrieval.wideningLevel}.`,
+    `- Materialized evidence: ${includedPaths.length}; visited nodes: ${finalAttempt?.visitedNodes ?? 0}; ` +
+      `visited edges: ${finalAttempt?.visitedEdges ?? 0}.`,
+    `- Full graph scan: no; fallback: ${task.retrieval.fallbackUsed ? "yes" : "no"}.`,
   ].join("\n");
 }
 
@@ -541,7 +528,7 @@ export async function createSectionContext(
   const task = await compileTaskContext({
     wikiRoot: options.wikiRoot,
     intent: "document",
-    objective: `Preparare la sezione \"${options.sectionTitle}\" usando evidenze verificabili.`,
+    objective: `Prepare section \"${options.sectionTitle}\" using verifiable evidence.`,
     query: queryText,
     changedPaths: options.pagePaths,
     pageTypes: options.pageTypes,
@@ -649,42 +636,42 @@ export function formatSectionContext(
   maxOutputChars?: number
 ): string {
   const lines: string[] = [
-    `# Context pack sezione: ${sectionTitle}`,
+    `# Section context pack: ${sectionTitle}`,
     "",
-    `> Pagine incluse: ${result.pages.length}`,
-    `> Caratteri inclusi: ${result.totalIncludedChars}`,
-    `> Caratteri originali: ${result.totalOriginalChars}`,
+    `> Included pages: ${result.pages.length}`,
+    `> Included characters: ${result.totalIncludedChars}`,
+    `> Original characters: ${result.totalOriginalChars}`,
     `> Context Compiler: ${result.compiler.strategy} W${result.compiler.wideningLevel}`,
-    `> Budget manifest: ~${result.compiler.manifestHeuristicTokens} token (${result.compiler.withinHeuristicBudget ? "rispettato" : "superato"})`,
+    `> Manifest budget: ~${result.compiler.manifestHeuristicTokens} tokens (${result.compiler.withinHeuristicBudget ? "within budget" : "exceeded"})`,
     "",
-    "## Matrice di copertura evidence",
+    "## Evidence coverage matrix",
     "",
-    "| Stato | Evidence obbligatoria | Evidence trovata | Evidence mancante | Source coverage | Contraddizioni |",
+    "| State | Required evidence | Found evidence | Missing evidence | Source coverage | Contradictions |",
     "|---|---|---|---|---|---|",
-    `| ${result.coverage.status} | ${result.coverage.requiredEvidence.join(", ") || "nessuna"} | ` +
-      `${result.coverage.foundEvidence.join(", ") || "nessuna"} | ` +
-      `${result.coverage.missingEvidence.join(", ") || "nessuna"} | ` +
+    `| ${result.coverage.status} | ${result.coverage.requiredEvidence.join(", ") || "none"} | ` +
+      `${result.coverage.foundEvidence.join(", ") || "none"} | ` +
+      `${result.coverage.missingEvidence.join(", ") || "none"} | ` +
       `${result.coverage.sourceCoverage.averageCoveragePercent === null
-        ? "nessuna fonte referenziata"
+        ? "no referenced sources"
         : `${result.coverage.sourceCoverage.averageCoveragePercent.toFixed(2)}% ` +
-          `(${result.coverage.sourceCoverage.knownSources}/${result.coverage.sourceCoverage.referencedSources} note; ` +
+          `(${result.coverage.sourceCoverage.knownSources}/${result.coverage.sourceCoverage.referencedSources} known; ` +
           `${result.coverage.sourceCoverage.unknownSources.length} unknown)`} | ` +
-      `${result.coverage.contradictions.join("; ") || "nessuna rilevata"} |`,
+      `${result.coverage.contradictions.join("; ") || "none detected"} |`,
     "",
-    `> Evidence senza source provenance: ${result.coverage.unprovenancedEvidenceCount}`,
+    `> Evidence without source provenance: ${result.coverage.unprovenancedEvidenceCount}`,
     "",
     ...(result.coverage.status === "GAP"
       ? [
-          "**GAP — mancano evidenze obbligatorie. Non completare la sezione con inferenze non supportate.**",
+          "**GAP — required evidence is missing. Do not complete the section with unsupported inference.**",
           "",
         ]
       : []),
-    "## Istruzioni writer",
-    "- Usa solo le evidenze presenti in questo context pack e segnala le lacune invece di inventare.",
-    "- Ogni claim fattuale deve mantenere la provenance indicata dall'evidence URI o dalle fonti.",
-    `- Scrivi nella lingua richiesta (${result.writerLanguage ?? "lingua del documento"}) con registro professionale, concreto e pulito.`,
-    "- Inserisci diagrammi Mermaid solo quando aiutano a chiarire flussi, architetture o relazioni.",
-    "- Non usare ASCII art o placeholder.",
+    "## Writer instructions",
+    "- Use only the evidence in this context pack and report gaps instead of inventing content.",
+    "- Every factual claim must preserve the provenance shown by the evidence URI or sources.",
+    `- Write in the requested language (${result.writerLanguage ?? "document language"}) using a professional, concrete, polished register.`,
+    "- Add Mermaid diagrams only when they clarify flows, architecture, or relationships.",
+    "- Do not use ASCII art or placeholders.",
     "",
   ];
 
@@ -694,38 +681,38 @@ export function formatSectionContext(
   }
 
   if (result.pages.length === 0) {
-    lines.push("Nessuna pagina rilevante trovata per questa sezione.");
+    lines.push("No relevant pages were found for this section.");
     return lines.join("\n");
   }
 
   for (const page of result.pages) {
     lines.push(`## ${page.title}`);
-    lines.push(`_Percorso: \`${page.relPath}\`_`);
-    lines.push(`_Tipo: ${page.type || "n/d"} | Score: ${page.score}_`);
-    if (page.heading) lines.push(`_Passaggio: ${page.heading}_`);
+    lines.push(`_Path: \`${page.relPath}\`_`);
+    lines.push(`_Type: ${page.type || "n/a"} | Score: ${page.score}_`);
+    if (page.heading) lines.push(`_Passage: ${page.heading}_`);
     if (page.evidenceUri) lines.push(`_Evidence URI: ${page.evidenceUri}_`);
-    lines.push(`_Tags: ${page.tags.length > 0 ? page.tags.join(", ") : "n/d"}_`);
-    lines.push(`_Fonti: ${page.sources.length > 0 ? page.sources.join(", ") : "n/d"}_`);
-    lines.push(`_Caratteri: ${page.includedChars}/${page.originalChars}${page.truncated ? " (troncato)" : ""}_`);
+    lines.push(`_Tags: ${page.tags.length > 0 ? page.tags.join(", ") : "n/a"}_`);
+    lines.push(`_Sources: ${page.sources.length > 0 ? page.sources.join(", ") : "n/a"}_`);
+    lines.push(`_Characters: ${page.includedChars}/${page.originalChars}${page.truncated ? " (truncated)" : ""}_`);
     lines.push("");
     lines.push(page.body);
     if (page.truncated) {
       lines.push("");
-      lines.push(`_[Troncato: ${page.originalChars - page.includedChars} caratteri aggiuntivi]_`);
+      lines.push(`_[Truncated: ${page.originalChars - page.includedChars} additional characters]_`);
     }
     lines.push("");
     lines.push("---");
     lines.push("");
   }
   if (result.omittedPaths && result.omittedPaths.length > 0) {
-    lines.push("## Pagine pertinenti non incluse nel budget", "");
+    lines.push("## Relevant pages omitted by the budget", "");
     for (const path of result.omittedPaths) lines.push(`- ${path}`);
-    lines.push("", "Usare `knowledge_page action=read` o un nuovo context pack con `page_paths` per espanderle.", "");
+    lines.push("", "Use `knowledge_page action=read` or a new context pack with `page_paths` to expand them.", "");
   }
 
   const output = lines.join("\n");
   if (!maxOutputChars || Buffer.byteLength(output, "utf8") <= maxOutputChars) return output;
-  const marker = "\n\n_[Output troncato al budget complessivo; espandere le pagine indicate con knowledge_page action=read.]_";
+  const marker = "\n\n_[Output truncated to the overall budget; expand the listed pages with knowledge_page action=read.]_";
   const contentByteBudget = Math.max(0, maxOutputChars - Buffer.byteLength(marker, "utf8"));
   let usedBytes = 0;
   let bounded = "";
@@ -765,7 +752,7 @@ export function reviewDocumentStructure(
     findings.push({
       severity: "BLOCKER",
       code: "PLACEHOLDER_RESIDUO",
-      message: `Sono presenti ${placeholders.length} placeholder non risolti.`,
+      message: `${placeholders.length} unresolved placeholder(s) remain.`,
       evidence: [...new Set(placeholders)].slice(0, 8).join(", "),
     });
   }
@@ -775,7 +762,7 @@ export function reviewDocumentStructure(
     findings.push({
       severity: "BLOCKER",
       code: "FENCE_NON_CHIUSA",
-      message: "Il documento contiene un blocco fenced code non chiuso.",
+      message: "The document contains an unclosed fenced code block.",
     });
   }
 
@@ -785,7 +772,7 @@ export function reviewDocumentStructure(
   while ((mermaidMatch = mermaidBlockRe.exec(markdown)) !== null) {
     const firstLine = mermaidMatch[1].split(/\r?\n/).find((line) => line.trim() !== "")?.trim() ?? "";
     if (!/^(flowchart|graph|sequenceDiagram|erDiagram|classDiagram|stateDiagram|journey|gantt|pie|mindmap|timeline)\b/.test(firstLine)) {
-      mermaidIssues.push(firstLine || "(blocco vuoto)");
+      mermaidIssues.push(firstLine || "(empty block)");
     }
   }
   const asciiDiagramRe = /```(?!mermaid|json|bash|shell|ts|typescript|js|javascript|yaml|yml|http|text)\s*\r?\n[\s\S]*(?:──|-->|<--|\+[-+]{2,}|\|.*\|)[\s\S]*?```/g;
@@ -795,7 +782,7 @@ export function reviewDocumentStructure(
     findings.push({
       severity: "WARNING",
       code: "MERMAID_SOSPETTO",
-      message: "Alcuni blocchi Mermaid non iniziano con un tipo di diagramma riconosciuto.",
+      message: "Some Mermaid blocks do not start with a recognized diagram type.",
       evidence: mermaidIssues.slice(0, 5).join(", "),
     });
   }
@@ -803,16 +790,16 @@ export function reviewDocumentStructure(
     findings.push({
       severity: "WARNING",
       code: "DIAGRAMMA_ASCII",
-      message: "Sono presenti possibili diagrammi ASCII: convertirli in Mermaid se rappresentano flussi o architetture.",
+      message: "Possible ASCII diagrams were found; convert them to Mermaid when they represent flows or architecture.",
     });
   }
 
-  const language = (options.language ?? contract?.defaultLanguage ?? "italiano").toLowerCase();
+  const language = (options.language ?? contract?.defaultLanguage ?? "English").toLowerCase();
   const languageIssues: string[] = [];
   if (language.includes("ital")) {
-    for (const rule of ITALIAN_LANGUAGE_PATTERNS) {
+    for (const [index, rule] of ITALIAN_LANGUAGE_PATTERNS.entries()) {
       if (rule.pattern.test(markdownWithoutCode)) {
-        languageIssues.push(rule.suggestion);
+        languageIssues.push(ITALIAN_LANGUAGE_SUGGESTIONS[index] ?? rule.suggestion);
       }
       rule.pattern.lastIndex = 0;
     }
@@ -821,7 +808,7 @@ export function reviewDocumentStructure(
     findings.push({
       severity: "WARNING",
       code: "REVISIONE_LINGUA",
-      message: `Rilevati ${languageIssues.length} possibili problemi linguistici nella lingua richiesta (${options.language ?? contract?.defaultLanguage ?? "italiano"}).`,
+      message: `${languageIssues.length} possible language issue(s) were found for the requested language (${options.language ?? contract?.defaultLanguage ?? "English"}).`,
       evidence: uniqueStrings(languageIssues).slice(0, 8).join(" "),
     });
   }
@@ -839,7 +826,7 @@ export function reviewDocumentStructure(
     findings.push({
       severity: "BLOCKER",
       code: "NON_CLIENT_FACING",
-      message: "Il documento contiene riferimenti al processo interno non adatti a un cliente finale.",
+      message: "The document contains internal-process references that are unsuitable for a client-facing deliverable.",
       evidence: uniqueStrings(clientFacingIssues).join(", "),
     });
   }
@@ -856,8 +843,8 @@ export function reviewDocumentStructure(
       severity: "BLOCKER",
       code: "DOCUMENT_TITLE_CONTRACT",
       message: h1Headings.length === 0
-        ? "Il documento deve avere un titolo H1."
-        : "Il documento deve avere un solo titolo H1.",
+        ? "The document must have an H1 title."
+        : "The document must have exactly one H1 title.",
     });
   }
   if (h2Headings.length > 0) {
@@ -866,7 +853,7 @@ export function reviewDocumentStructure(
     findings.push({
       severity: "BLOCKER",
       code: "DOCUMENT_SECTION_CONTRACT",
-      message: "Il documento deve contenere almeno una sezione H2.",
+      message: "The document must contain at least one H2 section.",
     });
   }
   const normalizedH2 = h2Headings.map((heading) => normalizeText(heading.title));
@@ -888,7 +875,7 @@ export function reviewDocumentStructure(
       findings.push({
         severity: "BLOCKER",
         code: "SEZIONI_MANCANTI",
-        message: `Mancano ${missingSections.length} sezioni previste dal template.`,
+        message: `${missingSections.length} template section(s) are missing.`,
         evidence: missingSections.slice(0, 10).join(", "),
       });
     }
@@ -913,7 +900,7 @@ export function reviewDocumentStructure(
     findings.push({
       severity: contract && contract.type !== "custom" ? "BLOCKER" : "WARNING",
       code: "SEZIONI_DEBOLI",
-      message: `Alcune sezioni non raggiungono il minimo contrattuale di ${minimumSectionChars} caratteri utili.`,
+      message: `Some sections do not meet the contract minimum of ${minimumSectionChars} useful characters.`,
       evidence: weakSections.slice(0, 10).join(", "),
     });
   }
@@ -941,7 +928,7 @@ export function reviewDocumentStructure(
     findings.push({
       severity: "INFO",
       code: "NESSUN_BLOCCANTE",
-      message: "Non sono stati rilevati problemi strutturali bloccanti.",
+      message: "No blocking structural problems were found.",
     });
   }
 
@@ -981,27 +968,27 @@ function suggestedPageTypeForFinding(finding: ReviewFinding): WikiPageType {
 export function formatWikiUpdatePlan(result: DocumentReviewResult): string {
   const actionable = result.findings.filter((finding) => finding.severity !== "INFO");
   const lines: string[] = [
-    "## Piano aggiornamento wiki",
+    "## Wiki update plan",
     "",
   ];
 
   if (actionable.length === 0) {
-    lines.push("Nessun aggiornamento wiki obbligatorio rilevato. Se emergono dubbi durante la revisione umana, usare comunque `knowledge_context mode=search` e la lettura mirata del codice prima di modificare il documento finale.");
+    lines.push("No required wiki updates were detected. If human review raises doubts, still use `knowledge_context mode=search` and targeted code reading before changing the final document.");
     return lines.join("\n");
   }
 
-  lines.push("Prima di aggiornare il documento cliente-facing, risolvere le lacune nella wiki:");
+  lines.push("Resolve wiki gaps before updating the client-facing document:");
   lines.push("");
   actionable.forEach((finding, index) => {
     const query = actionQueryForFinding(finding);
     const pageType = suggestedPageTypeForFinding(finding);
-    lines.push(`### Azione ${index + 1} — ${finding.code}`);
-    lines.push(`- **Ricerca wiki:** chiamare \`knowledge_context mode="search"\` con query \`${query}\`.`);
-    lines.push("- **Lettura:** chiamare `knowledge_page action=read` sulle pagine rilevanti trovate.");
-    lines.push("- **Verifica codice:** se la wiki non basta, usare prima `knowledge_code`; una scansione raw è solo fallback esplicito e va registrata.");
-    lines.push(`- **Preparazione aggiornamento:** usare il prompt \`prepare_knowledge_update\` con \`page_type="${pageType}"\`, finding e contesto wiki/codice.`);
-    lines.push("- **Applicazione:** usare `knowledge_page action=write` (index.md si aggiorna da solo), poi `action=append_log`.");
-    lines.push("- **Rigenerazione:** richiamare `knowledge_document_context action=section` e aggiornare la sezione del documento.");
+    lines.push(`### Action ${index + 1} — ${finding.code}`);
+    lines.push(`- **Wiki search:** call \`knowledge_context mode="search"\` with query \`${query}\`.`);
+    lines.push("- **Read:** call `knowledge_page action=read` for the relevant pages found.");
+    lines.push("- **Code verification:** if the wiki is insufficient, use `knowledge_code` first; a raw scan is an explicit fallback and must be recorded.");
+    lines.push(`- **Prepare update:** use \`prepare_knowledge_update\` with \`page_type="${pageType}"\`, the finding, and wiki/code context.`);
+    lines.push("- **Apply:** use `knowledge_page action=write` (index.md updates automatically), then `action=append_log`.");
+    lines.push("- **Regenerate:** call `knowledge_document_context action=section` again and update the document section.");
     lines.push("");
   });
 
@@ -1014,17 +1001,17 @@ export function formatReviewResult(
   options: ReviewOptions = {}
 ): string {
   const lines: string[] = [
-    `# Review documento: ${filename}`,
+    `# Document review: ${filename}`,
     "",
-    `> Tipo: ${result.documentType ?? "non specificato"}`,
-    `> Pronto per export: ${result.readyForExport ? "sì" : "no"}`,
+    `> Type: ${result.documentType ?? "unspecified"}`,
+    `> Ready for export: ${result.readyForExport ? "yes" : "no"}`,
     `> Blocker: ${result.blockerCount}`,
-    `> Check contratto: ${result.contractChecksPassed}/${result.contractCheckCount}`,
+    `> Contract checks: ${result.contractChecksPassed}/${result.contractCheckCount}`,
     `> Finding: ${result.findings.length}`,
-    `> Placeholder residui: ${result.placeholderCount}`,
-    `> Problemi Mermaid/diagrammi: ${result.mermaidIssueCount}`,
-    `> Problemi lingua: ${result.languageIssueCount}`,
-    `> Problemi client-facing: ${result.clientFacingIssueCount}`,
+    `> Remaining placeholders: ${result.placeholderCount}`,
+    `> Mermaid/diagram issues: ${result.mermaidIssueCount}`,
+    `> Language issues: ${result.languageIssueCount}`,
+    `> Client-facing issues: ${result.clientFacingIssueCount}`,
     "",
     "## Finding",
     "",
@@ -1032,30 +1019,30 @@ export function formatReviewResult(
 
   for (const finding of result.findings) {
     lines.push(`- **${finding.severity} ${finding.code}:** ${finding.message}`);
-    if (finding.evidence) lines.push(`  Evidenza: ${finding.evidence}`);
+    if (finding.evidence) lines.push(`  Evidence: ${finding.evidence}`);
   }
 
-  lines.push("", "## Matrice di copertura", "", "| Sezione | Stato | Evidenze citate |", "|---|---|---|");
-  if (result.coverage.length === 0) lines.push("| _Nessuna sezione H2_ | weak | — |");
+  lines.push("", "## Coverage matrix", "", "| Section | State | Cited evidence |", "|---|---|---|");
+  if (result.coverage.length === 0) lines.push("| _No H2 sections_ | weak | — |");
   for (const row of result.coverage) {
-    lines.push(`| ${row.section.replace(/\|/g, "\\|")} | ${row.status} | ${row.evidence.join(", ").replace(/\|/g, "\\|") || "da verificare"} |`);
+    lines.push(`| ${row.section.replace(/\|/g, "\\|")} | ${row.status} | ${row.evidence.join(", ").replace(/\|/g, "\\|") || "to verify"} |`);
   }
 
   lines.push("");
-  lines.push("## Checklist revisione automatizzabile");
-  lines.push("- Risolvere tutti i finding BLOCKER prima della consegna.");
-  lines.push("- Sostituire ogni placeholder con contenuto reale o rimuovere la sezione se non applicabile.");
-  lines.push("- Integrare le sezioni deboli usando `knowledge_document_context action=section` con query mirate.");
-  lines.push("- Convertire diagrammi ASCII in blocchi `mermaid` validi quando rappresentano processi o architetture.");
-  lines.push("- Se il finding indica lacune o inesattezze, aggiornare prima la wiki e solo dopo rigenerare il documento.");
-  lines.push("- Salvare la versione revisionata solo con `knowledge_document action=write` dopo aver applicato le patch.");
+  lines.push("## Automatable review checklist");
+  lines.push("- Resolve every BLOCKER finding before delivery.");
+  lines.push("- Replace every placeholder with real content or remove the section when it does not apply.");
+  lines.push("- Expand weak sections using `knowledge_document_context action=section` with targeted queries.");
+  lines.push("- Convert ASCII diagrams to valid `mermaid` blocks when they represent processes or architecture.");
+  lines.push("- If a finding identifies gaps or inaccuracies, update the wiki before regenerating the document.");
+  lines.push("- Save the revised version with `knowledge_document action=write` only after applying patches.");
   if (options.includeWikiUpdatePlan ?? true) {
     lines.push("");
     lines.push(formatWikiUpdatePlan(result));
   }
   lines.push("");
-  lines.push("## Prompt patch consigliato");
-  lines.push("Usa i finding sopra come backlog. Prima aggiorna la wiki per lacune verificabili usando knowledge_context mode=search, knowledge_page action=read, il prompt prepare_knowledge_update e knowledge_page action=write. Solo dopo produci la versione revisionata del documento.");
+  lines.push("## Suggested patch prompt");
+  lines.push("Use the findings above as the backlog. First update the wiki for verifiable gaps using knowledge_context mode=search, knowledge_page action=read, prepare_knowledge_update, and knowledge_page action=write. Only then produce the revised document.");
 
   return lines.join("\n");
 }
@@ -1065,7 +1052,7 @@ export function prepareKnowledgeUpdateDraft(options: KnowledgeUpdateOptions): {
   content: string;
 } {
   const today = options.date ?? new Date().toISOString().slice(0, 10);
-  const title = options.title?.trim() || `Aggiornamento conoscenza - ${options.finding.slice(0, 60).trim()}`;
+  const title = options.title?.trim() || `Knowledge update - ${options.finding.slice(0, 60).trim()}`;
   const pageType = options.pageType ?? "analysis";
   const pathPrefix: Record<WikiPageType, string> = WIKI_PAGE_DIRECTORY_BY_TYPE;
   const pagePath = options.targetPagePath?.trim()
@@ -1085,20 +1072,20 @@ export function prepareKnowledgeUpdateDraft(options: KnowledgeUpdateOptions): {
     "",
     `# ${title}`,
     "",
-    "## Motivo dell'aggiornamento",
+    "## Reason for the update",
     options.finding.trim(),
     "",
-    "## Sintesi verificata",
-    "Integrare qui la sintesi finale dopo aver confrontato contesto wiki e codice. Non lasciare questa sezione vuota prima di applicare con `knowledge_page action=write`.",
+    "## Verified summary",
+    "Complete the final summary after comparing wiki context and code. Do not leave this section empty before applying with `knowledge_page action=write`.",
     "",
-    "## Evidenze dalla wiki",
-    options.wikiContext?.trim() || "Da completare con `knowledge_context mode=search` e `knowledge_page action=read`.",
+    "## Wiki evidence",
+    options.wikiContext?.trim() || "Complete with `knowledge_context mode=search` and `knowledge_page action=read`.",
     "",
-    "## Evidenze dal codice",
-    options.codeContext?.trim() || "Da completare leggendo direttamente il codice di progetto se la wiki non è sufficiente.",
+    "## Code evidence",
+    options.codeContext?.trim() || "Complete by reading project code directly if the wiki is insufficient.",
     "",
-    "## Impatto sui documenti cliente",
-    "Rigenerare i context pack delle sezioni interessate e aggiornare il documento finale senza riferimenti al processo interno.",
+    "## Impact on client documents",
+    "Regenerate the affected section context packs and update the final document without internal-process references.",
   ].join("\n");
 
   return { path: pagePath, content };

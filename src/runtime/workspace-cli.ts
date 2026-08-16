@@ -1,5 +1,6 @@
 import { discoverWorkspaceFromCwd } from "../mcp/workspace-discovery.js";
 import { WorkspaceRegistry } from "../workspaces/registry.js";
+import { evictWorkspaceStateForProject } from "../core/workspace-state.js";
 
 export async function runWorkspaceList(registry = new WorkspaceRegistry()): Promise<void> {
   const entries = await registry.listSafe();
@@ -30,7 +31,9 @@ export async function runWorkspaceUnregister(
   if (!/^ws_[A-Za-z0-9_-]{8,}$/.test(workspaceId)) {
     throw new Error("Invalid workspace ID.");
   }
+  const registration = await registry.get(workspaceId);
   const removed = await registry.unregister(workspaceId);
   if (!removed) throw new Error("Workspace ID was not found.");
+  if (registration) evictWorkspaceStateForProject(registration.canonicalRoot);
   process.stdout.write(`Unregistered ${workspaceId}; no project files were deleted.\n`);
 }

@@ -73,6 +73,6 @@ test("Mermaid render configuration is secure, bounded and document-oriented", ()
 
 test("Mermaid renderer rejects empty and oversized diagrams before spawning Chromium", async () => {
   const renderer = new MermaidCliRenderer({ maxSourceChars: 20 });
-  await assert.rejects(() => renderer.renderPng("   \n"), /vuoto/);
-  await assert.rejects(() => renderer.renderPng(`flowchart LR\n  ${"A".repeat(40)}`), /limite di 20 caratteri/);
+  await assert.rejects(() => renderer.renderPng("   \n"), /empty/);
+  await assert.rejects(() => renderer.renderPng(`flowchart LR\n  ${"A".repeat(40)}`), /20-character limit/);
 });

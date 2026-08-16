@@ -9,18 +9,32 @@ import { stripFrontmatter } from "./utils.js";
 export { FILE_CATEGORIES, type FileCategory } from "../config/workspace-layout.js";
 
 export const DEV_REPORT_SECTIONS = [
-  "Contesto richiesta",
-  "Modifiche funzionali",
+  "Request context",
+  "Functional changes",
   "Data model",
-  "Automazioni",
-  "Integrazioni/API",
+  "Automations",
+  "Integrations/API",
   "UI/UX",
-  "Permessi/Sicurezza",
-  "Test",
+  "Permissions/Security",
+  "Tests",
   "Changelog",
-  "Impatto documentale",
-  "Gap/Ambiguità",
+  "Documentation impact",
+  "Gaps/Ambiguities",
 ] as const;
+
+const REPORT_SECTION_ALIASES: Readonly<Record<string, (typeof DEV_REPORT_SECTIONS)[number]>> = {
+  "Contesto richiesta": "Request context",
+  "Modifiche funzionali": "Functional changes",
+  "Data model": "Data model",
+  Automazioni: "Automations",
+  "Integrazioni/API": "Integrations/API",
+  "UI/UX": "UI/UX",
+  "Permessi/Sicurezza": "Permissions/Security",
+  Test: "Tests",
+  Changelog: "Changelog",
+  "Impatto documentale": "Documentation impact",
+  "Gap/Ambiguità": "Gaps/Ambiguities",
+};
 
 export interface DevReportPlanOptions {
   client: string;
@@ -84,7 +98,8 @@ function extractReportSections(markdown: string): Record<string, string> {
   for (let i = 0; i < headings.length; i++) {
     const current = headings[i]!;
     const next = headings[i + 1];
-    sections[current.title] = body.slice(current.end, next ? next.index : body.length).trim();
+    const canonicalTitle = REPORT_SECTION_ALIASES[current.title] ?? current.title;
+    sections[canonicalTitle] = body.slice(current.end, next ? next.index : body.length).trim();
   }
   return sections;
 }
@@ -93,17 +108,18 @@ function hasMeaningfulContent(content: string): boolean {
   const normalized = content
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/\[[^\]]+\]/g, "")
-    .replace(/N\/A|n\.d\.|da compilare|tbd|todo/gi, "")
+    .replace(/N\/A|n\.d\.|da compilare|to be completed|tbd|todo/gi, "")
     .trim();
   return normalized.length >= 12;
 }
 
 function declaresNoImpact(content: string): boolean {
-  return /\b(nessun[aoe]?|non applicabile|n\/a|non sono stat[ei]|nessuna modifica|nessun impatto)\b/i.test(content);
+  return /\b(nessun[aoe]?|non applicabile|n\/a|non sono stat[ei]|nessuna modifica|nessun impatto|none|not applicable|no changes?|no impact)\b/i.test(content);
 }
 
-function metadataValue(markdown: string, label: string): string | undefined {
-  const re = new RegExp(`^>\\s*\\*\\*${label}:\\*\\*\\s*(.+)$`, "mi");
+function metadataValue(markdown: string, label: string, legacyLabel?: string): string | undefined {
+  const alternatives = [label, legacyLabel].filter(Boolean).join("|");
+  const re = new RegExp(`^>\\s*\\*\\*(?:${alternatives}):\\*\\*\\s*(.+)$`, "mi");
   return markdown.match(re)?.[1]?.trim();
 }
 
@@ -112,65 +128,65 @@ export function buildDevReportPlan(options: DevReportPlanOptions): string {
   const suggestedFile = `docs/reports/${slug(options.requestId)}_${date}.md`;
   const related = options.relatedFiles && options.relatedFiles.length > 0
     ? options.relatedFiles.map((file) => `- ${file}`).join("\n")
-    : "- Nessun file collegato dichiarato.";
+    : "- No related files declared.";
 
   const template = [
     `# Development Report - ${options.requestId}`,
     "",
-    `> **Cliente:** ${options.client}`,
-    `> **Progetto:** ${options.project}`,
+    `> **Client:** ${options.client}`,
+    `> **Project:** ${options.project}`,
     `> **Request ID:** ${options.requestId}`,
-    `> **Data:** ${date}`,
-    `> **Stato:** Validato per ingestione wiki`,
+    `> **Date:** ${date}`,
+    `> **Status:** Validated for wiki ingestion`,
     "",
-    "## Contesto richiesta",
-    `Obiettivo: ${options.objective}`,
+    "## Request context",
+    `Objective: ${options.objective}`,
     "",
-    "File o fonti collegate:",
+    "Related files or sources:",
     related,
     "",
-    "## Modifiche funzionali",
-    "Descrivere cosa cambia per utenti, processi, regole operative e comportamento atteso. Se non ci sono modifiche funzionali, scrivere esplicitamente `Nessuna modifica funzionale`.",
+    "## Functional changes",
+    "Describe changes for users, processes, operating rules, and expected behavior. If there are no functional changes, state `No functional changes` explicitly.",
     "",
     "## Data model",
-    "Elencare oggetti, campi, relazioni, vincoli, mapping, migrazioni o modifiche ai dati. Se non impattato, scrivere `Nessuna modifica al data model`.",
+    "List objects, fields, relationships, constraints, mappings, migrations, or data changes. If unaffected, state `No data-model changes`.",
     "",
-    "## Automazioni",
-    "Elencare trigger, job, workflow, schedulazioni, condizioni, side effect e rollback. Se non impattate, scrivere `Nessuna modifica alle automazioni`.",
+    "## Automations",
+    "List triggers, jobs, workflows, schedules, conditions, side effects, and rollback. If unaffected, state `No automation changes`.",
     "",
-    "## Integrazioni/API",
-    "Descrivere endpoint, payload, sistemi coinvolti, autenticazione, errori e frequenza. Se non impattate, scrivere `Nessuna modifica a integrazioni o API`.",
+    "## Integrations/API",
+    "Describe endpoints, payloads, involved systems, authentication, errors, and frequency. If unaffected, state `No integration or API changes`.",
     "",
     "## UI/UX",
-    "Descrivere schermate, azioni utente, validazioni, messaggi, stati vuoti o errori. Se non impattata, scrivere `Nessuna modifica UI/UX`.",
+    "Describe screens, user actions, validation, messages, empty states, or errors. If unaffected, state `No UI/UX changes`.",
     "",
-    "## Permessi/Sicurezza",
-    "Descrivere ruoli, policy, visibilità dati, permessi, audit e impatti sicurezza. Se non impattati, scrivere `Nessuna modifica a permessi o sicurezza`.",
+    "## Permissions/Security",
+    "Describe roles, policies, data visibility, permissions, auditing, and security impact. If unaffected, state `No permission or security changes`.",
     "",
-    "## Test",
-    "Indicare ambiente, casi testati, esito, evidenze e regressioni note. Un report validato deve contenere test eseguiti o una motivazione esplicita approvata.",
+    "## Tests",
+    "State the environment, tested cases, outcome, evidence, and known regressions. A validated report must include executed tests or an explicitly approved justification.",
     "",
     "## Changelog",
-    "Elencare changelog aggiornati o note di rilascio prodotte. Se non applicabile, scrivere `Nessun changelog richiesto` e motivare.",
+    "List updated changelogs or produced release notes. If not applicable, state `No changelog required` and explain why.",
     "",
-    "## Impatto documentale",
-    "Indicare quali deliverable vanno aggiornati: manuale utente, documento funzionale, documento tecnico, onboarding, API reference. Se nessuno, scrivere `Nessun impatto documentale` e motivare.",
+    "## Documentation impact",
+    "Identify deliverables to update: user manual, functional document, technical document, onboarding, or API reference. If none, state `No documentation impact` and explain why.",
     "",
-    "## Gap/Ambiguità",
-    "Elencare dubbi, assunzioni, punti da confermare o scrivere `Nessun gap noto`.",
+    "## Gaps/Ambiguities",
+    "List doubts, assumptions, and points to confirm, or state `No known gaps`.",
   ].join("\n");
 
   return [
-    "# Piano development report",
+    "# Development-report plan",
     "",
-    `File suggerito: \`${suggestedFile}\``,
+    `Suggested file: \`${suggestedFile}\``,
     "",
-    "## Istruzioni operative",
-    "- Scrivi il development report in `docs/reports/` usando esattamente il template sotto.",
-    "- Aggiorna eventuali changelog in `docs/changelogs/`.",
-    "- Poi chiama `knowledge_ingest action=report` sul file prodotto: valida il report e genera le bozze wiki.",
-    "- Se la validazione segnala BLOCKER, integra il report e richiama lo stesso tool.",
-    "- Applica le bozze generate con `knowledge_page action=write`.",
+    "## Operating instructions",
+    "- Write the development report in `docs/reports/` using the exact template below.",
+    "- Update any changelogs in `docs/changelogs/`.",
+    "- Then call `knowledge_ingest action=report` on the produced file to validate it and generate wiki drafts.",
+    "- If validation reports a BLOCKER, complete the report and call the same tool again.",
+    "- Apply generated drafts with `knowledge_page action=write`.",
     "",
     "```markdown",
     template,
@@ -188,7 +204,7 @@ export function validateDevReport(markdown: string): ReportValidationResult {
         severity: "BLOCKER",
         code: "SECTION_MISSING",
         section,
-        message: `Sezione obbligatoria mancante: ${section}.`,
+        message: `Required section missing: ${section}.`,
       });
       continue;
     }
@@ -197,29 +213,29 @@ export function validateDevReport(markdown: string): ReportValidationResult {
         severity: "BLOCKER",
         code: "SECTION_EMPTY",
         section,
-        message: `La sezione '${section}' non contiene contenuto operativo sufficiente.`,
+        message: `Section '${section}' does not contain enough operational content.`,
       });
     }
   }
 
-  const testContent = sections["Test"] ?? "";
+  const testContent = sections["Tests"] ?? "";
   if (!/(test|verificat|validat|collaud|uat|regression|esito|pass|fail|ok)/i.test(testContent)) {
     findings.push({
       severity: "BLOCKER",
       code: "TEST_EVIDENCE_MISSING",
-      section: "Test",
-      message: "La sezione Test deve indicare casi eseguiti, ambiente ed esito oppure una motivazione approvata.",
+      section: "Tests",
+      message: "The Tests section must state executed cases, environment, and outcome, or provide an approved justification.",
     });
   }
 
-  for (const section of ["Data model", "Automazioni", "Integrazioni/API", "UI/UX", "Permessi/Sicurezza"] as const) {
+  for (const section of ["Data model", "Automations", "Integrations/API", "UI/UX", "Permissions/Security"] as const) {
     const content = sections[section] ?? "";
     if (content && !declaresNoImpact(content) && content.length < 40) {
       findings.push({
         severity: "WARNING",
         code: "SECTION_WEAK",
         section,
-        message: `La sezione '${section}' dichiara impatti ma sembra troppo sintetica.`,
+        message: `Section '${section}' declares impact but appears too brief.`,
       });
     }
   }
@@ -229,7 +245,7 @@ export function validateDevReport(markdown: string): ReportValidationResult {
     findings.push({
       severity: "INFO",
       code: "REPORT_VALID",
-      message: "Report valido per preparare l'ingestione wiki.",
+      message: "The report is valid for preparing wiki ingestion.",
     });
   }
 
@@ -276,7 +292,7 @@ function draftPath(type: string, requestId: string, title: string): string {
 }
 
 function sectionOrNone(sections: Record<string, string>, name: string): string {
-  return sections[name]?.trim() || "Non indicato nel report validato.";
+  return sections[name]?.trim() || "Not stated in the validated report.";
 }
 
 export function prepareRequestIngestionDrafts(
@@ -286,17 +302,17 @@ export function prepareRequestIngestionDrafts(
   const validation = validateDevReport(markdown);
   if (!validation.valid) return { valid: false, validation, drafts: [] };
 
-  const client = metadataValue(markdown, "Cliente") ?? "";
-  const project = metadataValue(markdown, "Progetto") ?? "";
-  const requestId = metadataValue(markdown, "Request ID") ?? slug(metadataValue(markdown, "Data") ?? "request");
+  const client = metadataValue(markdown, "Client", "Cliente") ?? "";
+  const project = metadataValue(markdown, "Project", "Progetto") ?? "";
+  const requestId = metadataValue(markdown, "Request ID") ?? slug(metadataValue(markdown, "Date", "Data") ?? "request");
   const sources = [reportSourcePath.startsWith("docs/") ? reportSourcePath : `docs/${reportSourcePath}`];
   const common = { client, project, requestId, sources };
   const sections = validation.sections;
 
   const drafts: RequestIngestionDraft[] = [];
-  const requestTitle = `Richiesta ${requestId}`;
+  const requestTitle = `Request ${requestId}`;
   drafts.push({
-    path: draftPath("request", requestId, "richiesta"),
+    path: draftPath("request", requestId, "request"),
     content:
       frontmatter({
         title: requestTitle,
@@ -309,24 +325,24 @@ export function prepareRequestIngestionDrafts(
       [
         `# ${requestTitle}`,
         "",
-        "## Contesto",
-        sectionOrNone(sections, "Contesto richiesta"),
+        "## Context",
+        sectionOrNone(sections, "Request context"),
         "",
-        "## Modifiche funzionali",
-        sectionOrNone(sections, "Modifiche funzionali"),
+        "## Functional changes",
+        sectionOrNone(sections, "Functional changes"),
         "",
-        "## Gap e ambiguità",
-        sectionOrNone(sections, "Gap/Ambiguità"),
+        "## Gaps and ambiguities",
+        sectionOrNone(sections, "Gaps/Ambiguities"),
       ].join("\n"),
   });
 
   const sectionToType: Array<[string, string, string, string[]]> = [
-    ["Modifiche funzionali", "requirement", "Requisiti", ["requirement", "functional"]],
+    ["Functional changes", "requirement", "Requirements", ["requirement", "functional"]],
     ["Data model", "data_model", "Data model", ["data-model"]],
-    ["Automazioni", "automation", "Automazioni", ["automation"]],
-    ["Integrazioni/API", "integration", "Integrazioni API", ["integration", "api"]],
-    ["Test", "test_result", "Esiti test", ["test", "validation"]],
-    ["Changelog", "release", "Changelog e rilascio", ["release", "changelog"]],
+    ["Automations", "automation", "Automations", ["automation"]],
+    ["Integrations/API", "integration", "API integrations", ["integration", "api"]],
+    ["Tests", "test_result", "Test results", ["test", "validation"]],
+    ["Changelog", "release", "Changelog and release", ["release", "changelog"]],
   ];
 
   for (const [sectionName, type, titleSuffix, tags] of sectionToType) {
@@ -348,9 +364,9 @@ export function prepareRequestIngestionDrafts(
     });
   }
 
-  const implementationTitle = `Implementazione - ${requestId}`;
+  const implementationTitle = `Implementation - ${requestId}`;
   drafts.push({
-    path: draftPath("implementation", requestId, "implementazione"),
+    path: draftPath("implementation", requestId, "implementation"),
     content:
       frontmatter({
         title: implementationTitle,
@@ -363,23 +379,23 @@ export function prepareRequestIngestionDrafts(
       [
         `# ${implementationTitle}`,
         "",
-        "## Sintesi implementativa",
-        sectionOrNone(sections, "Modifiche funzionali"),
+        "## Implementation summary",
+        sectionOrNone(sections, "Functional changes"),
         "",
         "## Data model",
         sectionOrNone(sections, "Data model"),
         "",
-        "## Automazioni",
-        sectionOrNone(sections, "Automazioni"),
+        "## Automations",
+        sectionOrNone(sections, "Automations"),
         "",
-        "## Integrazioni/API",
-        sectionOrNone(sections, "Integrazioni/API"),
+        "## Integrations/API",
+        sectionOrNone(sections, "Integrations/API"),
         "",
         "## UI/UX",
         sectionOrNone(sections, "UI/UX"),
         "",
-        "## Permessi/Sicurezza",
-        sectionOrNone(sections, "Permessi/Sicurezza"),
+        "## Permissions/Security",
+        sectionOrNone(sections, "Permissions/Security"),
       ].join("\n"),
   });
 
@@ -422,15 +438,15 @@ export function prepareSourceIngestionDraft(params: {
         `# ${title}`,
         "",
         ...(params.sourceSegmentId
-          ? ["> Segmento fonte: `" + params.sourceSegmentId + "`", ""]
+          ? ["> Source segment: `" + params.sourceSegmentId + "`", ""]
           : []),
-        "## Sintesi",
+        "## Summary",
         params.content.trim(),
         "",
-        "## Stato",
+        "## Status",
         type === "candidate_request"
-          ? "Richiesta candidata: richiede conferma tramite report validato prima di diventare richiesta progettuale."
-          : "Fonte di contesto tracciata: non prevale su report e test validati.",
+          ? "Candidate request: requires confirmation through a validated report before becoming a project request."
+          : "Tracked context source: does not override validated reports and tests.",
       ].join("\n"),
   };
 }
@@ -456,7 +472,7 @@ export async function extractXlsxMarkdown(buffer: Buffer): Promise<string> {
   const sheets = Object.keys(zip.files)
     .filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name))
     .sort();
-  const lines: string[] = ["# Excel normalizzato", ""];
+  const lines: string[] = ["# Normalized Excel", ""];
 
   for (const [index, sheetPath] of sheets.entries()) {
     const raw = await zip.file(sheetPath)?.async("text");
@@ -483,7 +499,7 @@ export async function extractPptxMarkdown(buffer: Buffer): Promise<string> {
   const slides = Object.keys(zip.files)
     .filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
     .sort((a, b) => Number(a.match(/slide(\d+)/)?.[1] ?? 0) - Number(b.match(/slide(\d+)/)?.[1] ?? 0));
-  const lines: string[] = ["# PowerPoint normalizzato", ""];
+  const lines: string[] = ["# Normalized PowerPoint", ""];
 
   for (const slidePath of slides) {
     const slideNo = slidePath.match(/slide(\d+)/)?.[1] ?? "?";
@@ -494,7 +510,7 @@ export async function extractPptxMarkdown(buffer: Buffer): Promise<string> {
       .filter(Boolean);
     lines.push(`## Slide ${slideNo}`, "");
     if (texts.length === 0) {
-      lines.push("_Nessun testo estratto._", "");
+      lines.push("_No text extracted._", "");
     } else {
       lines.push(...texts.map((text) => `- ${text}`), "");
     }
@@ -505,9 +521,9 @@ export async function extractPptxMarkdown(buffer: Buffer): Promise<string> {
 
 export function formatReportValidation(result: ReportValidationResult, filename: string): string {
   const lines = [
-    `# Validazione development report: ${filename}`,
+    `# Development-report validation: ${filename}`,
     "",
-    `> Stato: ${result.valid ? "VALIDO" : "BLOCCATO"}`,
+    `> Status: ${result.valid ? "VALID" : "BLOCKED"}`,
     "",
   ];
   for (const finding of result.findings) {
@@ -515,11 +531,11 @@ export function formatReportValidation(result: ReportValidationResult, filename:
   }
   if (!result.valid) {
     lines.push("");
-    lines.push("## Checklist integrazione");
-    lines.push("- Compilare tutte le sezioni obbligatorie del template MCP.");
-    lines.push("- Dichiarare esplicitamente `Nessuna modifica` nelle aree non impattate.");
-    lines.push("- Aggiungere ambiente, casi ed esito nella sezione Test.");
-    lines.push("- Richiamare di nuovo `knowledge_ingest action=report` dopo le integrazioni.");
+    lines.push("## Completion checklist");
+    lines.push("- Complete every required section in the MCP template.");
+    lines.push("- State `No changes` explicitly in unaffected areas.");
+    lines.push("- Add environment, cases, and outcome to the Tests section.");
+    lines.push("- Call `knowledge_ingest action=report` again after completing the report.");
   }
   return lines.join("\n");
 }

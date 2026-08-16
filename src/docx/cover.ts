@@ -69,7 +69,7 @@ export function buildCoverParagraphs(params: CoverParams): Paragraph[] {
       spacing: { after: 80, line: 300, lineRule: LineRuleType.AUTO },
       children: [
         new TextRun({
-          text: normalizeDocxText(`Versione ${version}`),
+          text: normalizeDocxText(`Version ${version}`),
           font: DOCX_TEXT_FONT, language: DOCX_LANGUAGE, size: 22, color: DOCX_COLORS.metadataGray,
         }),
       ],
@@ -91,7 +91,7 @@ export function buildCoverParagraphs(params: CoverParams): Paragraph[] {
       spacing: { after: 80, line: 300, lineRule: LineRuleType.AUTO },
       children: [
         new TextRun({
-          text: normalizeDocxText(`Stato: ${status}`),
+          text: normalizeDocxText(`Status: ${status}`),
           font: DOCX_TEXT_FONT, language: DOCX_LANGUAGE, size: 22, bold: true, color: DOCX_COLORS.mediumBlue,
         }),
       ],

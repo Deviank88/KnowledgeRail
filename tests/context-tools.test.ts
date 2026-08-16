@@ -92,7 +92,8 @@ test("modern knowledge_context returns resource links without registering a redu
       intent: "modify",
       objective: "Aggiornare la tracciabilità delle approvazioni",
     });
-    assert.equal(context.structuredContent.retrieval?.strategy, "hybrid_progressive_widening");
+    const retrieval = context.structuredContent.retrieval as Record<string, unknown>;
+    assert.equal(retrieval.strategy, "hybrid_progressive_widening");
     const requirements = context.structuredContent.requirements as Array<Record<string, unknown>>;
     assert.equal(requirements[0]?.path, "requirements/REQ_42.md");
     const evidence = context.structuredContent.evidence as Array<Record<string, unknown>>;

@@ -36,5 +36,7 @@ test("parseMarkdown preserves code blocks, links, checkboxes, and irregular tabl
   assert.deepEqual(table.rows[0], ["one", ""]);
   const checkbox = blocks.find((block) => block.kind === "checkbox" && block.checked);
   assert.ok(checkbox);
+  assert.equal(checkbox.kind, "checkbox");
+  if (checkbox.kind !== "checkbox") throw new Error("Expected a checked checkbox block.");
   assert.equal(checkbox.inline.map((span) => span.text).join("").includes("https://example.com"), true);
 });

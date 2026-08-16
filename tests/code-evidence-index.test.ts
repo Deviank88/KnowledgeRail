@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
 import {
+  codeEvidenceIndexFile,
   codeResourceUri,
   PersistentCodeEvidenceIndex,
 } from "../src/core/code-evidence/index.js";
@@ -179,5 +180,23 @@ test("code evidence updates renamed symbols, removes files, and records grep fal
   } finally {
     await fs.rm(root, { recursive: true, force: true });
     await fs.rm(outside, { recursive: true, force: true });
+  }
+});
+
+test("a corrupt derived code-evidence snapshot is discarded and rebuilt on query", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-code-recovery-"));
+  const wikiRoot = path.join(root, "wiki");
+  try {
+    await writeFixture(root);
+    const index = new PersistentCodeEvidenceIndex({ repositoryRoot: root, wikiRoot });
+    await index.rebuild();
+    await fs.writeFile(codeEvidenceIndexFile(wikiRoot), "{truncated", "utf8");
+
+    const hits = await index.symbol("processOrder");
+    assert.equal(hits[0]?.fragment.path, "src/service.ts");
+    const repaired = await fs.readFile(codeEvidenceIndexFile(wikiRoot), "utf8");
+    assert.doesNotThrow(() => JSON.parse(repaired));
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
   }
 });

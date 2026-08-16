@@ -1,7 +1,7 @@
 import { invalidateWikiGraph } from "../core/graph-index.js";
 import { updateRuntimeWikiGraphPaths } from "../core/graph-runtime.js";
 import { invalidateManifestEntries } from "../core/manifest-service.js";
-import { wikiDir } from "../core/paths.js";
+import { getWikiRoot, wikiDir } from "../core/paths.js";
 import { updateRetrievalPaths } from "../core/retrieval-index.js";
 import { rebuildIndex } from "../core/wiki-index-service.js";
 import { WorkspaceAuthorizationError } from "../core/paths.js";
@@ -24,8 +24,30 @@ export function structuredTextResult(
   return { content: [{ type: "text", text }], structuredContent };
 }
 
+function escapedRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function redactWorkspacePaths(text: string): string {
+  let redacted = text;
+  try {
+    const root = getWikiRoot();
+    const variants = new Set([root, root.replace(/\\/g, "/")]);
+    for (const variant of variants) {
+      if (!variant) continue;
+      redacted = redacted.replace(
+        new RegExp(escapedRegExp(variant), process.platform === "win32" ? "gi" : "g"),
+        "<workspace>"
+      );
+    }
+  } catch {
+    // Workspace negotiation errors intentionally contain no resolved root.
+  }
+  return redacted;
+}
+
 export function errorResult(error: unknown): ToolResult {
-  const text = error instanceof Error ? error.message : String(error);
+  const text = redactWorkspacePaths(error instanceof Error ? error.message : String(error));
   if (error instanceof WorkspaceAuthorizationError) {
     return {
       content: [{ type: "text", text }],
@@ -57,5 +79,5 @@ export async function finalizePageMutation(relPaths: string[]): Promise<string> 
   if (!runtimeUpdated) invalidateWikiGraph(wikiDir());
   const pageCount = await rebuildIndex();
   await invalidateManifestEntries(wikiDir(), ["index.md"]);
-  return `Index aggiornato (${pageCount} pagine).`;
+  return `Index updated (${pageCount} pages).`;
 }

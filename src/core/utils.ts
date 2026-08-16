@@ -30,12 +30,15 @@ export function stripFrontmatter(content: string): string {
 
 export function parseFrontmatter(content: string): Frontmatter {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  if (!match) return {};
-  const result: Frontmatter = {};
+  const result = Object.create(null) as Frontmatter;
+  if (!match) return result;
   for (const line of match[1].split("\n")) {
     const colonIdx = line.indexOf(":");
     if (colonIdx > 0) {
       const key = line.slice(0, colonIdx).trim();
+      if (["__proto__", "prototype", "constructor"].includes(key)) {
+        throw new Error(`Unsafe frontmatter key is not allowed: ${key}`);
+      }
       const rawVal = line.slice(colonIdx + 1).trim();
       const arrayMatch = rawVal.match(/^\[(.*)\]$/);
       if (arrayMatch) {

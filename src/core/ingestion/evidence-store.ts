@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { atomicWriteText } from "../fs-service.js";
+import { withWikiFileLock } from "../lock-service.js";
 import { ensureDir, readFileSafe } from "../utils.js";
 import { evidenceClaimIsValid, type EvidenceClaim } from "./evidence-claim.js";
 import { WIKI_PAGE_TYPES } from "../wiki-validation.js";
@@ -44,7 +45,6 @@ export interface EvidenceIrStore {
   syntheses: EvidenceSynthesisRecord[];
 }
 
-const storeLocks = new Map<string, Promise<void>>();
 const DISPOSITIONS = new Set<EvidenceLinkDisposition>([
   "candidate_update",
   "candidate_new_page",
@@ -206,22 +206,11 @@ export async function mutateEvidenceIrStore<T>(
   operation: (store: EvidenceIrStore) => Promise<T> | T
 ): Promise<T> {
   const key = path.resolve(evidenceIrStoreFile(wikiRoot));
-  const previous = storeLocks.get(key) ?? Promise.resolve();
-  let release!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const queued = previous.then(() => gate, () => gate);
-  storeLocks.set(key, queued);
-  await previous.catch(() => undefined);
-  try {
+  return withWikiFileLock(wikiRoot, key, async () => {
     const store = await readEvidenceIrStore(wikiRoot);
     const result = await operation(store);
     store.updatedAt = new Date().toISOString();
     await writeEvidenceIrStore(wikiRoot, store);
     return result;
-  } finally {
-    release();
-    if (storeLocks.get(key) === queued) storeLocks.delete(key);
-  }
+  });
 }

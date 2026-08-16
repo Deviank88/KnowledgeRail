@@ -12,35 +12,35 @@ export function registerWikiResources(
   options: { includeWorkspaceBinding?: boolean } = {}
 ): void {
   const schemaReader = async () => ({
-    contents: [{ uri: "wiki://schema", text: await readFileSafe(schemaFile()) ?? "SCHEMA.md non trovato." }],
+    contents: [{ uri: "wiki://schema", text: await readFileSafe(schemaFile()) ?? "SCHEMA.md not found." }],
   });
   const logReader = async () => ({
-    contents: [{ uri: "wiki://log", text: await readFileSafe(logFile()) ?? "log.md non trovato." }],
+    contents: [{ uri: "wiki://log", text: await readFileSafe(logFile()) ?? "log.md not found." }],
   });
   if (options.includeWorkspaceBinding) {
     server.registerResource(
       "wiki-schema",
       new ResourceTemplate("wiki://schema{?workspace_binding}", { list: undefined }),
-      { title: "Wiki schema", description: "Convenzioni e workflow della wiki", mimeType: "text/markdown" },
+      { title: "Wiki schema", description: "Wiki conventions and workflow", mimeType: "text/markdown" },
       schemaReader
     );
     server.registerResource(
       "wiki-log",
       new ResourceTemplate("wiki://log{?workspace_binding}", { list: undefined }),
-      { title: "Wiki log", description: "Registro operativo della wiki", mimeType: "text/markdown" },
+      { title: "Wiki log", description: "Wiki operations log", mimeType: "text/markdown" },
       logReader
     );
   } else {
     server.registerResource(
       "wiki-schema",
       "wiki://schema",
-      { title: "Wiki schema", description: "Convenzioni e workflow della wiki", mimeType: "text/markdown" },
+      { title: "Wiki schema", description: "Wiki conventions and workflow", mimeType: "text/markdown" },
       schemaReader
     );
     server.registerResource(
       "wiki-log",
       "wiki://log",
-      { title: "Wiki log", description: "Registro operativo della wiki", mimeType: "text/markdown" },
+      { title: "Wiki log", description: "Wiki operations log", mimeType: "text/markdown" },
       logReader
     );
   }

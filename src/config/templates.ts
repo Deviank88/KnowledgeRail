@@ -1,39 +1,39 @@
-export const DEFAULT_INDEX_MD = `# Indice Wiki
+export const DEFAULT_INDEX_MD = `# Wiki Index
 
-> Catalogo aggiornato automaticamente di tutte le pagine wiki.
+> Automatically updated catalog of all wiki pages.
 
-## Entità
-<!-- pagine su persone, organizzazioni, prodotti -->
+## Entities
+<!-- pages about people, organizations, and products -->
 
-## Concetti
-<!-- pagine su idee, tecniche, pattern -->
+## Concepts
+<!-- pages about ideas, techniques, and patterns -->
 
-## Riepiloghi
-<!-- riepiloghi dei documenti sorgente -->
+## Summaries
+<!-- source-document summaries -->
 
-## Confronti
-<!-- analisi comparative -->
+## Comparisons
+<!-- comparative analyses -->
 
-## Panoramiche
-<!-- visioni d'insieme di aree tematiche -->
+## Overviews
+<!-- landscape views of topic areas -->
 
-## Analisi
-<!-- argomenti ragionati e sintesi -->
+## Analysis
+<!-- reasoned topics and syntheses -->
 
-## Richieste Validate
-<!-- request end-to-end validate da development report -->
+## Validated Requests
+<!-- end-to-end requests validated by development reports -->
 
-## Requisiti
-<!-- requisiti funzionali e non funzionali -->
+## Requirements
+<!-- functional and non-functional requirements -->
 
-## Implementazioni
-<!-- sintesi tecniche validate -->
+## Implementations
+<!-- validated technical summaries -->
 
-## Esiti Test
-<!-- risultati test e validazioni -->
+## Test Results
+<!-- test and validation results -->
 
-## Release
-<!-- changelog e rilasci -->
+## Releases
+<!-- changelogs and releases -->
 `;
 
 export const DEFAULT_SCHEMA_MD = `# Wiki Schema and Conventions
@@ -49,10 +49,10 @@ export const DEFAULT_SCHEMA_MD = `# Wiki Schema and Conventions
 
 ---
 
-## Lingua
+## Language
 
-**Tutte le pagine wiki devono essere scritte in italiano.**
-I campi di frontmatter (\`title\`, \`tags\`, ecc.) rimangono nei loro formati tecnici (es. date ISO, lowercase-with-hyphens per i tag), ma tutto il testo libero — titoli, contenuto, descrizioni, commenti — deve essere in italiano.
+**Write all wiki pages in English by default.**
+Frontmatter fields (\`title\`, \`tags\`, and so on) retain their technical formats (for example ISO dates and lowercase-with-hyphens tags). A caller may explicitly request another document language when needed, but model-facing instructions and generated control files remain in English.
 
 ---
 
@@ -60,28 +60,28 @@ I campi di frontmatter (\`title\`, \`tags\`, ecc.) rimangono nei loro formati te
 
 \`\`\`
 {project-root}/
-├── docs/                # Piano documentale: fonti, output e stato evidence
-│   ├── client/          # Fonti fornite dal cliente
-│   ├── transcripts/     # Trascrizioni e note meeting
-│   ├── reports/         # Development report validati
-│   ├── changelogs/      # Changelog tecnici/funzionali
-│   ├── normalized/      # Copie markdown normalizzate delle fonti
-│   ├── deliverables/    # Documenti generati ed export DOCX
-│   ├── assets/          # Asset dei deliverable (opzionale)
-│   └── evidence-ir/     # Evidence IR durevole, gestita da KnowledgeRail
-├── wiki/                # Memoria canonica mantenuta dall'agent
-│   ├── SCHEMA.md        # Questo contratto
-│   ├── index.md         # Indice rigenerato automaticamente
+├── docs/                # Document plan: sources, outputs, and evidence state
+│   ├── client/          # Client-provided sources
+│   ├── transcripts/     # Transcripts and meeting notes
+│   ├── reports/         # Validated development reports
+│   ├── changelogs/      # Technical and functional changelogs
+│   ├── normalized/      # Normalized Markdown source copies
+│   ├── deliverables/    # Generated documents and DOCX exports
+│   ├── assets/          # Optional deliverable assets
+│   └── evidence-ir/     # Durable Evidence IR managed by KnowledgeRail
+├── wiki/                # Canonical memory maintained by the agent
+│   ├── SCHEMA.md        # This contract
+│   ├── index.md         # Automatically regenerated index
 │   ├── log.md           # Log append-only
-│   ├── .knowledge-rail/ # Stato operativo/derivato, non conoscenza canonica
-│   └── <page-type>/     # Directory tipizzate, create al primo utilizzo
+│   ├── .knowledge-rail/ # Operational/derived state, not canonical knowledge
+│   └── <page-type>/     # Typed directories created on first use
 \`\`\`
 
-Le directory wiki tipizzate sono: \`entities\`, \`concepts\`, \`summaries\`,
+The typed wiki directories are: \`entities\`, \`concepts\`, \`summaries\`,
 \`comparisons\`, \`overviews\`, \`analysis\`, \`meeting-notes\`, \`client-sources\`,
 \`candidate-requests\`, \`requests\`, \`requirements\`, \`implementations\`, \`tests\`,
 \`decisions\`, \`releases\`, \`risks\`, \`data-model\`, \`automations\`, \`integrations\`
-e \`api\`. Le directory appaiono solo quando viene scritta la prima pagina di quel tipo.
+and \`api\`. A directory appears only when the first page of that type is written.
 
 ---
 
@@ -97,8 +97,8 @@ tags: [tag1, tag2, tag3]
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 sources: ["docs/filename.md", "docs/other.md"]
-client: "Cliente"
-project: "Progetto"
+client: "Client"
+project: "Project"
 request_id: "REQ-001"
 status: candidate | validated | implemented | tested | released | superseded | conflict
 authority: context | client_input | validated_report | test_evidence | deliverable
@@ -158,17 +158,17 @@ A reasoned argument, opinion synthesis, or inference drawn from sources.
 
 ### Project delivery types
 Use these page types for consulting-project knowledge:
-- \`meeting_note\`: transcript/sintesi meeting e contesto NotebookLM; authority \`context\`.
-- \`client_source\`: documento fornito dal cliente; authority \`client_input\`.
-- \`candidate_request\`: richiesta emersa ma non ancora validata.
-- \`request\`: richiesta validata end-to-end da development report.
-- \`requirement\`: requisito funzionale/non funzionale collegato a una request.
-- \`implementation\`: sintesi tecnica validata.
-- \`test_result\`: evidenza test e validazione.
-- \`decision\`: decisione tecnica o funzionale.
-- \`release\`: changelog/rilascio.
-- \`risk\`: rischio, gap o conflitto tra fonti.
-- \`data_model\`, \`automation\`, \`integration\`, \`api\`: dettagli specialistici.
+- \`meeting_note\`: meeting transcript/summary and contextual notes; authority \`context\`.
+- \`client_source\`: client-provided document; authority \`client_input\`.
+- \`candidate_request\`: an emerging request that is not yet validated.
+- \`request\`: a request validated end-to-end by a development report.
+- \`requirement\`: a functional or non-functional requirement linked to a request.
+- \`implementation\`: a validated technical summary.
+- \`test_result\`: test and validation evidence.
+- \`decision\`: a technical or functional decision.
+- \`release\`: a changelog or release record.
+- \`risk\`: a risk, gap, or source conflict.
+- \`data_model\`, \`automation\`, \`integration\`, \`api\`: specialist details.
 
 ---
 
@@ -189,14 +189,14 @@ Standard markdown links for external URLs:
 
 ## Ingest Workflow
 
-1. Normalizza la fonte, se necessario, con \`knowledge_files action="normalize"\`.
-2. Avvia \`knowledge_ingest action="start"\` sul file normalizzato e segui il \`nextAction\` restituito.
-3. Il ciclo guidato è \`next → apply_claims\`: \`apply_claims\` registra, collega, valida e sintetizza Evidence IR prima di aggiornare pagine canoniche.
-4. Un segmento privo di claim utili può essere classificato soltanto con stato ammesso e motivazione esplicita.
-5. Usa \`knowledge_ingest action="source_status"\` per verificare coverage e gap.
-6. La fonte può essere finalizzata soltanto quando lo stato propone \`action="finalize"\` dopo coverage completa.
+1. Normalize the source when necessary with \`knowledge_files action="normalize"\`.
+2. Run \`knowledge_ingest action="start"\` on the normalized file and follow its \`nextAction\`.
+3. The guided cycle is \`next → apply_claims\`: \`apply_claims\` records, links, validates, and synthesizes Evidence IR before updating canonical pages.
+4. A segment without useful claims may be classified only with an allowed state and explicit reason.
+5. Use \`knowledge_ingest action="source_status"\` to inspect coverage and gaps.
+6. Finalize a source only when the state proposes \`action="finalize"\` after complete coverage.
 
-\`index.md\` viene rigenerato automaticamente a ogni mutation di pagina; registra le operazioni significative con \`knowledge_page action="append_log"\`.
+\`index.md\` is regenerated after every page mutation; record significant operations with \`knowledge_page action="append_log"\`.
 
 ---
 
@@ -204,12 +204,12 @@ Standard markdown links for external URLs:
 
 When answering a question using the wiki:
 
-1. Chiama \`knowledge_context mode="task"\` con l'intent appropriato e un obiettivo concreto; la risposta compact è predefinita.
-2. Usa \`mode="search"\` o \`mode="graph"\` soltanto per diagnostica mirata, non come catena obbligatoria.
-3. Materializza soltanto i resource link pertinenti.
-4. Se la risposta contiene un \`nextAction\` di widening, eseguilo con il budget suggerito.
-5. Non concatenare manualmente search, graph e page dump.
-6. Se la knowledge resta insufficiente e non viene suggerito altro widening, dichiara gli \`evidenceGaps\` come GAP/unknown senza allucinare.
+1. Call \`knowledge_context mode="task"\` with the appropriate intent and a concrete objective; compact response detail is the default.
+2. Use \`mode="search"\` or \`mode="graph"\` only for targeted diagnostics, not as a mandatory chain.
+3. Materialize only relevant resource links.
+4. If the response contains a widening \`nextAction\`, execute it with the suggested budget.
+5. Do not manually chain search, graph, and page dumps.
+6. If knowledge remains insufficient and no further widening is suggested, report \`evidenceGaps\` as GAP/unknown without hallucinating.
 
 ---
 
@@ -241,130 +241,187 @@ Run \`knowledge_admin action="lint"\` periodically and fix:
 
 ## Document Generation Workflow
 
-Usa questo workflow editoriale per produrre documenti strutturati (spec funzionali, architetture, ecc.) dalla conoscenza accumulata nella wiki senza perdere contenuti in contesti lunghi:
+Use this editorial workflow to produce structured documents (functional specifications, architecture documents, and so on) from accumulated wiki knowledge without losing information in long contexts:
 
-1. **Pianifica come redattore**: chiama \`knowledge_document_context action="plan"\` con \`document_type\`, opzionalmente \`project_name\`, \`objective\` e \`audience\`. Il tool restituisce contratto, sezioni, checklist e strategia di copertura.
-2. **Prepara context pack mirati**: Per ogni sezione, chiama \`knowledge_document_context action="section"\` con \`section_title\`, query mirata, eventuali \`page_paths\`, filtri \`page_types\` e budget.
-3. **Verifica codice quando la wiki non basta**: usa \`knowledge_code\` e materializza solo le risorse \`code://\` pertinenti. Una scansione raw è esclusivamente un fallback esplicito da registrare.
-4. **Aggiorna la wiki prima del documento**: Per lacune o inesattezze, usa il prompt \`prepare_knowledge_update\`, applica la bozza con \`knowledge_page action="write"\`, poi \`action="append_log"\`. Dopo l'aggiornamento, rigenera il context pack.
-5. **Assegna i writer**: Ogni writer scrive una sezione usando solo il proprio context pack aggiornato e segnala lacune invece di inventare.
-6. **Assembla come redattore**: Unisci le sezioni, elimina duplicazioni e inserisci Mermaid solo quando chiarisce il contenuto.
-7. **Salva la bozza**: Chiama \`knowledge_document action="write"\` con filename, titolo, tipo e contenuto completo.
-8. **Revisiona**: segui il \`nextAction\` verso \`knowledge_document action="review"\` e risolvi tutti i blocker.
-9. **Recupera lacune post-review**: usa \`knowledge_context\` o \`knowledge_code\`, aggiorna la wiki e rigenera la sezione.
-10. **Esporta e registra**: \`knowledge_document action="export"\` rifiuta contenuti non conformi; poi usa \`knowledge_files\` e \`knowledge_page action="append_log"\`.
+1. **Plan as an editor**: call \`knowledge_document_context action="plan"\` with \`document_type\` and optional \`project_name\`, \`objective\`, and \`audience\`. The tool returns the contract, sections, checklist, and coverage strategy.
+2. **Prepare targeted context packs**: for each section call \`knowledge_document_context action="section"\` with \`section_title\`, a targeted query, optional \`page_paths\`, \`page_types\` filters, and budgets.
+3. **Verify code when the wiki is insufficient**: use \`knowledge_code\` and materialize only relevant \`code://\` resources. A raw scan is exclusively an explicit fallback that must be recorded.
+4. **Update the wiki before the document**: for gaps or inaccuracies, use \`prepare_knowledge_update\`, apply the draft with \`knowledge_page action="write"\`, then \`action="append_log"\`. Regenerate the context pack afterward.
+5. **Assign writers**: each writer produces one section using only its updated context pack and reports gaps instead of inventing content.
+6. **Assemble as an editor**: merge sections, remove duplication, and add Mermaid only when it clarifies the content.
+7. **Save the draft**: call \`knowledge_document action="write"\` with the filename, title, type, and complete content.
+8. **Review**: follow \`nextAction\` to \`knowledge_document action="review"\` and resolve every blocker.
+9. **Recover post-review gaps**: use \`knowledge_context\` or \`knowledge_code\`, update the wiki, and regenerate the section.
+10. **Export and record**: \`knowledge_document action="export"\` rejects non-conforming content; then use \`knowledge_files\` and \`knowledge_page action="append_log"\`.
 
-### Tipi di documento
+### Document types
 
-| Tipo | Descrizione | Persona adottata |
-|------|-------------|-----------------|
-| \`functional_spec\` | Documento Funzionale di Progetto completo in italiano | PM esperto |
-| \`architecture_doc\` | Architettura di sistema e decisioni tecniche | Solution Architect / Tech Lead |
-| \`project_brief\` | Sintesi esecutiva per stakeholder | Business Analyst |
-| \`onboarding_guide\` | Guida onboarding per nuovi sviluppatori | Senior Developer |
-| \`api_reference\` | Documentazione endpoint e interfacce API | Backend Developer / API Specialist |
+| Type | Description | Persona |
+|------|-------------|---------|
+| \`functional_spec\` | Complete functional project specification | Expert PM |
+| \`architecture_doc\` | System architecture and technical decisions | Solution Architect / Tech Lead |
+| \`project_brief\` | Executive stakeholder summary | Business Analyst |
+| \`onboarding_guide\` | Onboarding guide for new developers | Senior Developer |
+| \`api_reference\` | Endpoint and API-interface documentation | Backend Developer / API Specialist |
 | \`adr\` | Architecture Decision Record | Software Architect |
-| \`runbook\` | Procedura operativa, recovery e rollback | Site Reliability Engineer |
-| \`test_plan\` | Piano di test tracciabile | Test Lead |
-| \`incident_report\` | Incident review e azioni correttive | Incident Manager |
-| \`release_notes\` | Note di rilascio e upgrade | Release Manager |
-| \`custom\` | Qualsiasi altro tipo (nessun template predefinito) | — |
+| \`runbook\` | Operational, recovery, and rollback procedure | Site Reliability Engineer |
+| \`test_plan\` | Traceable test plan | Test Lead |
+| \`incident_report\` | Incident review and corrective actions | Incident Manager |
+| \`release_notes\` | Release and upgrade notes | Release Manager |
+| \`custom\` | Any other type (no predefined template) | — |
 
 ### Storage
 
-I documenti vengono salvati in \`docs/deliverables/\`. Non sono pagine wiki e **non richiedono frontmatter**.
+Documents are saved under \`docs/deliverables/\`. They are not wiki pages and **do not require frontmatter**.
 
 ---
 
-### Regole qualità documenti
+### Document quality rules
 
-- Usare lingua, audience e livello tecnico indicati dal contratto documentale o dagli override espliciti.
-- Non lasciare placeholder come \`[Descrivere...]\`, \`[Nome]\` o \`{{PROJECT_NAME}}\` nel documento finale.
-- Non inventare dettagli non presenti nella wiki: dichiarare lacune, assunzioni o dati da confermare.
-- Nei documenti client-facing non citare wiki, context pack, agent, prompt, tool MCP, percorsi \`src/\`, \`tests/\`, \`docs/\` o dettagli del processo interno.
-- Quando la wiki è insufficiente ma il codice chiarisce il funzionamento, aggiornare prima la wiki con una pagina o sezione verificata e poi rigenerare il documento.
-- Usare tabelle e criteri verificabili quando aiutano la validazione.
-- Usare blocchi Markdown \`\`\`mermaid solo quando il diagramma aggiunge chiarezza; non usare diagrammi ASCII o alberi monospaziati.
+- Use the language, audience, and technical depth from the document contract or explicit overrides.
+- Do not leave placeholders such as \`[Describe...]\`, \`[Name]\`, or \`{{PROJECT_NAME}}\` in the final document.
+- Do not invent details absent from the wiki; report gaps, assumptions, or data to confirm.
+- In client-facing documents, do not mention the wiki, context packs, agents, prompts, MCP tools, \`src/\`, \`tests/\`, \`docs/\` paths, or internal process details.
+- When the wiki is insufficient but code clarifies behavior, first update the wiki with a verified page or section and then regenerate the document.
+- Use tables and verifiable criteria when they aid validation.
+- Use Markdown \`\`\`mermaid blocks only when the diagram adds clarity; do not use ASCII diagrams or monospace trees.
 
 *Schema version 4 — Update this file when conventions evolve.*
 `;
 
 const DOCUMENT_QUALITY_RULES =
-  "Regole trasversali: usa la lingua e il registro richiesti dal contratto documentale; " +
-  "non lasciare placeholder irrisolti; non inventare dettagli non presenti nella wiki; " +
-  "se la wiki è incompleta ma il codice chiarisce il comportamento, aggiorna prima la wiki e poi rigenera il documento; " +
-  "nei documenti client-facing non citare wiki, context pack, agent, prompt, tool MCP o percorsi interni; " +
-  "usa blocchi Markdown ```mermaid solo quando il diagramma chiarisce davvero flussi, architetture, dati o sequenze; " +
-  "non usare ASCII art, alberi testuali o diagrammi monospaziati.";
+  "Cross-cutting rules: use the language and register required by the document contract; " +
+  "leave no unresolved placeholders; do not invent details absent from the wiki; " +
+  "if the wiki is incomplete but code clarifies behavior, update the wiki before regenerating the document; " +
+  "do not mention the wiki, context packs, agents, prompts, MCP tools, or internal paths in client-facing documents; " +
+  "use Markdown ```mermaid blocks only when a diagram genuinely clarifies flows, architecture, data, or sequences; " +
+  "do not use ASCII art, text trees, or monospace diagrams.";
 
 export const DOCUMENT_PERSONAS: Record<string, string> = {
   functional_spec:
-    "Sei un PM (Project Manager) esperto nella stesura di documentazione funzionale. " +
-    "Il tuo obiettivo è produrre un documento chiaro, strutturato e validabile dal cliente. " +
-    "Priorità: requisiti comprensibili anche da stakeholder non tecnici, scenari d'uso concreti, " +
-    "criteri di accettazione misurabili. Il documento deve poter essere usato dal cliente per validare " +
-    "la soluzione prima dello sviluppo. Quando servono diagrammi, usa esclusivamente blocchi Markdown " +
-    "```mermaid con flowchart o sequenceDiagram: non usare ASCII art, alberi testuali o diagrammi monospaziati. " +
+    "You are a PM experienced in functional documentation. " +
+    "Produce a clear, structured document that the client can validate. " +
+    "Prioritize requirements understandable by non-technical stakeholders, concrete usage scenarios, " +
+    "and measurable acceptance criteria. The client must be able to validate the solution before development. " +
+    "When diagrams are needed, use only Markdown ```mermaid flowchart or sequenceDiagram blocks; " +
+    "do not use ASCII art, text trees, or monospace diagrams. " +
     DOCUMENT_QUALITY_RULES,
 
   architecture_doc:
-    "Sei un Solution Architect / Tech Lead senior con vasta esperienza nella progettazione di sistemi distribuiti. " +
-    "Il tuo obiettivo è produrre un documento di architettura che guidi il team di sviluppo con precisione. " +
-    "Priorità: decisioni architetturali motivate, trade-off esplicitati, componenti e interfacce precisi, " +
-    "considerazioni su scalabilità, sicurezza e manutenibilità. Quando servono diagrammi, usa esclusivamente " +
-    "blocchi Markdown ```mermaid con flowchart, sequenceDiagram o erDiagram: non usare ASCII art, alberi testuali " +
-    "o diagrammi monospaziati. " +
+    "You are a senior Solution Architect / Tech Lead with extensive distributed-systems experience. " +
+    "Produce an architecture document that guides the development team precisely. " +
+    "Prioritize justified architecture decisions, explicit trade-offs, precise components and interfaces, " +
+    "and scalability, security, and maintainability. When diagrams are needed, use only Markdown ```mermaid " +
+    "flowchart, sequenceDiagram, or erDiagram blocks; do not use ASCII art, text trees, or monospace diagrams. " +
     DOCUMENT_QUALITY_RULES,
 
   project_brief:
-    "Sei un Business Analyst orientato al valore di business. " +
-    "Il tuo obiettivo è produrre una sintesi concisa per stakeholder esecutivi e non tecnici. " +
-    "Priorità: chiarezza sul problema da risolvere, benefici misurabili, timeline realistica, " +
-    "rischi principali. Massimo una pagina, linguaggio diretto. " +
+    "You are a Business Analyst focused on business value. " +
+    "Produce a concise summary for executive and non-technical stakeholders. " +
+    "Prioritize a clear problem statement, measurable benefits, a realistic timeline, and major risks. " +
+    "Use direct language and keep it to one page. " +
     DOCUMENT_QUALITY_RULES,
 
   onboarding_guide:
-    "Sei un Senior Developer con forte attenzione alla developer experience e all'onboarding. " +
-    "Il tuo obiettivo è produrre una guida pratica e auto-sufficiente per nuovi membri del team. " +
-    "Priorità: setup dell'ambiente passo-passo senza ambiguità, struttura del codebase spiegata, " +
-    "workflow di sviluppo chiaro, link e risorse utili. Zero assunzioni sulle conoscenze pregresse del lettore. " +
+    "You are a Senior Developer focused on developer experience and onboarding. " +
+    "Produce a practical, self-contained guide for new team members. " +
+    "Prioritize unambiguous step-by-step environment setup, an explained codebase structure, " +
+    "a clear development workflow, and useful links and resources. Assume no prior project knowledge. " +
     DOCUMENT_QUALITY_RULES,
 
   api_reference:
-    "Sei un Backend Developer / API Specialist esperto nella produzione di documentazione tecnica. " +
-    "Il tuo obiettivo è produrre una reference API precisa e immediatamente fruibile dagli sviluppatori integratori. " +
-    "Priorità: contratti API chiari, esempi reali di request/response in JSON, " +
-    "codici di errore documentati con cause e azioni correttive, autenticazione e rate limiting spiegati. " +
+    "You are a Backend Developer / API Specialist experienced in technical documentation. " +
+    "Produce a precise API reference that integration developers can use immediately. " +
+    "Prioritize clear API contracts, realistic JSON request/response examples, documented error codes " +
+    "with causes and corrective actions, and explained authentication and rate limiting. " +
     DOCUMENT_QUALITY_RULES,
 
   adr:
-    "Sei un software architect. Registra una singola decisione con contesto, driver, alternative, esito e conseguenze. " +
-    "Distingui chiaramente fatti, vincoli e trade-off; collega eventuali decisioni sostituite. " +
+    "You are a software architect. Record one decision with its context, drivers, alternatives, outcome, and consequences. " +
+    "Clearly distinguish facts, constraints, and trade-offs, and link any superseded decisions. " +
     DOCUMENT_QUALITY_RULES,
 
   runbook:
-    "Sei un Site Reliability Engineer. Produci istruzioni operative eseguibili, sicure e reversibili. " +
-    "Includi segnali, diagnosi, mitigazione, rollback, escalation e verifica finale. " +
+    "You are a Site Reliability Engineer. Produce executable, safe, and reversible operational instructions. " +
+    "Include signals, diagnosis, mitigation, rollback, escalation, and final verification. " +
     DOCUMENT_QUALITY_RULES,
 
   test_plan:
-    "Sei un Test Lead. Definisci scope, ambienti, dati, casi, risultati attesi, evidenze e criteri di uscita. " +
-    "Ogni caso deve essere ripetibile e collegato a un requisito o rischio. " +
+    "You are a Test Lead. Define scope, environments, data, cases, expected results, evidence, and exit criteria. " +
+    "Every case must be repeatable and linked to a requirement or risk. " +
     DOCUMENT_QUALITY_RULES,
 
   incident_report:
-    "Sei un Incident Manager. Ricostruisci fatti e timeline senza colpevolizzare, quantifica l'impatto e separa " +
-    "causa radice, fattori contribuenti e azioni correttive con owner e scadenze. " +
+    "You are an Incident Manager. Reconstruct facts and the timeline without blame, quantify impact, and separate " +
+    "root cause, contributing factors, and corrective actions with owners and deadlines. " +
     DOCUMENT_QUALITY_RULES,
 
   release_notes:
-    "Sei un Release Manager. Comunica cambiamenti osservabili, compatibilità, upgrade, fix e problemi noti " +
-    "in modo sintetico e verificabile per il pubblico destinatario. " +
+    "You are a Release Manager. Communicate observable changes, compatibility, upgrades, fixes, and known issues " +
+    "concisely and verifiably for the target audience. " +
     DOCUMENT_QUALITY_RULES,
 };
 
+const ENGLISH_FUNCTIONAL_SPEC = `# Functional Specification: {{PROJECT_NAME}}
+
+> **Version:** 1.0
+> **Date:** {{DATE}}
+> **Status:** Draft
+
+---
+
+## 1. Purpose and Objectives
+[Describe the document purpose, audience, project objectives, and measurable success criteria.]
+
+## 2. Context and Motivation
+[Describe the business context, current situation, target situation, and stakeholders.]
+
+## 3. Functional Requirements
+### FR-001 — [Requirement name]
+**Priority:** High / Medium / Low
+**Description:** [Detailed requirement description.]
+**Acceptance criteria:**
+- [ ] [Verifiable criterion 1]
+- [ ] [Verifiable criterion 2]
+
+## 4. Non-Functional Requirements
+[State performance, security, scalability, availability, and maintainability requirements.]
+
+## 5. System Architecture
+[Describe the high-level architecture, main components, responsibilities, and technology stack.]
+
+\`\`\`mermaid
+flowchart LR
+  A[Source system] --> B[Application component]
+  B --> C[Service or integration]
+  C --> D[Persistence]
+\`\`\`
+
+## 6. Data Model
+[Describe primary entities, fields, constraints, and relationships.]
+
+## 7. Process Flows
+[Describe actors, preconditions, main steps, postconditions, and alternative scenarios.]
+
+## 8. Integrations
+[Describe external systems, exposed APIs, protocols, payloads, and frequency.]
+
+## 9. Timeline and Roadmap
+[Describe phases, estimated duration, dependencies, milestones, and target dates.]
+
+## 10. Risks and Mitigations
+[List each risk, probability, impact, mitigation, and owner.]
+
+## 11. Glossary
+[Define project-specific terms.]
+
+## 12. Appendices
+[Add references and revision history.]
+`;
+
 export const DOCUMENT_TEMPLATES: Record<string, string> = {
-  functional_spec: `# Documento Funzionale di Progetto: {{PROJECT_NAME}}
+  functional_spec: ENGLISH_FUNCTIONAL_SPEC,
+  _legacy_functional_spec: `# Documento Funzionale di Progetto: {{PROJECT_NAME}}
 
 > **Versione:** 1.0
 > **Data:** {{DATE}}
@@ -654,71 +711,71 @@ flowchart TD
 [High-level resource estimate if known]
 `,
 
-  onboarding_guide: `# Guida di Onboarding: {{PROJECT_NAME}}
+  onboarding_guide: `# Onboarding Guide: {{PROJECT_NAME}}
 
-> **Data:** {{DATE}}
+> **Date:** {{DATE}}
 
-## Benvenuto nel progetto!
-[Breve presentazione del progetto, del team e degli obiettivi.]
+## Welcome to the project
+[Briefly introduce the project, team, and objectives.]
 
-## Prerequisiti
+## Prerequisites
 
-Prima di iniziare assicurati di avere installato:
-- [Strumento 1 — versione minima]
-- [Strumento 2]
-- [Accessi necessari — es. VPN, repository, cloud console]
+Before starting, make sure you have installed:
+- [Tool 1 — minimum version]
+- [Tool 2]
+- [Required access — for example VPN, repository, cloud console]
 
-## Setup dell'Ambiente di Sviluppo
+## Development Environment Setup
 
 \`\`\`bash
-# Clona il repository
+# Clone the repository
 git clone [repository-url]
 cd [directory]
 
-# Installa le dipendenze
+# Install dependencies
 [install command]
 
-# Configura le variabili d'ambiente
+# Configure environment variables
 cp .env.example .env
-# Edita .env con i tuoi valori
+# Edit .env with your values
 
-# Avvia in locale
+# Start locally
 [start command]
 \`\`\`
 
-## Struttura del Repository
+## Repository Structure
 
 \`\`\`
-[Struttura delle cartelle con spiegazione di ogni directory principale]
+[Directory tree with an explanation of each main directory]
 \`\`\`
 
-## Workflow di Sviluppo
+## Development Workflow
 
-1. Crea un branch da \`main\`: \`git checkout -b feature/nome-feature\`
-2. Sviluppa e testa in locale
-3. Apri una Pull Request verso \`main\`
-4. Attendi code review e CI verde
-5. Merge dopo approvazione
+1. Create a branch from \`main\`: \`git checkout -b feature/name\`
+2. Develop and test locally
+3. Open a pull request to \`main\`
+4. Wait for code review and green CI
+5. Merge after approval
 
 ## Test
 
 \`\`\`bash
-# Esegui i test
+# Run tests
 [test command]
 \`\`\`
 
-## Risoluzione dei Problemi
+## Troubleshooting
 
-[Descrivere errori comuni, controlli diagnostici e modalità di escalation.]
+[Describe common errors, diagnostic checks, and escalation paths.]
 
-## Contatti e Risorse
+## Contacts and Resources
 
-| Ruolo | Contatto |
+| Role | Contact |
 |-------|----------|
 | Tech Lead | |
 | Product Owner | |
-| Canale Slack del team | |
-| Documentazione | |
+| Team Slack channel | |
+| Documentation | |
 | Issue tracker | |
 `,
 
@@ -727,17 +784,17 @@ cp .env.example .env
 > **Version:** 1.0 | **Date:** {{DATE}}
 > **Base URL:** \`https://api.example.com/v1\`
 
-## Autenticazione
+## Authentication
 
-[Descrivi il metodo di autenticazione — es. Bearer token nell'header Authorization.]
+[Describe the authentication method, for example a Bearer token in the Authorization header.]
 
 \`\`\`
 Authorization: Bearer <token>
 \`\`\`
 
-## Formato delle Risposte
+## Response Format
 
-Tutte le risposte usano JSON:
+All responses use JSON:
 
 \`\`\`json
 {
@@ -748,42 +805,42 @@ Tutte le risposte usano JSON:
 }
 \`\`\`
 
-## Codici di Errore
+## Error Codes
 
-| Codice | Significato | Azione consigliata |
+| Code | Meaning | Recommended action |
 |--------|-------------|-------------------|
-| 400 | Bad Request | Verifica i parametri della richiesta |
-| 401 | Unauthorized | Rinnova il token di autenticazione |
-| 403 | Forbidden | Verifica i permessi dell'utente |
-| 404 | Not Found | La risorsa non esiste |
-| 429 | Too Many Requests | Implementa exponential backoff |
-| 500 | Internal Server Error | Riprova più tardi o contatta il supporto |
+| 400 | Bad Request | Check request parameters |
+| 401 | Unauthorized | Renew the authentication token |
+| 403 | Forbidden | Check the user's permissions |
+| 404 | Not Found | The resource does not exist |
+| 429 | Too Many Requests | Implement exponential backoff |
+| 500 | Internal Server Error | Retry later or contact support |
 
 ## Rate Limiting
 
-[Descrivi i limiti — es. 100 richieste/minuto per token.]
+[Describe limits, for example 100 requests per minute per token.]
 
 ---
 
 ## Endpoint
 
-### [Nome Risorsa]
+### [Resource Name]
 
-#### GET /[risorsa]
-**Descrizione:** [Elenca tutte le risorse]
+#### GET /[resource]
+**Description:** [List all resources]
 **Query params:**
-| Parametro | Tipo | Default | Descrizione |
+| Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| page | integer | 1 | Numero di pagina |
-| limit | integer | 20 | Risultati per pagina |
+| page | integer | 1 | Page number |
+| limit | integer | 20 | Results per page |
 
 **Response 200:**
 \`\`\`json
 { "data": [], "meta": { "total": 0 } }
 \`\`\`
 
-#### POST /[risorsa]
-**Descrizione:** [Crea una risorsa]
+#### POST /[resource]
+**Description:** [Create a resource]
 **Body:**
 \`\`\`json
 { "field": "value" }
@@ -793,18 +850,18 @@ Tutte le risposte usano JSON:
 { "data": { "id": "uuid", "field": "value" } }
 \`\`\`
 
-#### GET /[risorsa]/:id
-**Descrizione:** [Leggi una risorsa specifica]
+#### GET /[resource]/:id
+**Description:** [Read a specific resource]
 **Response 200:**
 \`\`\`json
 { "data": { "id": "uuid" } }
 \`\`\`
 
-#### PUT /[risorsa]/:id
-**Descrizione:** [Aggiorna una risorsa]
+#### PUT /[resource]/:id
+**Description:** [Update a resource]
 
-#### DELETE /[risorsa]/:id
-**Descrizione:** [Elimina una risorsa]
+#### DELETE /[resource]/:id
+**Description:** [Delete a resource]
 **Response 204:** No content
 `,
 

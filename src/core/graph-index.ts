@@ -1,5 +1,6 @@
 import * as nodePath from "node:path";
 import { atomicWriteText } from "./fs-service.js";
+import { registerWorkspaceState, touchWorkspaceState } from "./workspace-state.js";
 import { markdownLinkTargets, wikiLinkTargets } from "./link-resolution.js";
 import { wikiMetaDir } from "./manifest-service.js";
 import {
@@ -252,7 +253,7 @@ export async function buildWikiGraph(
       if (resolved) {
         addEdge(edges, { from: fromId, to: pageNodeId(resolved), kind: "links_to" });
       } else {
-        warnings.push(`${relPath}: link non risolto '${target}'`);
+        warnings.push(`${relPath}: unresolved link '${target}'`);
       }
     }
   }
@@ -286,12 +287,14 @@ export async function buildWikiGraph(
 
   const persisted = options.persist !== false;
   if (persisted) await persistGraph(wikiRoot, graph);
-  graphCache.set(nodePath.resolve(wikiRoot), {
+  const cacheRoot = nodePath.resolve(wikiRoot);
+  graphCache.set(cacheRoot, {
     graph,
     builtAt: Date.now(),
     retrievalGeneration: getRetrievalIndexGeneration(wikiRoot),
     persisted,
   });
+  registerWorkspaceState(cacheRoot, "graph-index", () => graphCache.delete(cacheRoot));
   return graph;
 }
 
@@ -301,6 +304,7 @@ export async function getWikiGraph(
   options: { persist?: boolean } = {}
 ): Promise<WikiGraph> {
   const root = nodePath.resolve(wikiRoot);
+  touchWorkspaceState(root);
   const cached = graphCache.get(root);
   if (!force && cached) {
     await refreshRetrievalIndex(wikiRoot, { persist: options.persist });
@@ -428,11 +432,11 @@ export function formatGraphQueryResult(result: GraphQueryResult): string {
   const lines = [
     "# Graph query",
     "",
-    `> Nodi inclusi: ${result.nodes.length}`,
-    `> Relazioni incluse: ${result.edges.length}`,
+    `> Included nodes: ${result.nodes.length}`,
+    `> Included relations: ${result.edges.length}`,
     `> Seed: ${result.seedNodeIds.length}`,
     "",
-    "## Nodi",
+    "## Nodes",
     "",
   ];
   for (const node of result.nodes) {
@@ -442,14 +446,14 @@ export function formatGraphQueryResult(result: GraphQueryResult): string {
       }`
     );
   }
-  lines.push("", "## Relazioni", "");
-  if (result.edges.length === 0) lines.push("_Nessuna relazione nel sotto-grafo._");
+  lines.push("", "## Relations", "");
+  if (result.edges.length === 0) lines.push("_No relations in the subgraph._");
   const labels = new Map(result.nodes.map((node) => [node.id, node.label]));
   for (const edge of result.edges) {
     lines.push(`- ${labels.get(edge.from) ?? edge.from} --${edge.kind}--> ${labels.get(edge.to) ?? edge.to}`);
   }
-  lines.push("", "## Pagine suggerite", "");
-  if (pageNodes.length === 0) lines.push("_Nessuna pagina suggerita._");
+  lines.push("", "## Suggested pages", "");
+  if (pageNodes.length === 0) lines.push("_No suggested pages._");
   for (const node of pageNodes) {
     lines.push(`- ${node.path}: ${node.label}`);
   }
@@ -488,7 +492,7 @@ export function graphSummaryForPagePaths(graph: WikiGraph, pagePaths: string[]):
   const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
   const relevantEdges = graph.edges.filter((edge) => pageIds.has(edge.from) || pageIds.has(edge.to));
   if (relevantEdges.length === 0) return "";
-  const lines = ["## Sintesi graph-based", ""];
+  const lines = ["## Graph-based summary", ""];
   for (const edge of relevantEdges.slice(0, 40)) {
     const from = nodesById.get(edge.from);
     const to = nodesById.get(edge.to);

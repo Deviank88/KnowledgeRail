@@ -36,7 +36,7 @@ function removeCoverOnlyFrontMatter(blocks: MdBlock[]): MdBlock[] {
 
     if (
       block.kind === "para" &&
-      /^(versione|data|stato)\s*:/i.test(block.inline.map((span) => span.text).join("").trim())
+      /^(version|date|status|versione|data|stato)\s*:/i.test(block.inline.map((span) => span.text).join("").trim())
     ) {
       start++;
       continue;

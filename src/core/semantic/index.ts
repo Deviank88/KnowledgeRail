@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { wikiPassageId } from "../../context/passage-id.js";
 import { wikiPageUri } from "../../context/resource-uri.js";
 import { atomicWriteText } from "../fs-service.js";
+import { registerWorkspaceState, touchWorkspaceState } from "../workspace-state.js";
 import { wikiMetaDir } from "../manifest-service.js";
 import type { WikiPassage, WikiPageRecord } from "../page-record.js";
 import {
@@ -475,6 +476,7 @@ export async function configuredSemanticIndex(
   const provider = configuredEmbeddingProvider();
   if (!provider) return null;
   const root = path.resolve(wikiRoot);
+  touchWorkspaceState(root);
   const persist = options.persist !== false;
   const key = `${root}\0${descriptorKey(provider)}\0${persist ? "persistent" : "memory"}`;
   let cached = indexCache.get(key);
@@ -484,6 +486,7 @@ export async function configuredSemanticIndex(
       retrievalGeneration: -1,
     };
     indexCache.set(key, cached);
+    registerWorkspaceState(root, `semantic:${key}`, () => indexCache.delete(key));
   }
   const generation = getRetrievalIndexGeneration(root);
   if (cached.retrievalGeneration !== generation) {

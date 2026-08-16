@@ -12,6 +12,7 @@ import {
   type GraphQueryResult,
   type WikiGraph,
 } from "./graph-index.js";
+import { registerWorkspaceState, touchWorkspaceState } from "./workspace-state.js";
 
 export interface GraphNeighbor {
   id: string;
@@ -67,6 +68,11 @@ const EDGE_WEIGHTS: Readonly<Record<GraphEdgeKind, number>> = {
 };
 
 const runtimeByRoot = new Map<string, RuntimeGraph>();
+
+function cacheRuntime(root: string, runtime: RuntimeGraph): void {
+  runtimeByRoot.set(root, runtime);
+  registerWorkspaceState(root, "graph-runtime", () => runtimeByRoot.delete(root));
+}
 const NON_TRANSITIVE_METADATA_HUBS = new Set<GraphNode["kind"]>([
   "source",
   "tag",
@@ -133,23 +139,26 @@ export async function getRuntimeWikiGraph(
   options: { persist?: boolean } = {}
 ): Promise<RuntimeGraph> {
   const root = nodePath.resolve(wikiRoot);
+  touchWorkspaceState(root);
   if (!force) {
     const cached = runtimeByRoot.get(root);
     if (cached) {
       const currentGraph = await getWikiGraph(wikiRoot, false, options);
       if (currentGraph === cached.graph) return cached;
       const refreshed = buildRuntimeGraph(currentGraph);
-      runtimeByRoot.set(root, refreshed);
+      cacheRuntime(root, refreshed);
       return refreshed;
     }
   }
   const runtime = buildRuntimeGraph(await getWikiGraph(wikiRoot, force, options));
-  runtimeByRoot.set(root, runtime);
+  cacheRuntime(root, runtime);
   return runtime;
 }
 
 export function peekRuntimeWikiGraph(wikiRoot: string): RuntimeGraph | undefined {
-  return runtimeByRoot.get(nodePath.resolve(wikiRoot));
+  const root = nodePath.resolve(wikiRoot);
+  touchWorkspaceState(root);
+  return runtimeByRoot.get(root);
 }
 
 export async function updateRuntimeWikiGraphPaths(

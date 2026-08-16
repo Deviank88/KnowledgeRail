@@ -24,15 +24,15 @@ export function formatTraceabilityRows(rows: TraceabilityRow[]): string {
       (type) => !types.has(type)
     );
     lines.push(`## ${requestId}`);
-    lines.push(`- Pagine: ${bucket.length}`);
-    lines.push(`- Copertura: ${missing.length === 0 ? "completa" : `manca ${missing.join(", ")}`}`);
+    lines.push(`- Pages: ${bucket.length}`);
+    lines.push(`- Coverage: ${missing.length === 0 ? "complete" : `missing ${missing.join(", ")}`}`);
     for (const row of bucket.sort((a, b) => a.type.localeCompare(b.type))) {
       lines.push(`  - ${row.type}: ${row.title} (${row.path})`);
     }
     lines.push("");
   }
 
-  if (lines.length === 2) lines.push("Nessuna richiesta tracciata trovata.");
+  if (lines.length === 2) lines.push("No tracked requests found.");
   return lines.join("\n").trimEnd();
 }
 

@@ -161,7 +161,7 @@ test("missing required evidence is emitted as GAP instead of inferred content", 
     assert.equal(context.coverage.status, "GAP");
     assert.deepEqual(context.coverage.missingEvidence, ["implementation"]);
     assert.equal(
-      formatSectionContext(context, "Soluzione TO-BE").includes("GAP — mancano evidenze obbligatorie"),
+      formatSectionContext(context, "Soluzione TO-BE").includes("GAP — required evidence is missing"),
       true
     );
     assert.equal(context.compiler.fullSourceGrepAttempted, false);

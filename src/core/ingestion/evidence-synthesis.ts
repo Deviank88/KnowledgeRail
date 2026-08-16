@@ -29,8 +29,8 @@ function renderClaim(claim: EvidenceClaim): string[] {
   );
   const epistemic = claim.origin === "inferred" || claim.origin === "synthesized" ||
     claim.kind === "inference" || claim.kind === "hypothesis"
-    ? `> Stato epistemico: **${claim.origin}** — non è un fatto esplicito della fonte.`
-    : `> Stato epistemico: **${claim.origin}**.`;
+    ? `> Epistemic state: **${claim.origin}** — this is not an explicit source fact.`
+    : `> Epistemic state: **${claim.origin}**.`;
   return [
     `### ${claim.kind}: ${claim.id}`,
     "",

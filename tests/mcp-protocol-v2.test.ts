@@ -246,7 +246,8 @@ test("2026-07-28 stdio leg uses resource links without legacy Roots negotiation"
         _meta: modernEnvelope(),
       },
     }));
-    assert.equal(textContent(initialized).includes(path.join(modernRoot, "wiki")), true);
+    assert.equal(textContent(initialized).includes("Wiki initialized: wiki/"), true);
+    assert.equal(textContent(initialized).includes(modernRoot), false);
     assert.equal(getWikiRoot(), modernRoot);
 
     await writeContextFixture(modernRoot);
@@ -438,7 +439,8 @@ test("legacy stdio leg preserves Roots precedence while keeping the same eight d
       },
     }));
     const text = textContent(result);
-    assert.equal(text.includes(path.join(legacyRoot, "wiki")), true);
+    assert.equal(text.includes("Wiki initialized: wiki/"), true);
+    assert.equal(text.includes(legacyRoot), false);
     assert.equal(text.includes(path.join(fallbackRoot, "wiki")), false);
     assert.equal(getWikiRoot(), legacyRoot);
   } finally {

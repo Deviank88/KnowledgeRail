@@ -57,6 +57,41 @@ test("concurrent registry mutations retain all workspaces", async () => {
   assert.equal((await registry.listSafe()).length, roots.length);
 });
 
+test("registry recovers an orphan lock owned by a dead process", async () => {
+  const state = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-state-stale-lock-"));
+  const project = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-stale-project-"));
+  const registry = new WorkspaceRegistry(state);
+  await fs.mkdir(state, { recursive: true });
+  await fs.writeFile(registry.lockPath, JSON.stringify({
+    version: 1,
+    pid: 99_999_999,
+    nonce: "dead-process-nonce",
+    processStartedAt: 1,
+    acquiredAt: new Date(0).toISOString(),
+  }));
+
+  const registered = await registry.register(project);
+  assert.equal(registered.canonicalRoot, await fs.realpath(project));
+  await assert.rejects(() => fs.access(registry.lockPath));
+});
+
+test("registry never steals a lock owned by a live process", async () => {
+  const state = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-state-live-lock-"));
+  const project = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-live-project-"));
+  const registry = new WorkspaceRegistry(state);
+  await fs.mkdir(state, { recursive: true });
+  await fs.writeFile(registry.lockPath, JSON.stringify({
+    version: 1,
+    pid: process.pid,
+    nonce: "live-process-nonce",
+    processStartedAt: Math.round(Date.now() - process.uptime() * 1_000),
+    acquiredAt: new Date().toISOString(),
+  }));
+
+  await assert.rejects(() => registry.register(project), /busy/);
+  await fs.unlink(registry.lockPath);
+});
+
 test("unregister removes only catalog metadata and preserves project contents", async () => {
   const state = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-state-remove-"));
   const project = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-preserved-"));

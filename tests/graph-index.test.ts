@@ -116,7 +116,7 @@ test("graph builder derives nodes and traceability edges from markdown metadata"
 
   const query = queryWikiGraph(graph, { query: "Alpha requirement", maxNodes: 4, maxDepth: 1 });
   assert.equal(query.nodes.length <= 4, true);
-  assert.equal(formatGraphQueryResult(query).includes("Pagine suggerite"), true);
+  assert.equal(formatGraphQueryResult(query).includes("Suggested pages"), true);
 
   const context = await createSectionContext({
     wikiRoot,
@@ -127,6 +127,5 @@ test("graph builder derives nodes and traceability edges from markdown metadata"
     maxTotalChars: 400,
     useGraph: true,
   });
-  assert.equal(formatSectionContext(context, "Requisiti Alpha").includes("Sintesi graph-based"), true);
+  assert.equal(formatSectionContext(context, "Requisiti Alpha").includes("Graph-based summary"), true);
 });
-

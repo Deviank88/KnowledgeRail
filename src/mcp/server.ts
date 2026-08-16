@@ -18,6 +18,7 @@ import { type ProtocolEra } from "./tool-names.js";
 import { registerWorkspaceTool } from "../tools/workspace-tool.js";
 import type { WorkspaceBindingManager } from "../workspaces/bindings.js";
 import { PRODUCT_VERSION } from "../product.js";
+import { logger } from "../core/logger.js";
 
 const STATIC_CATALOG_TTL_MS = 5 * 60 * 1_000;
 
@@ -56,19 +57,19 @@ function configureLegacyWorkspace(server: McpServer): void {
     refreshQueue = refreshQueue.then(async () => {
       const resolution = await resolveLegacyMcpWorkspace(server);
       if (previous !== resolution.root || reason === "initialized") {
-        process.stderr.write(
-          `[knowledge-rail] Legacy workspace ${reason}: ${resolution.root} (${resolution.source})\n`
-        );
+        logger.info("workspace", "legacy_workspace_resolved", {
+          reason,
+          source: resolution.source,
+        });
       }
     }).catch(async (error: unknown) => {
       // Roots failures normally fall back inside the resolver. This final
       // safety net guarantees that an unexpected adapter failure still
       // reopens the workspace gate on deterministic env/cwd resolution.
       const fallback = await resolveAndActivateWorkspace();
-      process.stderr.write(
-        `[knowledge-rail] Legacy workspace resolution failed; using ${fallback.root} ` +
-        `(${fallback.source}): ${String(error)}\n`
-      );
+      logger.warn("workspace", "legacy_workspace_resolution_failed", {
+        fallbackSource: fallback.source,
+      }, error);
     });
 
     return refreshQueue;

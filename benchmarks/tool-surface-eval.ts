@@ -197,6 +197,25 @@ export async function loadToolSurfaceBaseline(): Promise<ToolSurfaceBaseline> {
   return JSON.parse(await fs.readFile(fileURLToPath(baselineUrl), "utf8")) as ToolSurfaceBaseline;
 }
 
+interface ToolSurfaceLanguagePolicy {
+  forbiddenItalianTerms: string[];
+}
+
+async function loadToolSurfaceLanguagePolicy(): Promise<ToolSurfaceLanguagePolicy> {
+  const policyUrl = new URL("./fixtures/tool-surface-language-policy.json", import.meta.url);
+  return JSON.parse(await fs.readFile(fileURLToPath(policyUrl), "utf8")) as ToolSurfaceLanguagePolicy;
+}
+
+function languageViolations(tools: readonly CatalogTool[], policy: ToolSurfaceLanguagePolicy): string[] {
+  const catalogTokens = new Set(
+    JSON.stringify(tools).toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+      .match(/[a-z]+/g) ?? []
+  );
+  return policy.forbiddenItalianTerms.filter((term) => catalogTokens.has(
+    term.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+  ));
+}
+
 const ROUTING_GOLDENS = [
   ["Before I change lease renewal, gather the relevant project evidence and tell me what is missing", "knowledge_context", "task"],
   ["Prima di modificare i lease, recupera il contesto utile e segnala ciò che non sappiamo", "knowledge_context", "task"],
@@ -307,6 +326,7 @@ export interface ToolSurfaceReport {
   compactContextEvidenceParity: boolean;
   compactContextGapParity: boolean;
   defaultContextIsCompact: boolean;
+  catalogLanguageViolations: string[];
 }
 
 export async function evaluateToolSurface(
@@ -327,6 +347,7 @@ export async function evaluateToolSurface(
     const listed = resultOf(await harness.request("tools/list", { _meta: modernMeta() }));
     const tools = listed.tools as CatalogTool[];
     const modernCatalogBytes = Buffer.byteLength(JSON.stringify(tools), "utf8");
+    const catalogLanguageViolations = languageViolations(tools, await loadToolSurfaceLanguagePolicy());
     const toolsListResultBytes = Buffer.byteLength(JSON.stringify(listed), "utf8");
     const toolNames = tools.map((tool) => tool.name).sort();
     const discover = resultOf(await harness.request("server/discover", { _meta: modernMeta() }));
@@ -476,6 +497,7 @@ export async function evaluateToolSurface(
       compactContextEvidenceParity: JSON.stringify(compactEvidence) === JSON.stringify(fullEvidence),
       compactContextGapParity: JSON.stringify(compactStructured.gaps ?? []) === JSON.stringify(fullStructured.unknowns ?? []),
       defaultContextIsCompact: !("currentState" in compactStructured),
+      catalogLanguageViolations,
     };
   } finally {
     await harness.close();

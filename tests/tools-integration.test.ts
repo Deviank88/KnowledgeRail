@@ -12,7 +12,10 @@ import { registerContextTools } from "../src/tools/context-tools.js";
 import { registerDocumentTools } from "../src/tools/document-tools.js";
 import { registerWikiPrompts } from "../src/tools/prompts.js";
 import { registerSourceTools } from "../src/tools/source-tools.js";
-import { registerWikiTools } from "../src/tools/wiki-tools.js";
+import {
+  registerWikiTools,
+  setWikiMoveFailureAfterWritesForTests,
+} from "../src/tools/wiki-tools.js";
 import { registerEvidenceTools } from "../src/tools/evidence-tools.js";
 import { registerCodeEvidenceTools } from "../src/tools/code-evidence-tools.js";
 
@@ -131,7 +134,7 @@ test("core wiki tools: write with warnings, edit, auto-index, delete, search, li
 
   const write = await tools.get("wiki_write_page")!({ path: "concepts/Alpha.md", content: page });
   assert.equal(write.isError, undefined);
-  assert.equal(write.content[0].text.includes("Index aggiornato"), true);
+  assert.equal(write.content[0].text.includes("Index updated"), true);
   assert.equal(write.content[0].text.includes("[[Pagina Mancante]]"), true);
 
   // index.md rigenerato automaticamente dopo la scrittura
@@ -165,7 +168,7 @@ test("core wiki tools: write with warnings, edit, auto-index, delete, search, li
     replace_all: false,
   });
   assert.equal(edit.isError, undefined);
-  assert.equal(edit.content[0].text.includes("1 sostituzione"), true);
+  assert.equal(edit.content[0].text.includes("1 replacement"), true);
   const edited = await fs.readFile(path.join(root, "wiki", "concepts", "Alpha.md"), "utf-8");
   assert.equal(edited.includes("beta gamma"), true);
 
@@ -214,6 +217,96 @@ test("core wiki tools: write with warnings, edit, auto-index, delete, search, li
   assert.equal(indexAfterDelete.includes("Alpha Concept"), false);
 });
 
+test("filesystem tools reject glob and symlink workspace escapes", {
+  skip: process.platform === "win32" ? "symlink privileges vary on Windows" : false,
+}, async () => {
+  const { root, tools } = await setupWorkspace();
+  const outside = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-outside-"));
+  const validPage = [
+    "---",
+    "title: Outside",
+    "type: concept",
+    "tags: [escape]",
+    "created: 2026-08-16",
+    "updated: 2026-08-16",
+    "sources: []",
+    "---",
+    "",
+    "# Outside",
+  ].join("\n");
+  await fs.writeFile(path.join(outside, "Existing.md"), validPage);
+
+  const traversal = await tools.get("knowledge_files")!({
+    action: "list",
+    category: "client",
+    pattern: "../../**/*",
+  });
+  assert.equal(traversal.isError, true);
+  assert.match(traversal.content[0].text, /Parent-directory/);
+
+  const absolute = await tools.get("knowledge_files")!({
+    action: "list",
+    category: "client",
+    pattern: "/etc/hosts",
+  });
+  assert.equal(absolute.isError, true);
+  assert.match(absolute.content[0].text, /Absolute/);
+
+  const linkedWiki = path.join(root, "wiki", "linked");
+  await fs.symlink(outside, linkedWiki, "dir");
+  await assert.rejects(
+    () => tools.get("wiki_write_page")!({ path: "linked/New.md", content: validPage }),
+    /outside/
+  );
+  await assert.rejects(
+    () => tools.get("wiki_edit_page")!({
+      path: "linked/Existing.md",
+      old_string: "Outside",
+      new_string: "Escaped",
+      replace_all: false,
+    }),
+    /outside/
+  );
+  await assert.rejects(
+    () => tools.get("wiki_move_page")!({
+      old_path: "linked/Existing.md",
+      new_path: "Moved.md",
+      dry_run: false,
+    }),
+    /outside/
+  );
+  await assert.rejects(
+    () => tools.get("wiki_delete_page")!({ path: "linked/Existing.md" }),
+    /outside/
+  );
+
+  const outsideSecret = path.join(outside, "secret.txt");
+  await fs.writeFile(outsideSecret, "outside-secret");
+  await fs.symlink(outsideSecret, path.join(root, "docs", "client", "linked.txt"), "file");
+  const linkedRead = await tools.get("knowledge_files")!({
+    action: "read",
+    category: "client",
+    path: "linked.txt",
+  });
+  assert.equal(linkedRead.isError, true);
+  assert.equal(JSON.stringify(linkedRead).includes("outside-secret"), false);
+
+  await fs.rm(path.join(root, "docs", "deliverables"), { recursive: true, force: true });
+  await fs.symlink(outside, path.join(root, "docs", "deliverables"), "dir");
+  await assert.rejects(
+    () => tools.get("knowledge_write_document")!({
+      filename: "escaped.md",
+      title: "Escaped",
+      document_type: "custom",
+      content: "# Escaped",
+      overwrite: true,
+    }),
+    /outside/
+  );
+  await assert.rejects(() => fs.access(path.join(outside, "escaped.md")));
+  await fs.rm(outside, { recursive: true, force: true });
+});
+
 test("wikilinks resolve canonical frontmatter titles before legacy filenames", async () => {
   const { tools } = await setupWorkspace();
   const frontmatter = (title: string) => [
@@ -235,21 +328,21 @@ test("wikilinks resolve canonical frontmatter titles before legacy filenames", a
     path: "concepts/internal-b.md",
     content: `${frontmatter("Canonical Beta Title")}\n\n# Beta\nSee [[Canonical Alpha Title]].`,
   });
-  assert.equal(betaWrite.content[0].text.includes("non corrisponde"), false);
+  assert.equal(betaWrite.content[0].text.includes("does not match"), false);
   const alphaEdit = await tools.get("wiki_edit_page")!({
     path: "concepts/internal-a.md",
     old_string: "Bootstrap page.",
     new_string: "See [[Canonical Beta Title]].",
     replace_all: false,
   });
-  assert.equal(alphaEdit.content[0].text.includes("non corrisponde"), false);
+  assert.equal(alphaEdit.content[0].text.includes("does not match"), false);
 
   const lint = await tools.get("wiki_lint")!({
     include_orphans: true,
     include_missing: true,
     include_broken_links: true,
   });
-  assert.equal(lint.content[0].text, "Wiki lint superato. Nessun problema trovato.");
+  assert.equal(lint.content[0].text, "Wiki lint passed. No problems found.");
 });
 
 test("wiki_move_page updates wikilinks and relative markdown links", async () => {
@@ -282,11 +375,58 @@ test("wiki_move_page updates wikilinks and relative markdown links", async () =>
     dry_run: false,
   });
   assert.equal(move.isError, undefined);
-  assert.equal(move.content[0].text.includes("Spostata"), true);
+  assert.equal(move.content[0].text.includes("Moved"), true);
 
   const beta = await fs.readFile(path.join(root, "wiki", "concepts", "Beta.md"), "utf-8");
   assert.equal(beta.includes("[[Alpha Entity]]"), true);
   assert.equal(beta.includes("(../entities/Alpha_Entity.md)"), true);
+});
+
+test("wiki_move_page rolls back every touched page after a partial failure", async () => {
+  const { root, tools } = await setupWorkspace();
+  const page = (title: string, body: string) => [
+    "---",
+    `title: "${title}"`,
+    "type: concept",
+    "tags: [journal]",
+    "created: 2026-08-16",
+    "updated: 2026-08-16",
+    "sources: []",
+    "---",
+    "",
+    `# ${title}`,
+    body,
+  ].join("\n");
+  await tools.get("wiki_write_page")!({ path: "concepts/Alpha.md", content: page("Alpha", "Body") });
+  await tools.get("wiki_write_page")!({
+    path: "concepts/Beta.md",
+    content: page("Beta", "See [[Alpha]] and [details](Alpha.md)."),
+  });
+  const alphaBefore = await fs.readFile(path.join(root, "wiki", "concepts", "Alpha.md"), "utf8");
+  const betaBefore = await fs.readFile(path.join(root, "wiki", "concepts", "Beta.md"), "utf8");
+  const indexBefore = await fs.readFile(path.join(root, "wiki", "index.md"), "utf8");
+
+  setWikiMoveFailureAfterWritesForTests(2);
+  try {
+    await assert.rejects(() => tools.get("wiki_move_page")!({
+      old_path: "concepts/Alpha.md",
+      new_path: "entities/Alpha_Entity.md",
+      dry_run: false,
+    }), /Injected wiki move failure/);
+  } finally {
+    setWikiMoveFailureAfterWritesForTests(null);
+  }
+
+  assert.equal(
+    await fs.readFile(path.join(root, "wiki", "concepts", "Alpha.md"), "utf8"),
+    alphaBefore
+  );
+  assert.equal(
+    await fs.readFile(path.join(root, "wiki", "concepts", "Beta.md"), "utf8"),
+    betaBefore
+  );
+  assert.equal(await fs.readFile(path.join(root, "wiki", "index.md"), "utf8"), indexBefore);
+  await assert.rejects(() => fs.access(path.join(root, "wiki", "entities", "Alpha_Entity.md")));
 });
 
 test("source ingestion: normalize, prepare drafts, dev report ingestion, traceability", async () => {
@@ -320,9 +460,9 @@ test("source ingestion: normalize, prepare drafts, dev report ingestion, traceab
     max_chars: 12000,
   });
   assert.equal(sourceDraft.isError, undefined);
-  assert.equal(sourceDraft.content[0].text.includes("Unità estrazione Evidence IR"), true);
+  assert.equal(sourceDraft.content[0].text.includes("Evidence IR extraction unit"), true);
   assert.equal(sourceDraft.content[0].text.includes("record, link, validation and synthesis are orchestrated internally"), true);
-  assert.equal(sourceDraft.content[0].text.includes("Coda unresolved:"), true);
+  assert.equal(sourceDraft.content[0].text.includes("Unresolved queue:"), true);
   assert.equal(sourceDraft.content[0].text.includes("```source"), true);
 
   const sourceCoverageResult = await tools.get("knowledge_prepare_source_ingestion")!({
@@ -340,7 +480,7 @@ test("source ingestion: normalize, prepare drafts, dev report ingestion, traceab
   assert.equal(prematureFinalize.isError, true);
   assert.equal(prematureFinalize.content[0].text.includes("Cannot finalize source coverage"), true);
 
-  const segmentId = sourceDraft.content[0].text.match(/Segmento: `([^`]+)`/)?.[1];
+  const segmentId = sourceDraft.content[0].text.match(/Segment: `([^`]+)`/)?.[1];
   assert.ok(segmentId);
   const representedBypass = await tools.get("knowledge_prepare_source_ingestion")!({
     action: "record",
@@ -351,7 +491,7 @@ test("source ingestion: normalize, prepare drafts, dev report ingestion, traceab
     page_refs: ["index.md"],
   });
   assert.equal(representedBypass.isError, true);
-  assert.equal(representedBypass.content[0].text.includes("derivati esclusivamente da knowledge_ingest action=apply_claims"), true);
+  assert.equal(representedBypass.content[0].text.includes("derived only by knowledge_ingest action=apply_claims"), true);
 
   const evidenceRecord = await tools.get("knowledge_evidence_ir")!({
     action: "record",
@@ -371,7 +511,7 @@ test("source ingestion: normalize, prepare drafts, dev report ingestion, traceab
     }],
   });
   assert.equal(evidenceRecord.isError, undefined);
-  assert.equal(evidenceRecord.content[0].text.includes("Evidence registrata prima della synthesis"), true);
+  assert.equal(evidenceRecord.content[0].text.includes("Evidence recorded before synthesis"), true);
   const recoveredClaimId = evidenceRecord.content[0].text.match(/(claim-[a-f0-9]{32})/)?.[1];
   assert.ok(recoveredClaimId);
   const recoveryRecord = await tools.get("knowledge_evidence_ir")!({
@@ -395,11 +535,11 @@ test("source ingestion: normalize, prepare drafts, dev report ingestion, traceab
   assert.equal(evidenceLink.content[0].text.includes("candidate_new_page"), true);
   const evidencePlan = await tools.get("knowledge_evidence_ir")!({ action: "plan_synthesis" });
   assert.equal(evidencePlan.isError, undefined);
-  assert.equal(evidencePlan.content[0].text.includes("Nessuna pagina scritta"), true);
+  assert.equal(evidencePlan.content[0].text.includes("No pages written"), true);
   assert.equal(evidencePlan.content[0].text.includes("client-sources/AlphaSource.md"), true);
   const evidenceSynthesis = await tools.get("knowledge_evidence_ir")!({ action: "synthesize" });
   assert.equal(evidenceSynthesis.isError, undefined);
-  assert.equal(evidenceSynthesis.content[0].text.includes("Coverage aggiornata: 1 segmenti; pending: 0"), true);
+  assert.equal(evidenceSynthesis.content[0].text.includes("Coverage updated: 1 segments; pending: 0"), true);
   const recoveryResolution = await tools.get("knowledge_evidence_ir")!({
     action: "recovery_resolve",
     recovery_event_id: recoveryEventId,
@@ -432,8 +572,8 @@ test("source ingestion: normalize, prepare drafts, dev report ingestion, traceab
     report_filename: "REQ-1.md",
   });
   assert.equal(requestDrafts.isError, undefined);
-  assert.equal(requestDrafts.content[0].text.includes("Bozze ingestione richiesta"), true);
-  assert.equal(requestDrafts.content[0].text.includes("requests/REQ_1_richiesta.md"), true);
+  assert.equal(requestDrafts.content[0].text.includes("Request-ingestion drafts"), true);
+  assert.equal(requestDrafts.content[0].text.includes("requests/REQ_1_request.md"), true);
 
   // report incompleto → bloccato
   await fs.writeFile(
@@ -445,7 +585,7 @@ test("source ingestion: normalize, prepare drafts, dev report ingestion, traceab
     report_filename: "REQ-2.md",
   });
   assert.equal(blocked.isError, true);
-  assert.equal(blocked.content[0].text.includes("BLOCCATO"), true);
+  assert.equal(blocked.content[0].text.includes("BLOCKED"), true);
 
   const trace = await tools.get("wiki_graph_query")!({ query: "REQ-1", view: "traceability" });
   assert.equal(typeof trace.content[0].text, "string");
@@ -474,7 +614,7 @@ test("document tools: section context, write, review, knowledge update, docx exp
     document_type: "runbook",
     project_name: "Alpha",
   });
-  assert.equal(documentPlan.content[0].text.includes("Piano editoriale documento"), true);
+  assert.equal(documentPlan.content[0].text.includes("Document editorial plan"), true);
   assert.equal(documentPlan.structuredContent?.documentType, "runbook");
 
   const sectionContext = await tools.get("knowledge_section_context")!({
@@ -485,7 +625,7 @@ test("document tools: section context, write, review, knowledge update, docx exp
     max_chars_per_page: 100,
     max_total_chars: 100,
   });
-  assert.equal(sectionContext.content[0].text.includes("Context pack sezione"), true);
+  assert.equal(sectionContext.content[0].text.includes("Section context pack"), true);
   assert.equal(sectionContext.content[0].text.includes("Alpha Concept"), true);
 
   const docWrite = await tools.get("knowledge_write_document")!({
@@ -501,7 +641,7 @@ test("document tools: section context, write, review, knowledge update, docx exp
     filename: "brief.md",
     document_type: "custom",
   });
-  assert.equal(docReview.content[0].text.includes("Review documento"), true);
+  assert.equal(docReview.content[0].text.includes("Document review"), true);
   assert.equal(docReview.content[0].text.includes("NESSUN_BLOCCANTE"), true);
   assert.equal(docReview.structuredContent?.readyForExport, true);
 
@@ -522,7 +662,7 @@ test("document tools: section context, write, review, knowledge update, docx exp
     overwrite: true,
   });
   assert.equal(blockedExport.isError, true);
-  assert.equal(blockedExport.content[0].text.includes("Export bloccato"), true);
+  assert.equal(blockedExport.content[0].text.includes("Export blocked"), true);
 
   const draft = await prompts.get("prepare_knowledge_update")!({
     finding: "La sezione requisiti Alpha è incompleta.",
@@ -552,7 +692,7 @@ test("MCP prompts return editorial and dev-report plans", async () => {
     document_type: "functional_spec",
     project_name: "Alpha Project",
   });
-  assert.equal(planDoc.messages[0].content.text.includes("Piano editoriale documento"), true);
+  assert.equal(planDoc.messages[0].content.text.includes("Document editorial plan"), true);
   assert.equal(planDoc.messages[0].content.text.includes('knowledge_document_context action="section"'), true);
 
   const planReport = await prompts.get("plan_dev_report")!({

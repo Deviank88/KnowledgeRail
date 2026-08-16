@@ -13,7 +13,7 @@ export const DOCX_CODE_FONT = {
 } as const;
 
 export const DOCX_LANGUAGE = {
-  value: "it-IT",
+  value: "en-US",
 } as const;
 
 const TYPOGRAPHIC_APOSTROPHE = "’";

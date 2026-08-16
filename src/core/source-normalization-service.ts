@@ -1,6 +1,9 @@
 import * as fs from "node:fs/promises";
 import * as nodePath from "node:path";
-import { docsCategoryFilePath } from "./paths.js";
+import {
+  docsCategoryFilePath,
+  docsCategoryFilePathReal,
+} from "./paths.js";
 import { atomicWriteText } from "./fs-service.js";
 import { ensureDir, readFileSafe } from "./utils.js";
 import {
@@ -91,16 +94,20 @@ export async function normalizeSourceFile(
   } = params;
 
   if (category === "normalized" || category === "deliverables" || category === "assets") {
-    throw new Error(`Categoria non normalizzabile: ${category}.`);
+    throw new Error(`Category cannot be normalized: ${category}.`);
   }
   if (!(FILE_CATEGORIES as readonly string[]).includes(category)) {
-    throw new Error(`Categoria non supportata: ${category}.`);
+    throw new Error(`Unsupported category: ${category}.`);
   }
 
-  const absPath = docsCategoryFilePath(category, relPath);
+  const absPath = await docsCategoryFilePathReal(category, relPath);
   await fs.access(absPath);
 
-  const out = normalizedOutputPath(category, relPath);
+  const lexicalOut = normalizedOutputPath(category, relPath);
+  const out = {
+    ...lexicalOut,
+    abs: await docsCategoryFilePathReal("normalized", lexicalOut.rel),
+  };
   if (!overwrite && (await readFileSafe(out.abs)) !== null) {
     return {
       ...out,
@@ -139,7 +146,7 @@ export async function normalizeSourceFile(
       continueOnPageError,
     });
   } else {
-    throw new Error(`Formato non supportato: ${ext}.`);
+    throw new Error(`Unsupported format: ${ext}.`);
   }
 
   const wrapped = [
@@ -149,7 +156,7 @@ export async function normalizeSourceFile(
     `category: ${category}`,
     "---",
     "",
-    `# Fonte normalizzata: ${nodePath.basename(relPath)}`,
+    `# Normalized source: ${nodePath.basename(relPath)}`,
     "",
     normalized.trim() || "_Nessun contenuto estratto._",
     "",
@@ -159,4 +166,3 @@ export async function normalizeSourceFile(
   await atomicWriteText(out.abs, wrapped);
   return { ...out, sourceLabel, chars: wrapped.length };
 }
-

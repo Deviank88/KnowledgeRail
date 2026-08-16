@@ -221,7 +221,7 @@ export async function evaluateEvidenceIr(
         return false;
       }
       const page = [...firstContents.values()].find((content) => content.includes(claim.id));
-      return !page?.includes("non è un fatto esplicito della fonte");
+      return !page?.includes("this is not an explicit source fact");
     }).length;
     const contradictionResolutions = resolutions.filter((item) => item.disposition === "contradiction");
     const contradictionPreserved = contradictionResolutions.filter((resolution) => {

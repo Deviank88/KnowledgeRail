@@ -8,7 +8,7 @@ KnowledgeRail is a local-first MCP server that turns project documentation and s
 
 It is designed for agents that need to understand, change, review, or document a codebase without loading the whole repository into the model context. Retrieval is bounded, provenance is preserved, missing evidence is reported explicitly, and difficult queries widen progressively instead of silently losing relevant information.
 
-> **Current status:** release candidate `1.0.0`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
+> **Current status:** stable release `1.0.1`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
 
 ## What it provides
 
@@ -39,12 +39,12 @@ Mermaid CLI and its compatible Chromium runtime are installed with the package. 
 Run this from any directory inside the project you opened in VS Code, Cursor, a terminal, or another context-aware coding client:
 
 ```bash
-npx -y knowledge-rail@<exact-version>
+npx -y knowledge-rail@1.0.1
 ```
 
 No project path is needed in the persistent MCP configuration. KnowledgeRail discovers the opened project independently for each process, so project X and project Y can be used at the same time by different agent sessions.
 
-The npm package is not considered available until the maintainers publish the reviewed release. Until then, use the source-checkout commands below. Pin an exact version in persistent configurations after publication; reserve `@latest` for one-time trials.
+The reviewed package is published to npm. Pin an exact version in persistent configurations; reserve `@latest` for one-time trials.
 
 ## Install and run from source
 
@@ -73,7 +73,7 @@ Use the standard `stdio` server shape once. Do not hard-code one repository:
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@<exact-version>"]
+      "args": ["-y", "knowledge-rail@1.0.1"]
     }
   }
 }
@@ -105,7 +105,7 @@ A desktop chat does not open a filesystem folder, so it cannot safely infer a pr
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@<exact-version>", "desktop"]
+      "args": ["-y", "knowledge-rail@1.0.1", "desktop"]
     }
   }
 }
@@ -118,10 +118,10 @@ In a new chat, ask KnowledgeRail to list workspaces, choose one entry, and confi
 Projects opened successfully by an IDE/terminal are added to the local catalog automatically without changing their clean eight-tool workflow. Operators can also manage catalog metadata locally:
 
 ```bash
-npx -y knowledge-rail@<exact-version> workspace list
-npx -y knowledge-rail@<exact-version> workspace register
-npx -y knowledge-rail@<exact-version> workspace register /absolute/project/path
-npx -y knowledge-rail@<exact-version> workspace unregister ws_example
+npx -y knowledge-rail@1.0.1 workspace list
+npx -y knowledge-rail@1.0.1 workspace register
+npx -y knowledge-rail@1.0.1 workspace register /absolute/project/path
+npx -y knowledge-rail@1.0.1 workspace unregister ws_example
 ```
 
 Registration never copies, uploads, scans the disk, or deletes project files. `workspace register` without a path discovers only upward from cwd.
@@ -131,7 +131,7 @@ Registration never copies, uploads, scans the disk, or deletes project files. `w
 Start one gateway for many concurrent local clients and workspaces:
 
 ```bash
-npx -y knowledge-rail@<exact-version> --transport http
+npx -y knowledge-rail@1.0.1 --transport http
 ```
 
 The default endpoint is `http://127.0.0.1:3333/mcp`; liveness only is available at `/healthz`. MCP requests require the random credential stored in the OS-protected per-user KnowledgeRail state directory. The desktop adapter reads it automatically, so it never belongs in project configuration or a repository.
@@ -315,6 +315,7 @@ All public tools use the `knowledge_*` prefix in both protocol eras. Historical 
 npm ci
 npm run verify
 npm run audit:runtime
+npm run audit:signatures
 npm run package:smoke
 ```
 

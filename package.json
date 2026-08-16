@@ -1,6 +1,6 @@
 {
   "name": "knowledge-rail",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "mcpName": "io.github.deviank88/knowledge-rail",
   "description": "Local-first MCP 2.0 server for persistent, evidence-backed project knowledge and task context",
   "license": "Apache-2.0",
@@ -21,6 +21,7 @@
   ],
   "files": [
     "ACKNOWLEDGEMENTS.md",
+    "CHANGELOG.md",
     "SELF_HOSTING.md",
     "SECURITY.md",
     "assets/knowledge-rail-logo.png",
@@ -35,12 +36,12 @@
   "scripts": {
     "build": "rimraf dist && tsc",
     "prepack": "npm run build",
-    "check": "tsc --noEmit",
+    "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.check.json",
     "test": "node scripts/run-tests.mjs",
     "verify": "npm run check && npm test",
     "package:smoke": "node scripts/package-smoke.mjs",
     "audit:runtime": "npm audit --omit=dev --audit-level=high",
-    "bench": "tsx benchmarks/search-bench.ts",
+    "audit:signatures": "npm audit signatures",
     "bench:scale": "tsx benchmarks/search-bench.ts",
     "bench:mcp": "tsx benchmarks/mcp-protocol-bench.ts",
     "bench:context": "tsx benchmarks/context-disclosure-bench.ts",
@@ -73,6 +74,8 @@
     "eval:tool-surface": "tsx benchmarks/tool-surface-eval.ts",
     "eval:tool-surface:gate": "tsx benchmarks/tool-surface-baseline-gate.ts",
     "eval:gates": "node scripts/run-quality-gates.mjs",
+    "release:verify": "node scripts/verify-release.mjs",
+    "docs:generate": "node --import tsx scripts/generate-tool-reference.ts",
     "dogfood:self-wiki": "node --import tsx scripts/dogfood-self-wiki.ts",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
@@ -92,9 +95,6 @@
     "pdf-to-png-converter": "3.14.0",
     "puppeteer": "25.6.0",
     "zod": "^4.4.3"
-  },
-  "allowScripts": {
-    "puppeteer@25.6.0": true
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

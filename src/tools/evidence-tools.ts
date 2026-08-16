@@ -85,8 +85,8 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
       if (action === "recovery_record") {
         if (total_evidence_used === undefined || recovery_events === undefined) {
           return errorResult(
-            "total_evidence_used e recovery_events sono obbligatori per action=recovery_record; " +
-            "recovery_events può essere vuoto quando tutta l'evidence usata era già rappresentata."
+            "total_evidence_used and recovery_events are required for action=recovery_record; " +
+            "recovery_events may be empty when all used evidence was already represented."
           );
         }
         const result = await recordKnowledgeRecoveryUsage({
@@ -101,8 +101,8 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
           })),
         });
         return structuredTextResult([
-          "Knowledge recovery usage registrato senza modificare la wiki canonica.",
-          `Eventi creati: ${result.created}; riusati: ${result.reused}; riaperti: ${result.reopened}.`,
+          "Knowledge-recovery usage recorded without changing the canonical wiki.",
+          `Events created: ${result.created}; reused: ${result.reused}; reopened: ${result.reopened}.`,
           `LateRecoveryRate: ${result.metrics.lateRecoveryRate.toFixed(4)} ` +
             `(${result.metrics.lateRecoveryEvidenceUsed}/${result.metrics.totalEvidenceUsed}).`,
           `KnowledgeRecoveryPending: ${result.metrics.knowledgeRecoveryPending}.`,
@@ -122,7 +122,7 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
       if (action === "recovery_resolve") {
         if (!recovery_event_id || !recovery_resolution || !recovery_reason) {
           return errorResult(
-            "recovery_event_id, recovery_resolution e recovery_reason sono obbligatori per action=recovery_resolve."
+            "recovery_event_id, recovery_resolution, and recovery_reason are required for action=recovery_resolve."
           );
         }
         const result = await resolveKnowledgeRecoveryEvent({
@@ -133,10 +133,10 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
           reason: recovery_reason,
         });
         return structuredTextResult([
-          `Knowledge recovery risolta: ${result.event.id} -> ${result.event.resolution}.`,
+          `Knowledge recovery resolved: ${result.event.id} -> ${result.event.resolution}.`,
           `Page refs: ${result.event.pageRefs.join(", ") || "none"}.`,
           `KnowledgeRecoveryPending: ${result.metrics.knowledgeRecoveryPending}.`,
-          "Le pagine vengono accettate solo dopo la normale mutation/synthesis pipeline e la verifica della provenance.",
+          "Pages are accepted only after the normal mutation/synthesis pipeline and provenance verification.",
         ].join("\n"), {
           action,
           event: result.event,
@@ -161,7 +161,7 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
           "",
           ...events.map((event) =>
             `- ${event.id} [${event.discoveredBy}/${event.resolution}] ${event.evidenceRef} -> ` +
-            `${event.expectedWikiPages.join(", ") || "target da definire"}`
+            `${event.expectedWikiPages.join(", ") || "target to be defined"}`
           ),
         ].join("\n"), {
           action,
@@ -173,10 +173,10 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
 
       if (action === "record") {
         if (!normalized_filename || !segment_id || !claims?.length) {
-          return errorResult("normalized_filename, segment_id e claims sono obbligatori per action=record.");
+          return errorResult("normalized_filename, segment_id, and claims are required for action=record.");
         }
         const content = await readFileSafe(docsCategoryFilePath("normalized", normalized_filename));
-        if (content === null) return errorResult(`Fonte normalizzata non trovata: ${normalized_filename}`);
+        if (content === null) return errorResult(`Normalized source not found: ${normalized_filename}`);
         const result = await recordEvidenceClaims({
           wikiRoot: wikiDir(),
           sourceUri: sourceUri(normalized_filename),
@@ -200,12 +200,12 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
           })),
         });
         return textResult([
-          "Evidence registrata prima della synthesis.",
-          `Creati: ${result.created}; riusati: ${result.reused}.`,
+          "Evidence recorded before synthesis.",
+          `Created: ${result.created}; reused: ${result.reused}.`,
           ...result.claims.map((claim) =>
             `- ${claim.id} [${claim.kind}/${claim.origin}/${claim.status}] ${claim.sourceUri}#${claim.segmentId}`
           ),
-          "Usare action=link prima della synthesis.",
+          "Use action=link before synthesis.",
         ].join("\n"));
       }
 
@@ -213,18 +213,18 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
         const resolutions = await resolveEvidenceClaims({ wikiRoot: wikiDir(), claimIds: claim_ids });
         const coverage = await reconcileEvidenceCoverage(wikiDir());
         return textResult([
-          `Claim risolti: ${resolutions.length}.`,
+          `Claims resolved: ${resolutions.length}.`,
           ...resolutions.map((item) =>
             `- ${item.claimId}: ${item.disposition} -> ${item.targetPagePath ?? (item.targetClaimIds.join(",") || "unresolved")} (${item.reason})`
           ),
-          `Coverage riconciliata: ${coverage.segmentsRecorded} segmenti; pending: ${coverage.segmentsPending}.`,
+          `Coverage reconciled: ${coverage.segmentsRecorded} segments; pending: ${coverage.segmentsPending}.`,
         ].join("\n"));
       }
 
       if (action === "plan_synthesis") {
         const drafts = await planEvidenceSynthesis({ wikiRoot: wikiDir(), claimIds: claim_ids });
         return textResult([
-          `Bozze synthesis: ${drafts.length}. Nessuna pagina scritta.`,
+          `Synthesis drafts: ${drafts.length}. No pages written.`,
           ...drafts.map((draft) => draftBlock(draft.pagePath, draft.content)),
         ].join("\n\n"));
       }
@@ -233,12 +233,12 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
         const drafts = await applyEvidenceSynthesis({ wikiRoot: wikiDir(), claimIds: claim_ids });
         const indexLine = drafts.length > 0
           ? await finalizePageMutation(drafts.map((draft) => draft.pagePath))
-          : "Nessuna pagina da aggiornare.";
+          : "No pages to update.";
         const coverage = await reconcileEvidenceCoverage(wikiDir());
         return textResult([
-          `Synthesis completata: ${drafts.length} pagina/e.`,
+          `Synthesis completed: ${drafts.length} page(s).`,
           ...drafts.map((draft) => `- ${draft.mode}: ${draft.pagePath} (${draft.claimIds.length} claim)`),
-          `Coverage aggiornata: ${coverage.segmentsRecorded} segmenti; pending: ${coverage.segmentsPending}.`,
+          `Coverage updated: ${coverage.segmentsRecorded} segments; pending: ${coverage.segmentsPending}.`,
           indexLine,
         ].join("\n"));
       }

@@ -377,7 +377,7 @@ function addOutgoingLinks(runtime: RuntimeGraph, state: RuntimeMutationState, re
   for (const target of [...wikiLinkTargets(record.raw), ...markdownLinkTargets(record.raw)]) {
     const resolved = resolveLinkTarget(runtime, state, record.path, target);
     if (resolved) addEdge(runtime, state, { from, to: resolved, kind: "links_to" });
-    else warnings.add(`${record.path}: link non risolto '${target}'`);
+    else warnings.add(`${record.path}: unresolved link '${target}'`);
   }
   state.warningsByPath.set(record.path, warnings);
 }

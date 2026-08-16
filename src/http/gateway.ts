@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import * as http from "node:http";
 import {
   createMcpHandler,
@@ -10,6 +10,9 @@ import {
 import { toNodeHandler, type NodeIncomingMessageLike } from "@modelcontextprotocol/node";
 import type { ServeCliOptions } from "../cli.js";
 import { createUnauthorizedWorkspaceContext, runWithWorkspaceContext } from "../core/workspace-context.js";
+import { evictWorkspaceStateForProject } from "../core/workspace-state.js";
+import { logger } from "../core/logger.js";
+import { MCP_PROTOCOL_VERSION, PRODUCT_VERSION } from "../product.js";
 import { buildServer } from "../mcp/server.js";
 import { discoverWorkspaceFromCwd } from "../mcp/workspace-discovery.js";
 import { WorkspaceBindingManager } from "../workspaces/bindings.js";
@@ -73,9 +76,36 @@ export async function runHttpGateway(
     const credential = await state.credential();
     const principalId = `local_${createHash("sha256").update(credential).digest("base64url")}`;
     const registry = new WorkspaceRegistry(state.directory);
-    const bindings = new WorkspaceBindingManager(registry);
+    const bindings = new WorkspaceBindingManager(
+      registry,
+      undefined,
+      undefined,
+      undefined,
+      async (workspaceId) => {
+        const registration = await registry.get(workspaceId);
+        if (registration) evictWorkspaceStateForProject(registration.canonicalRoot);
+      }
+    );
     let activeRequests = 0;
     const activeByWorkspace = new Map<string, number>();
+    const startedAt = Date.now();
+    let requestCount = 0;
+    const responseCounts = new Map<number, number>();
+    const recentLatenciesMs: number[] = [];
+    const finish = (response: Response, requestStartedAt: number, requestId?: string): Response => {
+      requestCount++;
+      responseCounts.set(response.status, (responseCounts.get(response.status) ?? 0) + 1);
+      recentLatenciesMs.push(Date.now() - requestStartedAt);
+      if (recentLatenciesMs.length > 1_000) recentLatenciesMs.shift();
+      if (!requestId) return response;
+      const headers = new Headers(response.headers);
+      headers.set("x-request-id", requestId);
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    };
     mcp = createMcpHandler(
       (context) => buildServer(context, {
         profile: { kind: "catalog", bindings, principalId },
@@ -83,46 +113,86 @@ export async function runHttpGateway(
       {
         legacy: "stateless",
         responseMode: "auto",
-        onerror: () => process.stderr.write("[knowledge-rail] MCP HTTP request failed.\n"),
+        onerror: (error) => logger.error("gateway", "mcp_request_failed", {}, error),
       }
     );
 
     const allowedHosts = [...new Set([...localhostAllowedHostnames(), ...options.allowedHosts])];
-    const allowedOriginHosts = [...new Set([
-      ...localhostAllowedOrigins(),
-      ...options.allowedOrigins.map((origin) => new URL(origin).hostname),
-    ])];
+    const explicitOrigins = options.allowedOrigins.map((origin) => new URL(origin).origin.toLowerCase());
+    const allowedOriginHosts = [...new Set(
+      explicitOrigins.length > 0
+        ? explicitOrigins.map((origin) => new URL(origin).hostname)
+        : localhostAllowedOrigins()
+    )];
     const route = {
       fetch: async (request: Request): Promise<Response> => {
+        const requestStartedAt = Date.now();
+        const requestId = randomUUID();
         const url = new URL(request.url);
+        const rejectedHost = hostHeaderValidationResponse(request, allowedHosts);
+        if (rejectedHost) return finish(rejectedHost, requestStartedAt, requestId);
         if (url.pathname === "/healthz" && request.method === "GET") {
-          return new Response(JSON.stringify({ status: "ok" }), {
+          const registeredWorkspaces = (await registry.listSafe()).length;
+          return new Response(JSON.stringify({
+            status: "ok",
+            version: PRODUCT_VERSION,
+            protocolVersion: MCP_PROTOCOL_VERSION,
+            uptimeSeconds: Math.floor((Date.now() - startedAt) / 1_000),
+            workspaces: { registered: registeredWorkspaces, active: bindings.activeWorkspaceCount() },
+            bindings: bindings.activeBindingCount(),
+          }), {
             status: 200,
             headers: { "content-type": "application/json", "cache-control": "no-store" },
           });
         }
-        if (url.pathname !== options.httpPath) return new Response("Not found", { status: 404 });
+        const metricsRequest = url.pathname === "/metrics" && request.method === "GET";
+        if (url.pathname !== options.httpPath && !metricsRequest) {
+          return finish(new Response("Not found", { status: 404 }), requestStartedAt, requestId);
+        }
 
-        const rejectedHost = hostHeaderValidationResponse(request, allowedHosts);
-        if (rejectedHost) return rejectedHost;
         const rejectedOrigin = originValidationResponse(request, allowedOriginHosts);
-        if (rejectedOrigin) return rejectedOrigin;
-        if (request.headers.has("origin") && options.allowedOrigins.length > 0) {
-          const origin = request.headers.get("origin")?.toLowerCase();
-          const defaultLocal = origin ? localhostAllowedOrigins().includes(new URL(origin).hostname) : false;
-          if (!defaultLocal && (!origin || !options.allowedOrigins.includes(origin))) {
-            return new Response("Forbidden", { status: 403 });
+        if (rejectedOrigin) return finish(rejectedOrigin, requestStartedAt, requestId);
+        if (request.headers.has("origin") && explicitOrigins.length > 0) {
+          const suppliedOrigin = request.headers.get("origin");
+          let normalizedOrigin = "";
+          try {
+            normalizedOrigin = suppliedOrigin ? new URL(suppliedOrigin).origin.toLowerCase() : "";
+          } catch {
+            normalizedOrigin = "";
+          }
+          if (!explicitOrigins.includes(normalizedOrigin)) {
+            return finish(new Response("Forbidden", { status: 403 }), requestStartedAt, requestId);
           }
         }
         if (!bearerMatches(request, credential)) {
-          return new Response("Unauthorized", {
+          return finish(new Response("Unauthorized", {
             status: 401,
             headers: { "www-authenticate": "Bearer", "cache-control": "no-store" },
-          });
+          }), requestStartedAt, requestId);
+        }
+
+        if (metricsRequest) {
+          const sortedLatencies = [...recentLatenciesMs].sort((left, right) => left - right);
+          const percentile = (ratio: number) => sortedLatencies.length === 0
+            ? 0
+            : sortedLatencies[Math.min(sortedLatencies.length - 1, Math.floor(sortedLatencies.length * ratio))]!;
+          return finish(new Response(JSON.stringify({
+            requests: requestCount,
+            responses: Object.fromEntries([...responseCounts.entries()].map(([status, count]) => [String(status), count])),
+            activeRequests,
+            activeWorkspaces: activeByWorkspace.size,
+            latencyMs: { p50: percentile(0.5), p95: percentile(0.95), p99: percentile(0.99) },
+          }), {
+            headers: { "content-type": "application/json", "cache-control": "no-store" },
+          }), requestStartedAt, requestId);
         }
 
         if (activeRequests >= DEFAULT_MAX_CONCURRENT_REQUESTS) {
-          return new Response("Gateway busy", { status: 503, headers: { "retry-after": "1" } });
+          return finish(
+            new Response("Gateway busy", { status: 503, headers: { "retry-after": "1" } }),
+            requestStartedAt,
+            requestId
+          );
         }
 
         const resolution = await resolveRequestWorkspace(request, bindings, principalId);
@@ -130,13 +200,21 @@ export async function runHttpGateway(
         const workspaceKey = context.authorized ? context.workspaceId : undefined;
         const workspaceActive = workspaceKey ? activeByWorkspace.get(workspaceKey) ?? 0 : 0;
         if (workspaceKey && workspaceActive >= DEFAULT_MAX_CONCURRENT_WORKSPACE_REQUESTS) {
-          return new Response("Workspace busy", { status: 429, headers: { "retry-after": "1" } });
+          return finish(
+            new Response("Workspace busy", { status: 429, headers: { "retry-after": "1" } }),
+            requestStartedAt,
+            requestId
+          );
         }
         activeRequests++;
         if (workspaceKey) activeByWorkspace.set(workspaceKey, workspaceActive + 1);
         try {
           const response = await runWithWorkspaceContext(context, () => mcp!.fetch(request));
-          return await qualifyWorkspaceResponse(response, context.authorized ? resolution.binding : undefined);
+          return finish(
+            await qualifyWorkspaceResponse(response, context.authorized ? resolution.binding : undefined),
+            requestStartedAt,
+            requestId
+          );
         } finally {
           activeRequests--;
           if (workspaceKey) {
@@ -148,7 +226,7 @@ export async function runHttpGateway(
       },
     };
     const nodeHandler = toNodeHandler(route, {
-      onerror: () => process.stderr.write("[knowledge-rail] HTTP adapter request failed.\n"),
+      onerror: (error) => logger.error("gateway", "http_adapter_failed", {}, error),
     });
 
     server = http.createServer((req, res) => {
@@ -159,7 +237,8 @@ export async function runHttpGateway(
         res.end("Request too large");
         return;
       }
-      void nodeHandler(limitedRequest(req, bodyLimit), res).catch(() => {
+      void nodeHandler(limitedRequest(req, bodyLimit), res).catch((error: unknown) => {
+        logger.error("gateway", "node_handler_failed", {}, error);
         if (!res.headersSent) res.writeHead(500, { "content-type": "text/plain" });
         res.end("Internal server error");
       });
@@ -185,7 +264,7 @@ export async function runHttpGateway(
     await state.publish(endpoint, nonce);
 
     void discoverWorkspaceFromCwd().then((workspace) => registry.register(workspace.root, "automatic")).catch(() => undefined);
-    process.stderr.write(`[knowledge-rail] Local HTTP gateway ready on ${options.host}:${address.port}${options.httpPath}.\n`);
+    logger.info("gateway", "ready", { host: options.host, port: address.port, path: options.httpPath });
 
     let closing: Promise<void> | undefined;
     return {

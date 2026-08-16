@@ -27,7 +27,7 @@ export function buildDocument(params: BuildDocumentParams): Document {
         alignment: AlignmentType.RIGHT,
         children: [
           new TextRun({
-            text: normalizeDocxText(`${project} | Documento di Validazione`),
+            text: normalizeDocxText(`${project} | Validation Document`),
             font: DOCX_TEXT_FONT, language: DOCX_LANGUAGE, size: 16, color: DOCX_COLORS.gray,
           }),
         ],
@@ -40,7 +40,7 @@ export function buildDocument(params: BuildDocumentParams): Document {
       new Paragraph({
         alignment: AlignmentType.CENTER,
         children: [
-          new TextRun({ text: "Pagina ", font: DOCX_TEXT_FONT, language: DOCX_LANGUAGE, size: 16, color: DOCX_COLORS.gray }),
+          new TextRun({ text: "Page ", font: DOCX_TEXT_FONT, language: DOCX_LANGUAGE, size: 16, color: DOCX_COLORS.gray }),
           new TextRun({ children: [PageNumber.CURRENT], font: DOCX_TEXT_FONT, language: DOCX_LANGUAGE, size: 16, color: DOCX_COLORS.gray }),
         ],
       }),
@@ -52,11 +52,11 @@ export function buildDocument(params: BuildDocumentParams): Document {
     outlineLevel: 0,
     spacing: { before: 0, after: 240, line: 300, lineRule: LineRuleType.AUTO },
     children: [
-      new TextRun({ text: "Indice", font: DOCX_TEXT_FONT, language: DOCX_LANGUAGE, size: 32, bold: true, color: DOCX_COLORS.darkBlue }),
+      new TextRun({ text: "Contents", font: DOCX_TEXT_FONT, language: DOCX_LANGUAGE, size: 32, bold: true, color: DOCX_COLORS.darkBlue }),
     ],
   });
 
-  const toc = new TableOfContents("Indice", {
+  const toc = new TableOfContents("Contents", {
     headingStyleRange: "1-3",
     hyperlink: true,
   });

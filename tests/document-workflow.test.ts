@@ -54,7 +54,7 @@ test("parseTemplateSections extracts top-level document sections with optional l
 
   assert.deepEqual(
     sections.map((section) => section.title),
-    ["1. Scopo e Obiettivi", "2. Contesto e Motivazione", "3. Requisiti Funzionali"]
+    ["1. Purpose and Objectives", "2. Context and Motivation", "3. Functional Requirements"]
   );
 });
 
@@ -113,7 +113,7 @@ test("reviewDocumentStructure reports placeholders, missing sections, and Mermai
   );
 
   assert.equal(review.placeholderCount > 0, true);
-  assert.equal(review.missingSections.includes("2. Contesto e Motivazione"), true);
+  assert.equal(review.missingSections.includes("2. Context and Motivation"), true);
   assert.equal(review.findings.some((finding) => finding.code === "PLACEHOLDER_RESIDUO"), true);
   assert.equal(review.findings.some((finding) => finding.code === "MERMAID_SOSPETTO"), true);
 });
@@ -136,9 +136,9 @@ test("reviewDocumentStructure reports client-facing and language issues with wik
   assert.equal(review.findings.some((finding) => finding.code === "REVISIONE_LINGUA"), true);
 
   const formatted = formatReviewResult(review, "documento.md", { includeWikiUpdatePlan: true });
-  assert.equal(formatted.includes("Piano aggiornamento wiki"), true);
+  assert.equal(formatted.includes("Wiki update plan"), true);
   assert.equal(formatted.includes("prepare_knowledge_update"), true);
-  assert.equal(formatted.includes("Matrice di copertura"), true);
+  assert.equal(formatted.includes("Coverage matrix"), true);
 });
 
 test("reviewDocumentStructure accepts a complete custom document without blocking findings", () => {
@@ -204,7 +204,7 @@ test("development report contract blocks incomplete reports and prepares request
     objective: "Aggiornare automazione.",
   });
   assert.equal(plan.includes("knowledge_ingest action=report"), true);
-  assert.equal(plan.includes("## Automazioni"), true);
+  assert.equal(plan.includes("## Automations"), true);
 
   const incomplete = validateDevReport([
     "# Report",

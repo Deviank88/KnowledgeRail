@@ -1,0 +1,113 @@
+name: Publish release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate release candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify release metadata
+        run: npm run release:verify -- "$GITHUB_REF_NAME"
+
+      - name: Typecheck and tests
+        env:
+          KNOWLEDGE_RAIL_MERMAID_NO_SANDBOX: "true"
+        run: npm run verify
+
+      - name: Deterministic quality gates
+        run: npm run eval:gates
+
+      - name: Installed-package smoke test
+        run: npm run package:smoke
+
+      - name: Runtime vulnerability and signature audit
+        run: npm run audit:runtime && npm run audit:signatures
+
+  publish:
+    name: Publish npm, MCP Registry, and GitHub release
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify release metadata
+        run: npm run release:verify -- "$GITHUB_REF_NAME"
+
+      - name: Publish provenance-attested npm package
+        run: |
+          PACKAGE_SPEC="$(node -p 'const p = require("./package.json"); `${p.name}@${p.version}`')"
+          if npm view "$PACKAGE_SPEC" version >/dev/null 2>&1; then
+            echo "$PACKAGE_SPEC is already published; skipping npm publish."
+          else
+            npm publish --provenance --access public
+          fi
+
+      - name: Install pinned MCP publisher
+        run: |
+          curl --fail --location --silent --show-error \
+            --output mcp-publisher.tar.gz \
+            https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz
+          echo "a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc  mcp-publisher.tar.gz" | sha256sum --check
+          tar xzf mcp-publisher.tar.gz mcp-publisher
+
+      - name: Publish server metadata to the MCP Registry
+        run: |
+          MCP_NAME="$(node -p 'require("./package.json").mcpName')"
+          MCP_VERSION="$(node -p 'require("./package.json").version')"
+          MCP_NAME_PATH="$(node -p 'encodeURIComponent(require("./package.json").mcpName)')"
+          if curl --fail --silent --show-error --output /dev/null \
+            "https://registry.modelcontextprotocol.io/v0.1/servers/${MCP_NAME_PATH}/versions/${MCP_VERSION}"; then
+            echo "$MCP_NAME@$MCP_VERSION is already published; skipping MCP Registry publish."
+          else
+            ./mcp-publisher login github-oidc
+            ./mcp-publisher publish
+          fi
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "GitHub release $GITHUB_REF_NAME already exists; skipping creation."
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --title "KnowledgeRail $GITHUB_REF_NAME"
+          fi

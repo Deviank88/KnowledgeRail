@@ -80,14 +80,7 @@ try {
     }
   }
 
-  await fs.writeFile(path.join(installDirectory, "package.json"), JSON.stringify({
-    private: true,
-    allowScripts: {
-      "puppeteer@25.6.0": true,
-      "esbuild@0.28.2": true,
-      "fsevents@2.3.3": true,
-    },
-  }, null, 2));
+  await fs.writeFile(path.join(installDirectory, "package.json"), JSON.stringify({ private: true }, null, 2));
   const tarball = path.join(packDirectory, path.basename(packResult.filename));
   await run(npmCommand, ["install", "--no-audit", "--no-fund", tarball], { cwd: installDirectory });
   const installedBin = path.join(installDirectory, "node_modules", "knowledge-rail", "dist", "index.js");

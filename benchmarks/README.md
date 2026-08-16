@@ -56,6 +56,10 @@ W0 uses the small local budget, W1 enlarges seeds and graph frontier, W2 adds en
 
 The gate pins both fixtures and both budgets. It requires final recall at least equal to Milestone A, zero evidence lost after widening, a majority of easy cases at W0, automatic widening for the difficult cases, per-attempt token/evidence/visited-node budget compliance and no full-graph scan.
 
+## Document-quality diagnostic
+
+`npm run eval:quality` is intentionally a diagnostic evaluator rather than a hard regression gate. Its scores depend on editorial content and heuristic document review rather than a pinned, deterministic golden fixture, so treating the current output as a threshold would create a misleading gate. The deterministic section-evidence, document-contract, and editorial acceptance requirements are enforced instead by `eval:editorial:gate` and `eval:documents:gate`. Promote this evaluator only after adding a reviewed fixture, a stable metric definition, and an accepted baseline without lowering either existing gate.
+
 ## Source coverage compiler
 
 Run the deterministic whole-source compiler evaluation and CI gate:

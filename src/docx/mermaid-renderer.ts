@@ -48,12 +48,12 @@ export function resolveMermaidCliInstallation(): MermaidCliInstallation {
       if (manifest.name === MERMAID_PACKAGE) {
         const binPath = mermaidBinPath(manifest);
         if (!binPath) {
-          throw new Error(`La dipendenza ${MERMAID_PACKAGE} non dichiara il binario mmdc.`);
+          throw new Error(`${MERMAID_PACKAGE} does not declare the mmdc binary.`);
         }
 
         const cliPath = nodePath.resolve(candidateDir, binPath);
         if (!existsSync(cliPath)) {
-          throw new Error(`Binario mmdc non trovato nel package installato: ${cliPath}`);
+          throw new Error(`mmdc binary not found in the installed package: ${cliPath}`);
         }
 
         cachedInstallation = { cliPath, version: manifest.version ?? "unknown" };
@@ -66,7 +66,7 @@ export function resolveMermaidCliInstallation(): MermaidCliInstallation {
     candidateDir = parentDir;
   }
 
-  throw new Error(`Impossibile individuare il package ${MERMAID_PACKAGE} a partire da ${entryPath}.`);
+  throw new Error(`Could not locate ${MERMAID_PACKAGE} from ${entryPath}.`);
 }
 
 function pngDimensions(data: Buffer): { width: number; height: number } {
@@ -78,7 +78,7 @@ function pngDimensions(data: Buffer): { width: number; height: number } {
     data[3] === 0x47;
 
   if (!isPng) {
-    throw new Error("Mermaid ha prodotto un file non PNG.");
+    throw new Error("Mermaid produced a non-PNG file.");
   }
 
   return {
@@ -90,7 +90,7 @@ function pngDimensions(data: Buffer): { width: number; height: number } {
 function imageTransform(data: Buffer): { width: number; height: number } {
   const dimensions = pngDimensions(data);
   if (dimensions.width <= 0 || dimensions.height <= 0) {
-    throw new Error("Mermaid ha prodotto un PNG con dimensioni non valide.");
+    throw new Error("Mermaid produced a PNG with invalid dimensions.");
   }
 
   const maxWidth = 602;
@@ -261,11 +261,11 @@ export class MermaidCliRenderer implements DiagramRenderer {
 
   async renderPng(source: string): Promise<RenderedDiagramImage> {
     if (source.trim() === "") {
-      throw new Error("Il diagramma Mermaid è vuoto.");
+      throw new Error("The Mermaid diagram is empty.");
     }
     if (source.length > this.maxSourceChars) {
       throw new Error(
-        `Il diagramma Mermaid supera il limite di ${this.maxSourceChars} caratteri (${source.length}).`
+        `The Mermaid diagram exceeds the ${this.maxSourceChars}-character limit (${source.length}).`
       );
     }
 
@@ -275,8 +275,8 @@ export class MermaidCliRenderer implements DiagramRenderer {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(
-        `Dipendenza Mermaid CLI non disponibile. Reinstallare le dipendenze runtime di KnowledgeRail con npm install; ` +
-        `non è richiesta un'installazione globale di mmdc. Dettaglio: ${message}`
+        `Mermaid CLI dependency is unavailable. Reinstall KnowledgeRail runtime dependencies with npm install; ` +
+        `a global mmdc installation is not required. Detail: ${message}`
       );
     }
     const key = createHash("sha256")
@@ -356,9 +356,9 @@ export class MermaidCliRenderer implements DiagramRenderer {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(
-        `Rendering Mermaid fallito con ${MERMAID_PACKAGE} ${installation.version}. ` +
-        `Verificare la sintassi; se Chromium non è stato scaricato durante npm install, eseguire ` +
-        `\`npx puppeteer browsers install chrome-headless-shell\`. Dettaglio: ${message}`
+        `Mermaid rendering failed with ${MERMAID_PACKAGE} ${installation.version}. ` +
+        `Check the syntax; if Chromium was not downloaded during npm install, run ` +
+        `\`npx puppeteer browsers install chrome-headless-shell\`. Detail: ${message}`
       );
     } finally {
       await rm(dir, { recursive: true, force: true });
