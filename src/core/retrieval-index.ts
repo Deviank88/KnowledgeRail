@@ -90,6 +90,10 @@ function stateFor(wikiRoot: string): IndexState {
     state = emptyState();
     states.set(root, state);
     try {
+      // libuv's recursive Windows watcher can abort the process on valid
+      // directory/case combinations instead of reporting an ordinary error.
+      // Periodic reconciliation is already authoritative on this platform.
+      if (process.platform === "win32") throw new Error("Use periodic reconciliation on Windows.");
       // `persistent: false` is stronger than relying only on `unref()` and ensures
       // the derived-index watcher cannot keep short-lived CLI/test processes alive.
       // In the MCP server the transport already keeps the event loop alive, so the

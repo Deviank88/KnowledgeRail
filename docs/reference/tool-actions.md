@@ -24,12 +24,12 @@ Actions/modes: `init`, `lint`, `migrate`.
 
 | Parameter | Type / values | Required | Default | Description |
 |---|---|---:|---|---|
-| `action` | `init` \| `lint` \| `migrate` | yes | — | init=bootstrap; lint=validate broken links/orphans; migrate=upgrade storage format. |
+| `action` | `init` &#124; `lint` &#124; `migrate` | yes | — | init=bootstrap; lint=validate broken links/orphans; migrate=upgrade storage format. |
 | `force` | boolean | no | `false` | — |
 | `include_orphans` | boolean | no | `true` | — |
 | `include_missing` | boolean | no | `true` | — |
 | `include_broken_links` | boolean | no | `true` | — |
-| `migration_action` | `plan` \| `apply` \| `rollback` | no | `"plan"` | — |
+| `migration_action` | `plan` &#124; `apply` &#124; `rollback` | no | `"plan"` | — |
 | `target_version` | string | no | `"4"` | — |
 | `dry_run` | boolean | no | — | — |
 | `backup` | boolean | no | `false` | — |
@@ -43,14 +43,14 @@ Actions/modes: `rebuild`, `update`, `remove`, `search`, `symbol`, `references`, 
 
 | Parameter | Type / values | Required | Default | Description |
 |---|---|---:|---|---|
-| `action` | `rebuild` \| `update` \| `remove` \| `search` \| `symbol` \| `references` \| `read` \| `status` \| `record_fallback` | yes | — | status=index; rebuild=recreate; update=refresh; remove=drop; search=find; symbol=definition; references=callers of symbol; read=open URI; record_fallback=raw lookup. |
+| `action` | `rebuild` &#124; `update` &#124; `remove` &#124; `search` &#124; `symbol` &#124; `references` &#124; `read` &#124; `status` &#124; `record_fallback` | yes | — | status=index; rebuild=recreate; update=refresh; remove=drop; search=find; symbol=definition; references=callers of symbol; read=open URI; record_fallback=raw lookup. |
 | `path` | string | no | — | — |
 | `query` | string | no | — | — |
 | `symbol` | string | no | — | — |
 | `symbol_id` | string | no | — | — |
 | `resource_uri` | string | no | — | — |
 | `path_prefixes` | array<string> | no | — | — |
-| `kinds` | array<module \| class \| function \| method \| route \| test \| comment> | no | — | — |
+| `kinds` | array<module &#124; class &#124; function &#124; method &#124; route &#124; test &#124; comment> | no | — | — |
 | `max_results` | integer | no | `12` | — |
 | `max_chars` | integer | no | `6000` | — |
 | `fallback_reason` | string | no | — | — |
@@ -65,20 +65,20 @@ Actions/modes: `task`, `list`, `search`, `graph`.
 
 | Parameter | Type / values | Required | Default | Description |
 |---|---|---:|---|---|
-| `mode` | `task` \| `list` \| `search` \| `graph` | no | `"task"` | task=context/gaps; list=pages; search=passages; graph=relations/dependencies. |
-| `intent` | `understand` \| `implement` \| `modify` \| `debug` \| `review` \| `document` | no | `"understand"` | — |
+| `mode` | `task` &#124; `list` &#124; `search` &#124; `graph` | no | `"task"` | task=context/gaps; list=pages; search=passages; graph=relations/dependencies. |
+| `intent` | `understand` &#124; `implement` &#124; `modify` &#124; `debug` &#124; `review` &#124; `document` | no | `"understand"` | — |
 | `objective` | string | no | — | — |
 | `query` | string | no | — | — |
 | `changed_paths` | array<string> | no | — | — |
 | `page_types` | array<string> | no | — | — |
-| `retrieval_profile` | `precision` \| `balanced` \| `coverage` | no | `"balanced"` | — |
+| `retrieval_profile` | `precision` &#124; `balanced` &#124; `coverage` | no | `"balanced"` | — |
 | `max_evidence` | integer | no | `8` | — |
 | `heuristic_token_budget` | integer | no | `2000` | — |
-| `response_detail` | `compact` \| `full` | no | `"compact"` | — |
+| `response_detail` | `compact` &#124; `full` | no | `"compact"` | — |
 | `max_results` | integer | no | `10` | — |
 | `max_nodes` | integer | no | `12` | — |
 | `max_depth` | integer | no | `1` | — |
-| `view` | `subgraph` \| `traceability` | no | `"subgraph"` | — |
+| `view` | `subgraph` &#124; `traceability` | no | `"subgraph"` | — |
 
 ## `knowledge_document`
 
@@ -88,9 +88,9 @@ Actions/modes: `write`, `review`, `export`.
 
 | Parameter | Type / values | Required | Default | Description |
 |---|---|---:|---|---|
-| `action` | `write` \| `review` \| `export` | yes | — | write=save Markdown; review=check required sections; export=render Word/DOCX. |
+| `action` | `write` &#124; `review` &#124; `export` | yes | — | write=save Markdown; review=check required sections; export=render Word/DOCX. |
 | `filename` | string | yes | — | — |
-| `document_type` | `functional_spec` \| `architecture_doc` \| `project_brief` \| `onboarding_guide` \| `api_reference` \| `adr` \| `runbook` \| `test_plan` \| `incident_report` \| `release_notes` \| `custom` | yes | — | — |
+| `document_type` | `functional_spec` &#124; `architecture_doc` &#124; `project_brief` &#124; `onboarding_guide` &#124; `api_reference` &#124; `adr` &#124; `runbook` &#124; `test_plan` &#124; `incident_report` &#124; `release_notes` &#124; `custom` | yes | — | — |
 | `title` | string | no | — | — |
 | `content` | string | no | — | — |
 | `project_name` | string | no | — | — |
@@ -113,8 +113,8 @@ Actions/modes: `plan`, `section`.
 
 | Parameter | Type / values | Required | Default | Description |
 |---|---|---:|---|---|
-| `action` | `plan` \| `section` | yes | — | plan=design outline; section=collect evidence. |
-| `document_type` | `functional_spec` \| `architecture_doc` \| `project_brief` \| `onboarding_guide` \| `api_reference` \| `adr` \| `runbook` \| `test_plan` \| `incident_report` \| `release_notes` \| `custom` | yes | — | — |
+| `action` | `plan` &#124; `section` | yes | — | plan=design outline; section=collect evidence. |
+| `document_type` | `functional_spec` &#124; `architecture_doc` &#124; `project_brief` &#124; `onboarding_guide` &#124; `api_reference` &#124; `adr` &#124; `runbook` &#124; `test_plan` &#124; `incident_report` &#124; `release_notes` &#124; `custom` | yes | — | — |
 | `project_name` | string | no | — | — |
 | `objective` | string | no | — | — |
 | `audience` | string | no | — | — |
@@ -122,8 +122,8 @@ Actions/modes: `plan`, `section`.
 | `section_title` | string | no | — | — |
 | `query` | string | no | — | — |
 | `language` | string | no | — | — |
-| `required_evidence` | array<requirement \| implementation \| decision \| source \| constraint \| invariant \| test \| risk \| current_state \| dependency \| contradiction> | no | — | — |
-| `preferred_evidence` | array<requirement \| implementation \| decision \| source \| constraint \| invariant \| test \| risk \| current_state \| dependency \| contradiction> | no | — | — |
+| `required_evidence` | array<requirement &#124; implementation &#124; decision &#124; source &#124; constraint &#124; invariant &#124; test &#124; risk &#124; current_state &#124; dependency &#124; contradiction> | no | — | — |
+| `preferred_evidence` | array<requirement &#124; implementation &#124; decision &#124; source &#124; constraint &#124; invariant &#124; test &#124; risk &#124; current_state &#124; dependency &#124; contradiction> | no | — | — |
 | `page_paths` | array<string> | no | — | — |
 | `page_types` | array<string> | no | — | — |
 | `max_pages` | integer | no | `8` | — |
@@ -131,7 +131,7 @@ Actions/modes: `plan`, `section`.
 | `max_total_chars` | integer | no | `30000` | — |
 | `max_output_chars` | integer | no | — | — |
 | `heuristic_token_budget` | integer | no | — | — |
-| `retrieval_profile` | `precision` \| `balanced` \| `coverage` | no | `"coverage"` | — |
+| `retrieval_profile` | `precision` &#124; `balanced` &#124; `coverage` | no | `"coverage"` | — |
 
 ## `knowledge_files`
 
@@ -141,8 +141,8 @@ Actions/modes: `list`, `read`, `normalize`.
 
 | Parameter | Type / values | Required | Default | Description |
 |---|---|---:|---|---|
-| `action` | `list` \| `read` \| `normalize` | no | `"list"` | list=sources; read=open; normalize=convert to Markdown. |
-| `category` | `client` \| `transcripts` \| `reports` \| `changelogs` \| `normalized` \| `deliverables` \| `assets` | no | — | — |
+| `action` | `list` &#124; `read` &#124; `normalize` | no | `"list"` | list=sources; read=open; normalize=convert to Markdown. |
+| `category` | `client` &#124; `transcripts` &#124; `reports` &#124; `changelogs` &#124; `normalized` &#124; `deliverables` &#124; `assets` | no | — | — |
 | `pattern` | string | no | `"**/*"` | — |
 | `path` | string | no | — | — |
 | `max_chars` | integer | no | — | — |
@@ -156,13 +156,13 @@ Actions/modes: `start`, `next`, `apply_claims`, `record_segment`, `source_status
 
 | Parameter | Type / values | Required | Default | Description |
 |---|---|---:|---|---|
-| `action` | `start` \| `next` \| `apply_claims` \| `record_segment` \| `source_status` \| `evidence_status` \| `finalize` \| `report` \| `record_recovery` \| `resolve_recovery` | yes | — | start=begin; next=segment; apply_claims=integrate; record_segment=classify; source_status=coverage; evidence_status=debt; finalize=close; report=drafts; record_recovery=track; resolve_recovery=resolve. |
+| `action` | `start` &#124; `next` &#124; `apply_claims` &#124; `record_segment` &#124; `source_status` &#124; `evidence_status` &#124; `finalize` &#124; `report` &#124; `record_recovery` &#124; `resolve_recovery` | yes | — | start=begin; next=segment; apply_claims=integrate; record_segment=classify; source_status=coverage; evidence_status=debt; finalize=close; report=drafts; record_recovery=track; resolve_recovery=resolve. |
 | `normalized_filename` | string | no | — | docs/normalized file. |
 | `max_chars` | integer | no | `12000` | Next response limit. |
 | `segment_max_chars` | integer | no | — | Start segment size. |
 | `segment_id` | string | no | — | ID from next. |
 | `claims` | array<object> | no | — | Claim: text, kind, origin, confidence; optional target/relations. |
-| `segment_status` | `irrelevant` \| `unresolved` \| `legacy_unverified` | no | — | record_segment class. |
+| `segment_status` | `irrelevant` &#124; `unresolved` &#124; `legacy_unverified` | no | — | record_segment class. |
 | `evidence_refs` | array<string> | no | — | Evidence refs. |
 | `page_refs` | array<string> | no | — | Page refs. |
 | `reason` | string | no | — | Classification reason. |
@@ -172,7 +172,7 @@ Actions/modes: `start`, `next`, `apply_claims`, `record_segment`, `source_status
 | `total_evidence_used` | integer | no | — | Evidence total. |
 | `recovery_events` | array<object> | no | — | Recovery: evidence_ref, source_uri, discovered_by, reason; optional pages. |
 | `recovery_event_id` | string | no | — | Recovery event ID. |
-| `recovery_resolution` | `page_updated` \| `new_page` \| `ledger_updated` \| `intentionally_ignored` | no | — | Recovery disposition. |
+| `recovery_resolution` | `page_updated` &#124; `new_page` &#124; `ledger_updated` &#124; `intentionally_ignored` | no | — | Recovery disposition. |
 | `recovery_page_refs` | array<string> | no | — | Representing pages. |
 | `recovery_reason` | string | no | — | Resolution reason. |
 
@@ -184,7 +184,7 @@ Actions/modes: `read`, `write`, `edit`, `move`, `delete`, `append_log`.
 
 | Parameter | Type / values | Required | Default | Description |
 |---|---|---:|---|---|
-| `action` | `read` \| `write` \| `edit` \| `move` \| `delete` \| `append_log` | yes | — | read=open; write=create; edit=replace; move=rename; delete=remove; append_log=event. |
+| `action` | `read` &#124; `write` &#124; `edit` &#124; `move` &#124; `delete` &#124; `append_log` | yes | — | read=open; write=create; edit=replace; move=rename; delete=remove; append_log=event. |
 | `path` | string | no | — | — |
 | `resource_uri` | string | no | — | — |
 | `max_chars` | integer | no | `6000` | — |
@@ -196,4 +196,4 @@ Actions/modes: `read`, `write`, `edit`, `move`, `delete`, `append_log`.
 | `new_path` | string | no | — | — |
 | `dry_run` | boolean | no | `false` | — |
 | `entry` | string | no | — | — |
-| `level` | `INFO` \| `WARN` \| `ACTION` \| `DECISION` | no | `"ACTION"` | — |
+| `level` | `INFO` &#124; `WARN` &#124; `ACTION` &#124; `DECISION` | no | `"ACTION"` | — |

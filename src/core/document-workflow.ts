@@ -1024,8 +1024,9 @@ export function formatReviewResult(
 
   lines.push("", "## Coverage matrix", "", "| Section | State | Cited evidence |", "|---|---|---|");
   if (result.coverage.length === 0) lines.push("| _No H2 sections_ | weak | — |");
+  const tableCell = (value: string): string => value.replace(/\|/g, "&#124;");
   for (const row of result.coverage) {
-    lines.push(`| ${row.section.replace(/\|/g, "\\|")} | ${row.status} | ${row.evidence.join(", ").replace(/\|/g, "\\|") || "to verify"} |`);
+    lines.push(`| ${tableCell(row.section)} | ${row.status} | ${tableCell(row.evidence.join(", ")) || "to verify"} |`);
   }
 
   lines.push("");

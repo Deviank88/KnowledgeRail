@@ -58,7 +58,7 @@ function schemaType(property: SchemaProperty): string {
 }
 
 function escapeCell(value: string): string {
-  return value.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+  return value.replace(/\|/g, "&#124;").replace(/\r?\n/g, " ");
 }
 
 function renderTool(tool: CatalogTool): string {

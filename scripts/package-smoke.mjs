@@ -6,7 +6,8 @@ import * as path from "node:path";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const npmCli = process.env.npm_execpath;
+if (!npmCli) throw new Error("npm_execpath is required; run this smoke test through npm.");
 const temporaryRoot = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-package-smoke-"));
 const packDirectory = path.join(temporaryRoot, "pack");
 const installDirectory = path.join(temporaryRoot, "install");
@@ -41,6 +42,10 @@ function run(command, args, options = {}) {
   });
 }
 
+function runNpm(args, options = {}) {
+  return run(process.execPath, [npmCli, ...args], options);
+}
+
 async function availablePort() {
   const server = net.createServer();
   await new Promise((resolve, reject) => {
@@ -68,7 +73,7 @@ async function waitForJson(filePath, timeoutMs = 10_000) {
 
 let gatewayProcess;
 try {
-  const packed = await run(npmCommand, ["pack", "--json", "--pack-destination", packDirectory], { cwd: process.cwd() });
+  const packed = await runNpm(["pack", "--json", "--pack-destination", packDirectory], { cwd: process.cwd() });
   const packResult = JSON.parse(packed.stdout)[0];
   const packedPaths = new Set(packResult.files.map((entry) => entry.path));
   for (const required of ["dist/index.js", "README.md", "LICENSE", "package.json", "server.json"]) {
@@ -82,7 +87,7 @@ try {
 
   await fs.writeFile(path.join(installDirectory, "package.json"), JSON.stringify({ private: true }, null, 2));
   const tarball = path.join(packDirectory, path.basename(packResult.filename));
-  await run(npmCommand, ["install", "--no-audit", "--no-fund", tarball], { cwd: installDirectory });
+  await runNpm(["install", "--no-audit", "--no-fund", tarball], { cwd: installDirectory });
   const installedBin = path.join(installDirectory, "node_modules", "knowledge-rail", "dist", "index.js");
   const firstLine = (await fs.readFile(installedBin, "utf8")).split(/\r?\n/, 1)[0];
   if (firstLine !== "#!/usr/bin/env node") throw new Error("Installed CLI lost its portable Node shebang.");
