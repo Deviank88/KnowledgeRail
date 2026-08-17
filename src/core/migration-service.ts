@@ -33,10 +33,24 @@ export const CURRENT_WIKI_FORMAT = 4;
 
 export type WikiFormatVersion = 1 | 2 | 3 | 4;
 
+export type MigrationSourceNamespace = "knowledge_rail" | "llm_wiki" | "schema";
+
+export interface LegacyManifestAssessment {
+  status: "absent" | "invalid" | "current" | "stale";
+  entryCount: number;
+  exactMatches: number;
+  metadataOnlyChanges: number;
+  lineEndingEquivalentMatches: number;
+  changedEntries: number;
+  missingEntries: number;
+  addedEntries: number;
+  error?: string;
+}
+
 export interface WikiState {
   formatVersion: 4;
   artifactVersions: {
-    manifest: 1;
+    manifest: 2;
     graph: 2;
     retrieval: 1;
     semantic: 1;
@@ -49,6 +63,7 @@ export interface WikiState {
 
 export interface MigrationPlan {
   detectedVersion: WikiFormatVersion | "unknown";
+  sourceNamespace: MigrationSourceNamespace;
   targetVersion: 4;
   steps: string[];
   warnings: string[];
@@ -57,6 +72,7 @@ export interface MigrationPlan {
   canonicalFileCount: number;
   pageCount: number;
   sourceCount: number;
+  legacyManifest?: LegacyManifestAssessment;
 }
 
 export interface CanonicalFileSnapshot {
@@ -126,6 +142,7 @@ interface MigrationJournal {
   failedAt?: string;
   rolledBackAt?: string;
   sourceVersion: WikiFormatVersion;
+  sourceNamespace: MigrationSourceNamespace;
   targetVersion: 4;
   status:
     | "backed_up"
@@ -141,6 +158,8 @@ interface MigrationJournal {
   regressionBefore?: MigrationRegressionReport;
   regressionAfter?: MigrationRegressionReport;
   coverageReport?: string;
+  legacyManifest?: LegacyManifestAssessment;
+  importedLegacyCoverageFiles?: number;
   error?: string;
 }
 
@@ -162,6 +181,8 @@ const TEXT_SOURCE_EXTENSIONS = new Set([
   ".rst", ".yaml", ".yml", ".log",
 ]);
 const MAX_LEGACY_SOURCE_BYTES = 5 * 1024 * 1024;
+const CURRENT_META_DIRECTORY = ".knowledge-rail";
+const LEGACY_META_DIRECTORY = ".llm-wiki";
 
 const STATIC_DERIVED_PATHS = [
   ".knowledge-rail/state.json",
@@ -183,6 +204,18 @@ function sha256(value: string | Buffer): string {
 
 function stateFile(wikiRoot: string): string {
   return nodePath.join(wikiMetaDir(wikiRoot), "state.json");
+}
+
+function legacyMetaDir(wikiRoot: string): string {
+  return nodePath.join(wikiRoot, LEGACY_META_DIRECTORY);
+}
+
+function legacyStateFile(wikiRoot: string): string {
+  return nodePath.join(legacyMetaDir(wikiRoot), "state.json");
+}
+
+function legacyManifestFile(wikiRoot: string): string {
+  return nodePath.join(legacyMetaDir(wikiRoot), "manifest.json");
 }
 
 function migrationRoot(wikiRoot: string): string {
@@ -269,7 +302,9 @@ async function walkFiles(
 async function canonicalFiles(wikiRoot: string): Promise<string[]> {
   return walkFiles(wikiRoot, {
     include: (relative) => relative.toLowerCase().endsWith(".md"),
-    descend: (relative) => relative !== ".knowledge-rail" && !relative.startsWith(".knowledge-rail/"),
+    descend: (relative) =>
+      relative !== CURRENT_META_DIRECTORY && !relative.startsWith(`${CURRENT_META_DIRECTORY}/`) &&
+      relative !== LEGACY_META_DIRECTORY && !relative.startsWith(`${LEGACY_META_DIRECTORY}/`),
   });
 }
 
@@ -312,9 +347,13 @@ function sourceRefs(records: readonly WikiPageRecord[]): Map<string, string[]> {
     .map(([source, pages]) => [source, [...pages].sort()]));
 }
 
-async function incompleteMigrationRuns(wikiRoot: string): Promise<string[]> {
+async function incompleteMigrationRuns(
+  wikiRoot: string,
+  directoryName = CURRENT_META_DIRECTORY
+): Promise<string[]> {
+  const runsRoot = nodePath.join(wikiRoot, directoryName, "migrations");
   try {
-    const stat = await fs.lstat(migrationRoot(wikiRoot));
+    const stat = await fs.lstat(runsRoot);
     if (stat.isSymbolicLink()) throw new Error("Migration journal directory must not be a symbolic link.");
   } catch (error: unknown) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return [];
@@ -322,7 +361,7 @@ async function incompleteMigrationRuns(wikiRoot: string): Promise<string[]> {
   }
   let entries: Dirent[];
   try {
-    entries = await fs.readdir(migrationRoot(wikiRoot), { withFileTypes: true });
+    entries = await fs.readdir(runsRoot, { withFileTypes: true });
   } catch (error: unknown) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return [];
     throw error;
@@ -330,7 +369,7 @@ async function incompleteMigrationRuns(wikiRoot: string): Promise<string[]> {
   const incomplete: string[] = [];
   for (const entry of entries) {
     if (!entry.isDirectory() || !validRunId(entry.name)) continue;
-    const raw = await readFileSafe(nodePath.join(migrationRoot(wikiRoot), entry.name, "journal.json"));
+    const raw = await readFileSafe(nodePath.join(runsRoot, entry.name, "journal.json"));
     if (!raw) continue;
     try {
       const journal = JSON.parse(raw) as { status?: string };
@@ -390,7 +429,7 @@ function currentState(migratedFrom: WikiFormatVersion, migratedAt: string): Wiki
   return {
     formatVersion: 4,
     artifactVersions: {
-      manifest: 1,
+      manifest: 2,
       graph: 2,
       retrieval: 1,
       semantic: 1,
@@ -400,6 +439,216 @@ function currentState(migratedFrom: WikiFormatVersion, migratedAt: string): Wiki
     migratedAt,
     migratedFrom,
   };
+}
+
+interface MigrationSourceInspection {
+  detectedVersion: WikiFormatVersion | "unknown";
+  sourceNamespace: MigrationSourceNamespace;
+  currentMetaFiles: string[];
+  legacyMetaFiles: string[];
+  warnings: string[];
+  blockers: string[];
+}
+
+interface LegacyManifestEntryShape {
+  path: string;
+  size: number;
+  mtimeMs: number;
+  sha256: string;
+  logicalType: "wiki_page" | "control" | "doc";
+}
+
+function parseWikiFormatVersion(raw: string): WikiFormatVersion | "unknown" {
+  try {
+    const state = JSON.parse(raw) as { formatVersion?: unknown };
+    return [1, 2, 3, 4].includes(state.formatVersion as number)
+      ? state.formatVersion as WikiFormatVersion
+      : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+async function inferredSchemaVersion(wikiRoot: string): Promise<WikiFormatVersion | "unknown"> {
+  const schema = await readFileSafe(nodePath.join(wikiRoot, "SCHEMA.md"));
+  if (!schema) return "unknown";
+  if (/Wiki format:\s*3\b/i.test(schema)) return 3;
+  return /index\.md viene rigenerato automaticamente|prepare_request_ingestion|\bv2\b/i.test(schema)
+    ? 2
+    : 1;
+}
+
+async function metadataFiles(wikiRoot: string, directoryName: string): Promise<string[]> {
+  const meta = nodePath.join(wikiRoot, directoryName);
+  try {
+    const stat = await fs.lstat(meta);
+    if (stat.isSymbolicLink()) throw new Error(`${directoryName} metadata directory must not be a symbolic link.`);
+    if (!stat.isDirectory()) throw new Error(`${directoryName} metadata path must be a directory.`);
+  } catch (error: unknown) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return [];
+    throw error;
+  }
+  const [rootReal, metaReal] = await Promise.all([fs.realpath(wikiRoot), fs.realpath(meta)]);
+  const relative = nodePath.relative(rootReal, metaReal).replace(/\\/g, "/");
+  if (relative !== directoryName || nodePath.isAbsolute(relative)) {
+    throw new Error(`${directoryName} metadata directory resolves outside the wiki root.`);
+  }
+  return walkFiles(wikiRoot, {
+    include: (candidate) => candidate.startsWith(`${directoryName}/`),
+    descend: (candidate) => candidate === directoryName || candidate.startsWith(`${directoryName}/`),
+  });
+}
+
+function persistentCurrentMetadata(files: readonly string[]): string[] {
+  return files.filter((file) =>
+    !file.startsWith(`${CURRENT_META_DIRECTORY}/migrations/`) &&
+    !file.startsWith(`${CURRENT_META_DIRECTORY}/locks/`)
+  );
+}
+
+async function inspectMigrationSource(wikiRoot: string): Promise<MigrationSourceInspection> {
+  const [currentMetaFiles, legacyMetaFiles] = await Promise.all([
+    metadataFiles(wikiRoot, CURRENT_META_DIRECTORY),
+    metadataFiles(wikiRoot, LEGACY_META_DIRECTORY),
+  ]);
+  const [currentRaw, legacyRaw] = await Promise.all([
+    readFileSafe(stateFile(wikiRoot)),
+    readFileSafe(legacyStateFile(wikiRoot)),
+  ]);
+  const warnings: string[] = [];
+  const blockers: string[] = [];
+  const currentPersistent = persistentCurrentMetadata(currentMetaFiles);
+
+  if (currentRaw !== null) {
+    if (legacyMetaFiles.length > 0) {
+      warnings.push("Legacy .llm-wiki metadata coexists with active .knowledge-rail state and remains untouched.");
+    }
+    return {
+      detectedVersion: parseWikiFormatVersion(currentRaw),
+      sourceNamespace: "knowledge_rail",
+      currentMetaFiles,
+      legacyMetaFiles,
+      warnings,
+      blockers,
+    };
+  }
+
+  if (legacyRaw !== null || legacyMetaFiles.length > 0) {
+    if (currentPersistent.length > 0) {
+      blockers.push(
+        `Legacy .llm-wiki metadata conflicts with partial .knowledge-rail state: ${currentPersistent.join(", ")}.`
+      );
+    }
+    return {
+      detectedVersion: legacyRaw === null
+        ? await inferredSchemaVersion(wikiRoot)
+        : parseWikiFormatVersion(legacyRaw),
+      sourceNamespace: "llm_wiki",
+      currentMetaFiles,
+      legacyMetaFiles,
+      warnings,
+      blockers,
+    };
+  }
+
+  return {
+    detectedVersion: await inferredSchemaVersion(wikiRoot),
+    sourceNamespace: currentPersistent.length > 0 ? "knowledge_rail" : "schema",
+    currentMetaFiles,
+    legacyMetaFiles,
+    warnings,
+    blockers,
+  };
+}
+
+function validLegacyManifestEntry(value: unknown): value is LegacyManifestEntryShape {
+  if (!value || typeof value !== "object") return false;
+  const entry = value as Partial<LegacyManifestEntryShape>;
+  if (
+    typeof entry.path !== "string" || entry.path !== entry.path.replace(/\\/g, "/") ||
+    nodePath.posix.isAbsolute(entry.path) || !entry.path.toLowerCase().endsWith(".md") ||
+    entry.path.split("/").some((part) => !part || part === "." || part === "..") ||
+    entry.path.startsWith(`${CURRENT_META_DIRECTORY}/`) || entry.path.startsWith(`${LEGACY_META_DIRECTORY}/`) ||
+    !Number.isSafeInteger(entry.size) || entry.size! < 0 ||
+    typeof entry.mtimeMs !== "number" || !Number.isFinite(entry.mtimeMs) || entry.mtimeMs < 0 ||
+    typeof entry.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(entry.sha256) ||
+    !["wiki_page", "control", "doc"].includes(entry.logicalType ?? "")
+  ) return false;
+  return true;
+}
+
+function emptyLegacyManifestAssessment(
+  status: LegacyManifestAssessment["status"],
+  error?: string
+): LegacyManifestAssessment {
+  return {
+    status,
+    entryCount: 0,
+    exactMatches: 0,
+    metadataOnlyChanges: 0,
+    lineEndingEquivalentMatches: 0,
+    changedEntries: 0,
+    missingEntries: 0,
+    addedEntries: 0,
+    ...(error ? { error } : {}),
+  };
+}
+
+async function assessLegacyManifest(
+  wikiRoot: string,
+  canonical: CanonicalSnapshot
+): Promise<LegacyManifestAssessment> {
+  const raw = await readFileSafe(legacyManifestFile(wikiRoot));
+  if (raw === null) return emptyLegacyManifestAssessment("absent");
+  let parsed: { version?: unknown; generatedAt?: unknown; entries?: unknown };
+  try {
+    parsed = JSON.parse(raw) as typeof parsed;
+  } catch (error: unknown) {
+    return emptyLegacyManifestAssessment("invalid", error instanceof Error ? error.message : String(error));
+  }
+  if (
+    parsed.version !== 1 || typeof parsed.generatedAt !== "string" ||
+    Number.isNaN(Date.parse(parsed.generatedAt)) || !Array.isArray(parsed.entries) ||
+    !parsed.entries.every(validLegacyManifestEntry)
+  ) {
+    return emptyLegacyManifestAssessment("invalid", "Unsupported or invalid legacy manifest schema.");
+  }
+  const entries = parsed.entries as LegacyManifestEntryShape[];
+  if (new Set(entries.map((entry) => entry.path)).size !== entries.length) {
+    return emptyLegacyManifestAssessment("invalid", "Legacy manifest contains duplicate paths.");
+  }
+
+  const currentByPath = new Map(canonical.files.map((file) => [file.path, file] as const));
+  const result = emptyLegacyManifestAssessment("current");
+  result.entryCount = entries.length;
+  for (const entry of entries) {
+    const current = currentByPath.get(entry.path);
+    if (!current) {
+      result.missingEntries++;
+      continue;
+    }
+    const stat = await fs.stat(nodePath.join(wikiRoot, entry.path));
+    if (current.size === entry.size && current.sha256 === entry.sha256) {
+      if (stat.mtimeMs === entry.mtimeMs) result.exactMatches++;
+      else result.metadataOnlyChanges++;
+      continue;
+    }
+    const text = await fs.readFile(nodePath.join(wikiRoot, entry.path), "utf8");
+    const asLf = Buffer.from(text.replace(/\r\n/g, "\n"), "utf8");
+    const asCrlf = Buffer.from(text.replace(/\r?\n/g, "\r\n"), "utf8");
+    if (sha256(asLf) === entry.sha256 || sha256(asCrlf) === entry.sha256) {
+      result.lineEndingEquivalentMatches++;
+    } else {
+      result.changedEntries++;
+    }
+  }
+  const legacyPaths = new Set(entries.map((entry) => entry.path));
+  result.addedEntries = canonical.files.filter((file) => !legacyPaths.has(file.path)).length;
+  if (
+    result.metadataOnlyChanges > 0 || result.lineEndingEquivalentMatches > 0 ||
+    result.changedEntries > 0 || result.missingEntries > 0 || result.addedEntries > 0
+  ) result.status = "stale";
+  return result;
 }
 
 export async function initializeWikiState(wikiRoot: string): Promise<void> {
@@ -412,68 +661,98 @@ export async function initializeWikiState(wikiRoot: string): Promise<void> {
 export async function detectWikiVersion(
   wikiRoot: string
 ): Promise<WikiFormatVersion | "unknown"> {
-  const stateRaw = await readFileSafe(stateFile(wikiRoot));
-  if (stateRaw) {
-    try {
-      const state = JSON.parse(stateRaw) as { formatVersion?: unknown };
-      return [1, 2, 3, 4].includes(state.formatVersion as number)
-        ? state.formatVersion as WikiFormatVersion
-        : "unknown";
-    } catch {
-      return "unknown";
-    }
-  }
-  const schema = await readFileSafe(nodePath.join(wikiRoot, "SCHEMA.md"));
-  if (!schema) return "unknown";
-  if (/Wiki format:\s*3\b/i.test(schema)) return 3;
-  return /index\.md viene rigenerato automaticamente|prepare_request_ingestion|\bv2\b/i.test(schema)
-    ? 2
-    : 1;
+  return (await inspectMigrationSource(wikiRoot)).detectedVersion;
 }
 
 export async function planWikiMigration(
   wikiRoot: string,
   targetVersion = "4"
 ): Promise<MigrationPlan> {
-  const detectedVersion = await detectWikiVersion(wikiRoot);
+  let inspection: MigrationSourceInspection = {
+    detectedVersion: "unknown",
+    sourceNamespace: "schema",
+    currentMetaFiles: [],
+    legacyMetaFiles: [],
+    warnings: [],
+    blockers: [],
+  };
   const blockers: string[] = [];
+  try {
+    inspection = await inspectMigrationSource(wikiRoot);
+    blockers.push(...inspection.blockers);
+  } catch (error: unknown) {
+    blockers.push(error instanceof Error ? error.message : String(error));
+  }
+  const detectedVersion = inspection.detectedVersion;
   if (!["4", "4.0", "current"].includes(targetVersion)) {
     blockers.push(`Unsupported target version: ${targetVersion}.`);
   }
   if (detectedVersion === "unknown") blockers.push("Unrecognized wiki version or invalid state.json.");
   let snapshot: CanonicalSnapshot = { digest: sha256(""), files: [] };
   let records: WikiPageRecord[] = [];
+  let legacyManifest: LegacyManifestAssessment | undefined;
   try {
     snapshot = await canonicalSnapshot(wikiRoot);
     records = await pageRecords(wikiRoot);
+    if (inspection.sourceNamespace === "llm_wiki") {
+      legacyManifest = await assessLegacyManifest(wikiRoot, snapshot);
+    }
   } catch (error: unknown) {
     blockers.push(error instanceof Error ? error.message : String(error));
   }
   try {
-    const incomplete = await incompleteMigrationRuns(wikiRoot);
-    if (incomplete.length > 0) {
-      blockers.push(`Incomplete migrations require rollback or intervention: ${incomplete.join(", ")}.`);
+    const currentIncomplete = await incompleteMigrationRuns(wikiRoot);
+    const legacyIncomplete = inspection.sourceNamespace === "llm_wiki"
+      ? await incompleteMigrationRuns(wikiRoot, LEGACY_META_DIRECTORY)
+      : [];
+    if (currentIncomplete.length > 0) {
+      blockers.push(`Incomplete KnowledgeRail migrations require rollback or intervention: ${currentIncomplete.join(", ")}.`);
+    }
+    if (legacyIncomplete.length > 0) {
+      blockers.push(`Incomplete .llm-wiki migrations require legacy recovery: ${legacyIncomplete.join(", ")}.`);
     }
   } catch (error: unknown) {
     blockers.push(error instanceof Error ? error.message : String(error));
   }
   const steps = [
-    "read-only preflight and format detection",
-    "SHA-256 snapshot and complete backup of canonical Markdown",
+    "read-only preflight, namespace detection, and legacy-manifest assessment",
+    "SHA-256 snapshot and complete backup of canonical Markdown and metadata",
+    "legacy source-coverage import when verified state exists",
     "conservative coverage backfill with legacy_unverified state",
     "derived-index invalidation or rebuild",
     "retrieval, document-context, and traceability regression checks",
     "canonical-hash verification and atomic state-format 4 commit",
   ];
-  const warnings: string[] = [];
+  const warnings: string[] = [...inspection.warnings];
   if (detectedVersion === 1 || detectedVersion === 2) {
     warnings.push(`Format v${detectedVersion} was inferred conservatively from SCHEMA.md.`);
+  }
+  if (inspection.sourceNamespace === "llm_wiki") {
+    warnings.push(
+      "Legacy .llm-wiki derived indexes are not copied; KnowledgeRail rebuilds them from current canonical Markdown."
+    );
+    warnings.push(
+      "Legacy .llm-wiki metadata remains untouched after migration and is retained in the migration backup."
+    );
+    if (legacyManifest?.status === "absent") {
+      warnings.push("Legacy manifest is absent; the KnowledgeRail manifest will be rebuilt from current Markdown.");
+    } else if (legacyManifest?.status === "invalid") {
+      warnings.push(`Legacy manifest is invalid and will be ignored: ${legacyManifest.error ?? "unknown error"}`);
+    } else if (legacyManifest?.status === "stale") {
+      warnings.push(
+        "Legacy manifest is stale " +
+        `(exact=${legacyManifest.exactMatches}, metadata=${legacyManifest.metadataOnlyChanges}, ` +
+        `line-endings=${legacyManifest.lineEndingEquivalentMatches}, changed=${legacyManifest.changedEntries}, ` +
+        `missing=${legacyManifest.missingEntries}, added=${legacyManifest.addedEntries}); it will be rebuilt.`
+      );
+    }
   }
   if (sourceRefs(records).size > 0) {
     warnings.push("Legacy sources without a verifiable ledger remain open as legacy_unverified.");
   }
   return {
     detectedVersion,
+    sourceNamespace: inspection.sourceNamespace,
     targetVersion: 4,
     steps,
     warnings,
@@ -482,6 +761,7 @@ export async function planWikiMigration(
     canonicalFileCount: snapshot.files.length,
     pageCount: records.length,
     sourceCount: sourceRefs(records).size,
+    ...(legacyManifest ? { legacyManifest } : {}),
   };
 }
 
@@ -578,9 +858,12 @@ async function backupMigrationInputs(
   canonical: CanonicalSnapshot
 ): Promise<CanonicalFileSnapshot[]> {
   const metaFiles = await walkFiles(wikiRoot, {
-    include: (relative) => relative.startsWith(".knowledge-rail/"),
+    include: (relative) =>
+      relative.startsWith(`${CURRENT_META_DIRECTORY}/`) ||
+      relative.startsWith(`${LEGACY_META_DIRECTORY}/`),
     descend: (relative) =>
-      relative !== ".knowledge-rail/migrations" && !relative.startsWith(".knowledge-rail/migrations/"),
+      relative !== `${CURRENT_META_DIRECTORY}/migrations` &&
+      !relative.startsWith(`${CURRENT_META_DIRECTORY}/migrations/`),
   });
   const paths = [...new Set([...canonical.files.map((file) => file.path), ...metaFiles])].sort();
   const snapshots: CanonicalFileSnapshot[] = [];
@@ -645,6 +928,54 @@ async function resolveLegacySource(projectRoot: string, sourceRef: string): Prom
   } catch {
     return null;
   }
+}
+
+async function importLegacySourceCoverage(params: {
+  wikiRoot: string;
+  touchedFiles: Set<string>;
+}): Promise<number> {
+  const prefix = `${LEGACY_META_DIRECTORY}/source-coverage/`;
+  const legacyLedgers = (await metadataFiles(params.wikiRoot, LEGACY_META_DIRECTORY))
+    .filter((relative) => relative.startsWith(prefix));
+  let imported = 0;
+  for (const relative of legacyLedgers) {
+    if (!/^\.llm-wiki\/source-coverage\/[a-f0-9]{64}\.json$/.test(relative)) {
+      throw new Error(`Invalid legacy source coverage path: ${relative}.`);
+    }
+    const source = nodePath.join(params.wikiRoot, relative);
+    const bytes = await fs.readFile(source);
+    let sourceUri: string;
+    try {
+      const parsed = JSON.parse(bytes.toString("utf8")) as { sourceUri?: unknown };
+      if (typeof parsed.sourceUri !== "string" || !parsed.sourceUri.trim()) {
+        throw new Error("sourceUri is missing");
+      }
+      sourceUri = parsed.sourceUri;
+    } catch (error: unknown) {
+      throw new Error(
+        `Invalid legacy source coverage ledger ${relative}: ${error instanceof Error ? error.message : String(error)}.`
+      );
+    }
+    const destination = sourceCoverageLedgerFile(params.wikiRoot, sourceUri);
+    if (nodePath.basename(destination) !== nodePath.basename(relative)) {
+      throw new Error(`Legacy source coverage filename does not match sourceUri: ${relative}.`);
+    }
+    const destinationRelative = nodePath.relative(params.wikiRoot, destination).replace(/\\/g, "/");
+    const existing = await fs.readFile(destination).catch((error: unknown) => {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (existing !== null && !existing.equals(bytes)) {
+      throw new Error(`Legacy source coverage conflicts with existing KnowledgeRail state: ${sourceUri}.`);
+    }
+    params.touchedFiles.add(destinationRelative);
+    if (existing === null) await atomicWriteBuffer(destination, bytes);
+    if (!await readSourceCoverageLedger(params.wikiRoot, sourceUri)) {
+      throw new Error(`Legacy source coverage ledger has an unsupported schema: ${sourceUri}.`);
+    }
+    imported++;
+  }
+  return imported;
 }
 
 async function legacyCoverageBackfill(params: {
@@ -840,11 +1171,13 @@ export async function applyWikiMigration(
       runId,
       startedAt,
       sourceVersion,
+      sourceNamespace: plan.sourceNamespace,
       targetVersion: 4,
       status: "backed_up",
       backupFiles,
       touchedFiles: [...touchedFiles].sort(),
       canonicalBefore,
+      ...(plan.legacyManifest ? { legacyManifest: plan.legacyManifest } : {}),
     };
     await writeJournal(journalFile, journal);
 
@@ -852,6 +1185,12 @@ export async function applyWikiMigration(
       const before = await regressionReport(wikiRoot);
       journal.regressionBefore = before;
       const records = await pageRecords(wikiRoot);
+      if (plan.sourceNamespace === "llm_wiki") {
+        journal.importedLegacyCoverageFiles = await importLegacySourceCoverage({
+          wikiRoot,
+          touchedFiles,
+        });
+      }
       const coverage = await legacyCoverageBackfill({
         wikiRoot,
         projectRoot,
@@ -956,10 +1295,19 @@ export function formatMigrationPlan(plan: MigrationPlan): string {
     "# Wiki migration",
     "",
     `Detected version: ${plan.detectedVersion}`,
+    `Source namespace: ${plan.sourceNamespace}`,
     `Target version: ${plan.targetVersion}`,
     `Canonical Markdown files: ${plan.canonicalFileCount}`,
     `Knowledge pages: ${plan.pageCount}`,
     `Referenced sources: ${plan.sourceCount}`,
+    ...(plan.legacyManifest ? [
+      `Legacy manifest: ${plan.legacyManifest.status} ` +
+      `(entries=${plan.legacyManifest.entryCount}, exact=${plan.legacyManifest.exactMatches}, ` +
+      `metadata=${plan.legacyManifest.metadataOnlyChanges}, ` +
+      `line-endings=${plan.legacyManifest.lineEndingEquivalentMatches}, ` +
+      `changed=${plan.legacyManifest.changedEntries}, missing=${plan.legacyManifest.missingEntries}, ` +
+      `added=${plan.legacyManifest.addedEntries})`,
+    ] : []),
     "",
     "## Step",
     ...plan.steps.map((step) => `- ${step}`),

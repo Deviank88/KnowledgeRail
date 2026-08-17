@@ -627,7 +627,7 @@ export function registerWikiTools(
             );
             });
 
-  server.registerTool(toolName("migrate", era), { description: "Plan, apply, or roll back the conservative wiki v1/v2/v3 to v4 migration; plan is the default.", inputSchema: z.object({
+  server.registerTool(toolName("migrate", era), { description: "Plan, apply, or roll back the conservative wiki v1/v2/v3 and pre-rebrand .llm-wiki namespace migration to v4; plan is the default.", inputSchema: z.object({
               action: z.enum(["plan", "apply", "rollback"]).optional(),
               target_version: z.string().optional().default("4"),
               dry_run: z.boolean().optional(),

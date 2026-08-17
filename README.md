@@ -8,7 +8,7 @@ KnowledgeRail is a local-first MCP server that turns project documentation and s
 
 It is designed for agents that need to understand, change, review, or document a codebase without loading the whole repository into the model context. Retrieval is bounded, provenance is preserved, missing evidence is reported explicitly, and difficult queries widen progressively instead of silently losing relevant information.
 
-> **Current status:** stable release `2.0.2`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
+> **Current status:** stable release `2.0.3`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
 
 ## What it provides
 
@@ -19,7 +19,7 @@ It is designed for agents that need to understand, change, review, or document a
 - A deterministic TypeScript/JavaScript code index with symbol and reference lookup.
 - Incremental graph, retrieval, and semantic indexes stored beside the project wiki.
 - Contract-driven Markdown deliverables with terminal review, content hashes, and optional caller-authored diagrams.
-- Conservative migration of existing v1/v2/v3 wikis.
+- Conservative migration of existing v1/v2/v3 wikis and pre-rebrand `.llm-wiki` metadata.
 - Automatic per-process workspace binding for IDEs and terminal agents.
 - A local HTTP gateway that keeps concurrent clients and projects isolated per request.
 - A desktop-chat workspace catalog with opaque, expiring per-chat bindings.
@@ -39,7 +39,7 @@ KnowledgeRail ships no browser or document renderer. Mermaid source remains ordi
 Run this from any directory inside the project you opened in VS Code, Cursor, a terminal, or another context-aware coding client:
 
 ```bash
-npx -y knowledge-rail@2.0.2
+npx -y knowledge-rail@2.0.3
 ```
 
 No project path is needed in the persistent MCP configuration. KnowledgeRail discovers the opened project independently for each process, so project X and project Y can be used at the same time by different agent sessions.
@@ -73,7 +73,7 @@ Use the standard `stdio` server shape once. Do not hard-code one repository:
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.0.2"]
+      "args": ["-y", "knowledge-rail@2.0.3"]
     }
   }
 }
@@ -105,7 +105,7 @@ A desktop chat does not open a filesystem folder, so it cannot safely infer a pr
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.0.2", "desktop"]
+      "args": ["-y", "knowledge-rail@2.0.3", "desktop"]
     }
   }
 }
@@ -118,10 +118,10 @@ In a new chat, ask KnowledgeRail to list workspaces, choose one entry, and confi
 Projects opened successfully by an IDE/terminal are added to the local catalog automatically without changing their clean eight-tool workflow. Operators can also manage catalog metadata locally:
 
 ```bash
-npx -y knowledge-rail@2.0.2 workspace list
-npx -y knowledge-rail@2.0.2 workspace register
-npx -y knowledge-rail@2.0.2 workspace register /absolute/project/path
-npx -y knowledge-rail@2.0.2 workspace unregister ws_example
+npx -y knowledge-rail@2.0.3 workspace list
+npx -y knowledge-rail@2.0.3 workspace register
+npx -y knowledge-rail@2.0.3 workspace register /absolute/project/path
+npx -y knowledge-rail@2.0.3 workspace unregister ws_example
 ```
 
 Registration never copies, uploads, scans the disk, or deletes project files. `workspace register` without a path discovers only upward from cwd.
@@ -131,7 +131,7 @@ Registration never copies, uploads, scans the disk, or deletes project files. `w
 Start one gateway for many concurrent local clients and workspaces:
 
 ```bash
-npx -y knowledge-rail@2.0.2 --transport http
+npx -y knowledge-rail@2.0.3 --transport http
 ```
 
 The default endpoint is `http://127.0.0.1:3333/mcp`; liveness only is available at `/healthz`. MCP requests require the random credential stored in the OS-protected per-user KnowledgeRail state directory. The desktop adapter reads it automatically, so it never belongs in project configuration or a repository.
@@ -254,6 +254,8 @@ project/
 ```
 
 Markdown pages are canonical knowledge. Files below `wiki/.knowledge-rail/` are derived or operational state and can be rebuilt where the corresponding workflow supports it. Source documents remain under `docs/`; normalization never overwrites the original.
+
+`knowledge_admin action="migrate"` also recognizes the pre-rebrand `wiki/.llm-wiki/` namespace. It backs up both namespaces, assesses the legacy manifest, imports valid source-coverage ledgers, and rebuilds manifests and indexes from the current checkout instead of copying stale sizes, mtimes, or hashes. The internal manifest v2 is deterministic across Windows, macOS, and Linux: paths use `/` and Unicode NFC, Markdown line endings are normalized to LF before `size` and SHA-256 are computed, entries have a stable order, and the serialized file contains neither timestamps nor filesystem mtimes. Trees that differ only in platform path representation, CRLF/LF line endings, or timestamps therefore produce byte-identical manifest files and the same manifest hash; case-insensitive path collisions are rejected as non-portable. Existing manifest v1 files remain readable and are upgraded when rebuilt or invalidated. The old namespace remains untouched after a successful migration and is retained in the migration backup; ambiguous partial state in both namespaces is blocked for explicit operator review.
 
 These directories may contain private project information. Decide deliberately whether the consuming project should commit them.
 

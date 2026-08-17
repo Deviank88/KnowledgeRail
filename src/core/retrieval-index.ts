@@ -99,7 +99,8 @@ function stateFor(wikiRoot: string): IndexState {
       // In the MCP server the transport already keeps the event loop alive, so the
       // watcher continues to deliver invalidation events for the server lifetime.
       const watcher = watch(root, { recursive: true, persistent: false }, (_eventType, filename) => {
-        if (filename?.toString().replace(/\\/g, "/").startsWith(".knowledge-rail/")) return;
+        const normalized = filename?.toString().replace(/\\/g, "/") ?? "";
+        if (normalized.startsWith(".knowledge-rail/") || normalized.startsWith(".llm-wiki/")) return;
         state!.dirty = true;
         state!.lastScanMs = 0;
       });

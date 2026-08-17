@@ -37,6 +37,7 @@ const CODE_IGNORES = [
   "dist/**",
   "coverage/**",
   "wiki/.knowledge-rail/**",
+  "wiki/.llm-wiki/**",
 ];
 
 function sha256(value: string | Buffer): string {
