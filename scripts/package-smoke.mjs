@@ -152,6 +152,14 @@ try {
   if ((await stdioClient.listTools()).tools.length !== 8) throw new Error("Installed stdio catalog is not the bound eight-tool profile.");
   await stdioClient.close();
 
+  const registration = await run(
+    process.execPath,
+    [installedBin, "workspace", "register", projectDirectory],
+    { cwd: projectDirectory, env: childEnvironment }
+  );
+  const workspaceId = registration.stdout.match(/\b(ws_[A-Za-z0-9_-]{8,})\b/)?.[1];
+  if (!workspaceId) throw new Error("Installed workspace registration did not return a workspace ID.");
+
   const port = await availablePort();
   gatewayProcess = spawn(process.execPath, [installedBin, "--transport", "http", "--port", String(port)], {
     cwd: projectDirectory,
@@ -176,7 +184,7 @@ try {
 
   const desktopClient = new Client(
     { name: "package-desktop-smoke", version: "1.0.0" },
-    { versionNegotiation: { mode: { pin: "2026-07-28" } } }
+    { versionNegotiation: { mode: "legacy" } }
   );
   await desktopClient.connect(new StdioClientTransport({
     command: process.execPath,
@@ -185,7 +193,33 @@ try {
     env: childEnvironment,
     stderr: "pipe",
   }));
-  if ((await desktopClient.listTools()).tools.length !== 9) throw new Error("Installed desktop proxy did not expose the catalog profile.");
+  const desktopTools = (await desktopClient.listTools()).tools;
+  if (desktopTools.length !== 9) throw new Error("Installed desktop proxy did not expose the catalog profile.");
+  if (!desktopTools.find((tool) => tool.name === "knowledge_workspace")?.outputSchema) {
+    throw new Error("Installed desktop proxy did not advertise the workspace output contract.");
+  }
+  const listed = await desktopClient.callTool({
+    name: "knowledge_workspace",
+    arguments: { action: "list" },
+  });
+  if (!Array.isArray(listed.structuredContent?.workspaces) || listed.structuredContent.workspaces.length !== 1) {
+    throw new Error("Installed desktop proxy did not return the registered workspace.");
+  }
+  const selected = await desktopClient.callTool({
+    name: "knowledge_workspace",
+    arguments: { action: "select", workspace_id: workspaceId, scope: "write", confirmed: true },
+  });
+  const selectionText = selected.content.find((item) => item.type === "text")?.text ?? "";
+  const workspaceBinding = selectionText.match(/^workspace_binding: (krb[0-9]+_[A-Za-z0-9_-]+)$/m)?.[1];
+  if (!workspaceBinding || workspaceBinding !== selected.structuredContent?.binding) {
+    throw new Error("Installed desktop proxy did not expose the binding through portable text content.");
+  }
+  const initialized = await desktopClient.callTool({
+    name: "knowledge_admin",
+    arguments: { action: "init", workspace_binding: workspaceBinding },
+  });
+  if (initialized.isError) throw new Error("Installed desktop proxy rejected its text-carried workspace binding.");
+  await fs.access(path.join(projectDirectory, "wiki", "SCHEMA.md"));
   await desktopClient.close();
 
   gatewayProcess.kill("SIGTERM");

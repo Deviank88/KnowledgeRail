@@ -45,7 +45,8 @@ function memoryPair(): [MemoryTransport, MemoryTransport] {
   return [left, right];
 }
 
-test("one desktop adapter carries two independent chat bindings through the HTTP center", async () => {
+for (const desktopProtocolVersion of [MCP_PROTOCOL_VERSION, "2025-11-25"] as const) {
+test(`desktop adapter exposes portable per-chat bindings over ${desktopProtocolVersion}`, async () => {
   const state = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-desktop-state-"));
   const rootA = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-desktop-a-"));
   const rootB = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-desktop-b-"));
@@ -72,11 +73,20 @@ test("one desktop adapter carries two independent chat bindings through the HTTP
   );
   const desktopClient = new Client(
     { name: "claude-desktop-simulation", version: "1.0.0" },
-    { versionNegotiation: { mode: { pin: MCP_PROTOCOL_VERSION } } }
+    {
+      versionNegotiation: {
+        mode:
+          desktopProtocolVersion === MCP_PROTOCOL_VERSION
+            ? { pin: MCP_PROTOCOL_VERSION }
+            : "legacy",
+      },
+    }
   );
   try {
     await desktopClient.connect(localWire);
-    assert.equal((await desktopClient.listTools()).tools.length, 9);
+    const tools = (await desktopClient.listTools()).tools;
+    assert.equal(tools.length, 9);
+    assert.ok(tools.find((tool) => tool.name === "knowledge_workspace")?.outputSchema);
     const templates = (await desktopClient.listResourceTemplates()).resourceTemplates;
     assert.equal(templates.length, 4);
     assert.equal(templates.every((item) => item.uriTemplate.includes("workspace_binding")), true);
@@ -86,7 +96,12 @@ test("one desktop adapter carries two independent chat bindings through the HTTP
         name: "knowledge_workspace",
         arguments: { action: "select", workspace_id: workspaceId, scope: "write", confirmed: true },
       });
-      return (selected.structuredContent as { binding: string }).binding;
+      const structuredBinding = (selected.structuredContent as { binding: string }).binding;
+      const textBlock = selected.content.find((item) => item.type === "text");
+      assert.ok(textBlock && textBlock.type === "text");
+      const textBinding = textBlock.text.match(/^workspace_binding: (krb[0-9]+_[A-Za-z0-9_-]+)$/m)?.[1];
+      assert.equal(textBinding, structuredBinding);
+      return textBinding!;
     };
     const [bindingA, bindingB] = await Promise.all([choose(workspaceA.id), choose(workspaceB.id)]);
     await Promise.all([
@@ -102,5 +117,11 @@ test("one desktop adapter carries two independent chat bindings through the HTTP
     await proxy.close();
     await remoteClient.close();
     await gateway.close();
+    await Promise.all([
+      fs.rm(state, { recursive: true, force: true }),
+      fs.rm(rootA, { recursive: true, force: true }),
+      fs.rm(rootB, { recursive: true, force: true }),
+    ]);
   }
 });
+}

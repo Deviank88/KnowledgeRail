@@ -89,6 +89,7 @@ test("HTTP gateway serves nine-tool catalog and isolates two concurrent workspac
     const { tools } = await client.listTools();
     assert.equal(tools.length, 9);
     assert.equal(tools.some((tool) => tool.name === "knowledge_workspace"), true);
+    assert.ok(tools.find((tool) => tool.name === "knowledge_workspace")?.outputSchema);
     const admin = tools.find((tool) => tool.name === "knowledge_admin");
     assert.ok(admin);
     assert.equal(
@@ -104,7 +105,11 @@ test("HTTP gateway serves nine-tool catalog and isolates two concurrent workspac
         name: "knowledge_workspace",
         arguments: { action: "select", workspace_id: workspaceId, scope: "write", confirmed: true },
       });
-      return structured(selected).binding as string;
+      const binding = structured(selected).binding as string;
+      const text = selected.content.find((item) => item.type === "text");
+      assert.ok(text && text.type === "text");
+      assert.match(text.text, new RegExp(`^workspace_binding: ${binding}$`, "m"));
+      return binding;
     };
     const [bindingA, bindingB] = await Promise.all([select(workspaceA.id), select(workspaceB.id)]);
     assert.notEqual(bindingA, bindingB);

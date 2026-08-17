@@ -1,5 +1,6 @@
-import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
+import { fromJsonSchema, type CallToolResult, type McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import { BINDING_FORMAT_VERSION } from "../product.js";
 import { WorkspaceBindingError, WorkspaceBindingManager } from "../workspaces/bindings.js";
 
 const WorkspaceToolSchema = z.object({
@@ -18,9 +19,47 @@ const WorkspaceToolSchema = z.object({
   }
 });
 
+const WorkspaceOutputSchema = fromJsonSchema({
+  type: "object",
+  properties: {
+    state: { type: "string" },
+    binding: {
+      type: "string",
+      pattern: `^krb${BINDING_FORMAT_VERSION}_[A-Za-z0-9_-]{40,}$`,
+      description: "Opaque per-chat workspace binding to copy unchanged into subsequent domain calls.",
+    },
+    workspace: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        displayName: { type: "string" },
+        disambiguator: { type: "string" },
+        availability: { type: "string", enum: ["available", "unavailable"] },
+        allowedScopes: { type: "array", items: { type: "string", enum: ["read", "write"] } },
+      },
+      additionalProperties: true,
+    },
+    scope: { type: "string", enum: ["read", "write"] },
+    expiresAt: { type: "string" },
+    nextAction: { type: ["object", "null"] },
+  },
+  required: ["state", "nextAction"],
+  additionalProperties: true,
+});
+
 function result(text: string, structuredContent: Record<string, unknown>, isError = false): CallToolResult {
+  const binding = typeof structuredContent.binding === "string"
+    ? structuredContent.binding
+    : undefined;
+  const portableText = binding
+    ? [
+        text,
+        `workspace_binding: ${binding}`,
+        "Copy this exact workspace_binding into every subsequent KnowledgeRail domain call in this chat.",
+      ].join("\n")
+    : text;
   return {
-    content: [{ type: "text", text }],
+    content: [{ type: "text", text: portableText }],
     structuredContent,
     ...(isError ? { isError: true } : {}),
   };
@@ -34,6 +73,7 @@ export function registerWorkspaceTool(
   server.registerTool("knowledge_workspace", {
     description: "List user-approved workspaces and manage one opaque per-chat binding.",
     inputSchema: WorkspaceToolSchema,
+    outputSchema: WorkspaceOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async (args) => {
     try {
