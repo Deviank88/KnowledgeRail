@@ -17,6 +17,9 @@ export interface RetrievalCoverage {
   evidenceGaps: string[];
   /** Gaps in the displayed subset that the full retrieved candidate set can cover. */
   budgetLimitedGaps: string[];
+  /** Whether the evidence actually returned to the caller covers the request. */
+  displaySufficient: boolean;
+  /** Whether the complete fused candidate pool covers the request. */
   sufficient: boolean;
 }
 
@@ -61,6 +64,7 @@ const COMPONENT_TYPES = new Set(["implementation", "api", "integration", "automa
 const SEMANTIC_FACET_THRESHOLD = 0.72;
 const SEMANTIC_ENTITY_THRESHOLD = 0.8;
 const SEMANTIC_ARTIFACT_THRESHOLD = 0.72;
+const LEADING_PROSE_VERB = /^(?:loads?|returns?|reads?|writes?|uses?|contains?|includes?|creates?|updates?|deletes?|runs?|handles?|supports?|allows?|requires?|provides?|stores?|sends?|receives?)\b/i;
 
 interface CoverageConcept {
   id: string;
@@ -98,12 +102,25 @@ export function extractQueryEntities(query: string): string[] {
     if (/\b(?:client|cliente|project|progetto|system|sistema)\s+$/i.test(prefix)) return [];
     return [candidate];
   });
+  const standalone = [...query.matchAll(/\b[A-Z][a-zA-Z]{2,}\b/g)].flatMap((match) => {
+    const candidate = match[0];
+    const index = match.index ?? 0;
+    const prefix = query.slice(Math.max(0, index - 24), index);
+    if (/\b(?:client|cliente|project|progetto|system|sistema)\s+$/i.test(prefix)) return [];
+    // Avoid treating ordinary sentence-initial prose ("Checkout loads …") as
+    // an entity while retaining leading proper nouns in noun-phrase queries.
+    if (index === 0 && LEADING_PROSE_VERB.test(query.slice(candidate.length).trimStart())) return [];
+    return [candidate];
+  });
   const introduced = [...query.matchAll(/\b(?:il|lo|la|i|gli|le|un|una|the|a|an)\s+([A-Z][a-zA-Z]{2,})\b/g)]
     .map((match) => match[1]!)
     .filter(Boolean);
-  return uniqueStable([...subjects, ...lexical, ...introduced].filter((candidate) => {
+  return uniqueStable([...subjects, ...lexical, ...standalone, ...introduced].filter((candidate) => {
     const normalized = candidate.toLowerCase();
-    if (QUERY_STOP_WORDS.has(normalized)) return false;
+    // A capitalized "System" can be a named domain concept. Lowercase system
+    // remains a stop word, so generic prose does not become an entity facet.
+    const namedSystem = candidate === "System";
+    if (QUERY_STOP_WORDS.has(normalized) && !namedSystem) return false;
     // Ordinary prose such as "automazioni/componenti" is not an identifier.
     // Keep paths and compounds that carry an actual technical signal.
     if (
@@ -403,7 +420,9 @@ export function assessRetrievalCoverage(params: {
   };
 
   const full = snapshot(params.hits);
-  const displayed = snapshot(params.displayHits ?? params.hits);
+  const displayed = params.displayHits === undefined || params.displayHits === params.hits
+    ? full
+    : snapshot(params.displayHits);
   const fullGaps = [...full.evidenceGaps];
   const displayedGaps = [...displayed.evidenceGaps];
   if (params.graphResult.stats.truncatedFrontierCount > 0) {
@@ -424,6 +443,7 @@ export function assessRetrievalCoverage(params: {
     contradictions: full.contradictions,
     evidenceGaps: stableGaps,
     budgetLimitedGaps,
+    displaySufficient: stableGaps.length === 0 && budgetLimitedGaps.length === 0,
     sufficient: stableGaps.length === 0,
   };
 }

@@ -2,6 +2,9 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
 import { safeResolveWithin } from "../paths.js";
+import { captureCodeAnchor } from "../code-evidence/code-anchor.js";
+import { PersistentCodeEvidenceIndex } from "../code-evidence/index.js";
+import type { CodeAnchor } from "../code-evidence/types.js";
 import { readSourceCoverageLedger } from "./coverage-ledger.js";
 import {
   createEvidenceClaim,
@@ -25,7 +28,7 @@ export async function recordEvidenceClaims(params: {
   sourceContent: string;
   segmentId: string;
   claims: readonly EvidenceClaimInput[];
-}): Promise<{ claims: EvidenceClaim[]; created: number; reused: number }> {
+}): Promise<{ claims: EvidenceClaim[]; created: number; reused: number; anchorWarnings: string[] }> {
   if (params.claims.length === 0) throw new Error("At least one evidence claim is required.");
   const ledger = await readSourceCoverageLedger(params.wikiRoot, params.sourceUri);
   if (!ledger) throw new Error("Source coverage is unknown; plan the source before extracting evidence.");
@@ -36,6 +39,38 @@ export async function recordEvidenceClaims(params: {
   if (!segment) throw new Error(`Evidence provenance references an unknown segment: ${params.segmentId}.`);
   if (sourceContentHash(params.sourceContent.slice(segment.start, segment.end)) !== segment.hash) {
     throw new Error(`Evidence provenance segment failed its integrity check: ${params.segmentId}.`);
+  }
+
+  const now = new Date().toISOString();
+  const repositoryRoot = path.dirname(path.resolve(params.wikiRoot));
+  const capturedAnchors = new Map<number, CodeAnchor>();
+  const anchorWarnings: string[] = [];
+  const targetedClaims = params.claims
+    .map((claim, index) => ({ claim, index }))
+    .filter(({ claim }) => Boolean(claim.target?.codeResourceUri));
+  if (targetedClaims.length > 0) {
+    const index = new PersistentCodeEvidenceIndex({ repositoryRoot, wikiRoot: params.wikiRoot });
+    try {
+      await index.rebuild();
+      for (const targeted of targetedClaims) {
+        try {
+          capturedAnchors.set(targeted.index, await captureCodeAnchor({
+            repositoryRoot,
+            wikiRoot: params.wikiRoot,
+            resourceUri: targeted.claim.target!.codeResourceUri!,
+            capturedAt: now,
+          }));
+        } catch (error: unknown) {
+          anchorWarnings.push(
+            `Claim ${targeted.index + 1} code target was not anchored: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      }
+    } catch (error: unknown) {
+      anchorWarnings.push(
+        `Code anchor index refresh failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 
   await sourceRecordSegment({
@@ -51,15 +86,15 @@ export async function recordEvidenceClaims(params: {
 
   const result = await mutateEvidenceIrStore(params.wikiRoot, (store) => {
     const byId = new Map(store.claims.map((claim) => [claim.id, claim] as const));
-    const now = new Date().toISOString();
     const recorded: EvidenceClaim[] = [];
     let created = 0;
     let reused = 0;
-    for (const input of params.claims) {
+    for (const [inputIndex, input] of params.claims.entries()) {
       const candidate = createEvidenceClaim({
         sourceUri: params.sourceUri,
         segmentId: params.segmentId,
         input,
+        codeAnchor: capturedAnchors.get(inputIndex),
         now,
       });
       const existing = byId.get(candidate.id);
@@ -67,7 +102,12 @@ export async function recordEvidenceClaims(params: {
         if (!sameImmutableClaim(existing, candidate)) {
           throw new Error(`Evidence claim identity collision: ${candidate.id}.`);
         }
+        const previousCodeTarget = existing.target?.codeResourceUri;
         existing.target = candidate.target;
+        if (candidate.codeAnchor) existing.codeAnchor = candidate.codeAnchor;
+        else if (!candidate.target?.codeResourceUri || candidate.target.codeResourceUri !== previousCodeTarget) {
+          delete existing.codeAnchor;
+        }
         existing.relations = candidate.relations;
         existing.confidence = candidate.confidence;
         existing.status = candidate.status;
@@ -112,7 +152,74 @@ export async function recordEvidenceClaims(params: {
       reason: "evidence_ir_link_pending",
     },
   });
-  return { claims: result.claims, created: result.created, reused: result.reused };
+  return { claims: result.claims, created: result.created, reused: result.reused, anchorWarnings };
+}
+
+export async function backfillEvidenceCodeAnchors(wikiRoot: string): Promise<{
+  eligible: number;
+  anchored: number;
+  unresolved: number;
+  warnings: string[];
+}> {
+  const snapshot = await readEvidenceIrStore(wikiRoot);
+  const eligible = snapshot.claims.filter((claim) =>
+    Boolean(claim.target?.codeResourceUri) && claim.codeAnchor === undefined
+  );
+  if (eligible.length === 0) return { eligible: 0, anchored: 0, unresolved: 0, warnings: [] };
+
+  const repositoryRoot = path.dirname(path.resolve(wikiRoot));
+  const capturedAt = new Date().toISOString();
+  const captured = new Map<string, { anchor: CodeAnchor; resourceUri: string }>();
+  const warnings: string[] = [];
+  const index = new PersistentCodeEvidenceIndex({ repositoryRoot, wikiRoot });
+  try {
+    await index.rebuild();
+    for (const claim of eligible) {
+      try {
+        const resourceUri = claim.target!.codeResourceUri!;
+        captured.set(claim.id, {
+          resourceUri,
+          anchor: await captureCodeAnchor({
+            repositoryRoot,
+            wikiRoot,
+            resourceUri,
+            capturedAt,
+          }),
+        });
+      } catch (error: unknown) {
+        warnings.push(
+          `${claim.id} was not anchored: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+  } catch (error: unknown) {
+    warnings.push(`Code anchor index refresh failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  let anchored = 0;
+  if (captured.size > 0) {
+    await mutateEvidenceIrStore(wikiRoot, (store) => {
+      for (const claim of store.claims) {
+        const candidate = captured.get(claim.id);
+        if (
+          !candidate || claim.codeAnchor ||
+          claim.target?.codeResourceUri !== candidate.resourceUri
+        ) continue;
+        claim.codeAnchor = candidate.anchor;
+        claim.updatedAt = capturedAt;
+        anchored++;
+      }
+    });
+  }
+  if (anchored < captured.size) {
+    warnings.push(`${captured.size - anchored} claim(s) changed while code anchors were being backfilled.`);
+  }
+  return {
+    eligible: eligible.length,
+    anchored,
+    unresolved: eligible.length - anchored,
+    warnings,
+  };
 }
 
 export async function evidenceIrStatus(wikiRoot: string): Promise<{

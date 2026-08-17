@@ -84,6 +84,28 @@ test("entity extraction ignores task verbs and ordinary slash-separated prose", 
   assert.equal(guidedTaskEntities.includes("SilverFir"), false);
 });
 
+test("single-word proper nouns remain coverage entities without substring matches", () => {
+  const entities = extractQueryEntities("Explain Payment and System behavior");
+  assert.equal(entities.includes("Explain"), false);
+  assert.equal(entities.includes("Payment"), true);
+  assert.equal(entities.includes("System"), true);
+
+  const substringOnly = assessRetrievalCoverage({
+    query: "Explain Payment behavior",
+    hits: [hit(1, "Prepayment behavior is documented for the invoice worker.")],
+    graphResult: graphResult(),
+  });
+  assert.equal(substringOnly.unresolvedEntities.includes("Payment"), true);
+  assert.equal(substringOnly.evidenceGaps.includes("entity:Payment"), true);
+
+  const exact = assessRetrievalCoverage({
+    query: "Explain Payment behavior",
+    hits: [hit(1, "Payment behavior is documented for the invoice worker.")],
+    graphResult: graphResult(),
+  });
+  assert.equal(exact.unresolvedEntities.includes("Payment"), false);
+});
+
 test("coverage uses the full candidate set and labels display exclusions as budget limited", () => {
   const displayed = Array.from({ length: 8 }, (_, index) =>
     hit(index + 1, "Unrelated archival notes about billing."));
@@ -100,6 +122,8 @@ test("coverage uses the full candidate set and labels display exclusions as budg
   assert.equal(coverage.evidenceGaps.includes("passage_evidence"), false);
   assert.equal(coverage.budgetLimitedGaps.includes("query_facets"), true);
   assert.equal(coverage.budgetLimitedGaps.includes("passage_evidence"), true);
+  assert.equal(coverage.sufficient, true, "the complete pool remains the missing-evidence oracle");
+  assert.equal(coverage.displaySufficient, false, "display coverage must remain visibly insufficient");
 });
 
 test("lexical coverage tolerates entity delimiters and classifier page-type equivalences", () => {

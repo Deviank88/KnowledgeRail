@@ -192,6 +192,7 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
               pagePath: claim.target.page_path,
               pageTitle: claim.target.page_title,
               pageType: claim.target.page_type,
+              codeResourceUri: claim.target.code_resource_uri,
             } : undefined,
             relations: claim.relations?.map((relation) => ({
               type: relation.type,
@@ -202,6 +203,7 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
         return textResult([
           "Evidence recorded before synthesis.",
           `Created: ${result.created}; reused: ${result.reused}.`,
+          ...result.anchorWarnings.map((warning) => `Anchor warning: ${warning}`),
           ...result.claims.map((claim) =>
             `- ${claim.id} [${claim.kind}/${claim.origin}/${claim.status}] ${claim.sourceUri}#${claim.segmentId}`
           ),

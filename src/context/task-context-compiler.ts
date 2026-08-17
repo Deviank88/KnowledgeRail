@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { driftedClaimsByPage } from "../core/drift-detection.js";
 import type { GraphEdge, GraphEdgeKind, GraphNode } from "../core/graph-index.js";
 import { getRuntimeWikiGraph, type RuntimeGraph } from "../core/graph-runtime.js";
 import {
@@ -42,6 +43,7 @@ export interface TaskContextAttempt {
   coverageCandidateCount: number;
   visitedNodes: number;
   visitedEdges: number;
+  maxDepthReached: number;
   maxVisitedNodes: number;
   maxEvidence: number;
   tokenBudget: number;
@@ -164,6 +166,7 @@ interface ClassifiedCandidate {
   hit: HybridRetrievalHit;
   categories: Set<TaskContextEvidenceField>;
   evidence?: EvidenceRef;
+  driftClaimIds?: string[];
 }
 
 interface TaskGraphSlice {
@@ -478,6 +481,7 @@ function emptyBuckets(): EvidenceBuckets {
 function buildBuckets(candidates: readonly ClassifiedCandidate[]): EvidenceBuckets {
   const buckets = emptyBuckets();
   for (const candidate of candidates) {
+    if (candidate.driftClaimIds?.length) continue;
     const evidence = compactTaskEvidence(candidate.evidence!);
     for (const category of candidate.categories) buckets[category].push(evidence);
   }
@@ -540,7 +544,13 @@ function knowledgeGaps(params: {
   })));
   for (const category of params.policy.requiredCategories) {
     if (params.buckets[category].length > 0) continue;
-    const availableBeyondDisplay = params.available.some((candidate) => candidate.categories.has(category));
+    const staleAvailable = params.available.some((candidate) =>
+      candidate.categories.has(category) && Boolean(candidate.driftClaimIds?.length)
+    );
+    if (staleAvailable) continue;
+    const availableBeyondDisplay = params.available.some((candidate) =>
+      candidate.categories.has(category) && !candidate.driftClaimIds?.length
+    );
     gaps.push({
       kind: availableBeyondDisplay ? "budget_limited" : "missing_evidence",
       description: availableBeyondDisplay
@@ -570,6 +580,18 @@ function knowledgeGaps(params: {
     gaps.push({
       kind: "stale_evidence",
       description: `Potentially stale evidence requires validation: ${uniqueSorted(stale).join(", ")}.`,
+    });
+  }
+  const drifted = params.selected.filter((candidate) => candidate.driftClaimIds?.length);
+  if (drifted.length > 0) {
+    gaps.push({
+      kind: "stale_evidence",
+      reason: "drift_suspected",
+      paths: uniqueSorted(drifted.map((candidate) => candidate.hit.path)),
+      claimIds: uniqueSorted(drifted.flatMap((candidate) => candidate.driftClaimIds ?? [])),
+      description: `Code-backed evidence changed and requires re-verification: ${
+        uniqueSorted(drifted.map((candidate) => candidate.hit.path)).join(", ")
+      }.`,
     });
   }
   if (params.buckets.contradictions.length > 0) {
@@ -711,6 +733,7 @@ function contextWithoutSize(params: {
     intent: params.intent,
   });
   const evidence = uniqueEvidence(params.selected.map((candidate) => candidate.evidence!));
+  const cleanSelected = params.selected.filter((candidate) => !candidate.driftClaimIds?.length);
   return {
     version: 2,
     task: { intent: params.intent, objective: params.objective },
@@ -719,7 +742,7 @@ function contextWithoutSize(params: {
     changeImpact: impactFor({
       policy: params.policy,
       requestedPaths: params.requestedPaths,
-      selected: params.selected,
+      selected: cleanSelected,
       buckets,
       graph: params.graph,
     }),
@@ -824,6 +847,11 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
     hit,
     categories: classifyCandidate(hit),
   }));
+  const driftClaims = await driftedClaimsByPage(params.wikiRoot);
+  for (const candidate of availableCandidates) {
+    const claimIds = driftClaims.get(candidate.hit.path);
+    if (claimIds?.length) candidate.driftClaimIds = claimIds;
+  }
   const candidateByPath = new Map(availableCandidates.map((candidate) => [candidate.hit.path, candidate] as const));
   const candidates = hybrid.hits
     .map((hit) => candidateByPath.get(hit.path))
@@ -840,10 +868,17 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
     const categoryLabels = [...candidate.categories]
       .map((category) => CATEGORY_LABELS[category])
       .join(", ") || "supporting evidence";
-    candidate.evidence = evidenceFromRetrievalHit(
+    const evidence = evidenceFromRetrievalHit(
       candidate.hit,
       `task ${params.intent}; ${categoryLabels}; hybrid ${profile} W${hybrid.wideningLevel}`
     );
+    candidate.evidence = candidate.driftClaimIds?.length ? {
+      ...evidence,
+      reason: `${evidence.reason}; stale: drift_suspected`,
+      stale: true,
+      staleReason: "drift_suspected",
+      driftClaimIds: [...candidate.driftClaimIds],
+    } : evidence;
   }
   const retrieval: TaskContextRetrieval = {
     strategy: "hybrid_progressive_widening",
@@ -852,8 +887,11 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
     query: retrievalQuery,
     profile,
     wideningLevel: hybrid.wideningLevel,
-    coverageSufficient: hybrid.coverage.sufficient,
-    evidenceGaps: [...hybrid.coverage.evidenceGaps],
+    coverageSufficient: hybrid.coverage.displaySufficient,
+    evidenceGaps: [
+      ...hybrid.coverage.evidenceGaps,
+      ...hybrid.coverage.budgetLimitedGaps.map((gap) => `display_budget:${gap}`),
+    ],
     estimatedContextTokens: hybrid.estimatedContextTokens,
     hitCount: hybrid.hits.length,
     coverageCandidateCount: hybrid.coverageHits.length,
@@ -866,6 +904,7 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
       coverageCandidateCount: attempt.coverageCandidateCount,
       visitedNodes: attempt.visitedNodes,
       visitedEdges: attempt.visitedEdges,
+      maxDepthReached: attempt.maxDepthReached,
       maxVisitedNodes: attempt.budget.maxVisitedNodes,
       maxEvidence: attempt.budget.maxEvidence,
       tokenBudget: attempt.budget.tokenBudget,

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://cdn.jsdelivr.net/npm/knowledge-rail@2.1.0/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
+  <img src="https://cdn.jsdelivr.net/npm/knowledge-rail@2.1.1/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
 </p>
 
 <h1 align="center">KnowledgeRail</h1>
@@ -8,7 +8,7 @@ KnowledgeRail is a local-first MCP server that turns project documentation and s
 
 It is designed for agents that need to understand, change, review, or document a codebase without loading the whole repository into the model context. Retrieval is bounded, provenance is preserved, missing evidence is reported explicitly, and difficult queries widen progressively instead of silently losing relevant information.
 
-> **Current status:** stable release `2.1.0`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
+> **Current status:** stable release `2.1.1`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
 
 ## What it provides
 
@@ -39,7 +39,7 @@ KnowledgeRail ships no browser or document renderer. Mermaid source remains ordi
 Run this from any directory inside the project you opened in VS Code, Cursor, a terminal, or another context-aware coding client:
 
 ```bash
-npx -y knowledge-rail@2.1.0
+npx -y knowledge-rail@2.1.1
 ```
 
 No project path is needed in the persistent MCP configuration. KnowledgeRail discovers the opened project independently for each process, so project X and project Y can be used at the same time by different agent sessions.
@@ -73,7 +73,7 @@ Use the standard `stdio` server shape once. Do not hard-code one repository:
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.1.0"]
+      "args": ["-y", "knowledge-rail@2.1.1"]
     }
   }
 }
@@ -105,7 +105,7 @@ A desktop chat does not open a filesystem folder, so it cannot safely infer a pr
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.1.0", "desktop"]
+      "args": ["-y", "knowledge-rail@2.1.1", "desktop"]
     }
   }
 }
@@ -118,10 +118,10 @@ In a new chat, ask KnowledgeRail to list workspaces, choose one entry, and confi
 Projects opened successfully by an IDE/terminal are added to the local catalog automatically without changing their clean eight-tool workflow. Operators can also manage catalog metadata locally:
 
 ```bash
-npx -y knowledge-rail@2.1.0 workspace list
-npx -y knowledge-rail@2.1.0 workspace register
-npx -y knowledge-rail@2.1.0 workspace register /absolute/project/path
-npx -y knowledge-rail@2.1.0 workspace unregister ws_example
+npx -y knowledge-rail@2.1.1 workspace list
+npx -y knowledge-rail@2.1.1 workspace register
+npx -y knowledge-rail@2.1.1 workspace register /absolute/project/path
+npx -y knowledge-rail@2.1.1 workspace unregister ws_example
 ```
 
 Registration never copies, uploads, scans the disk, or deletes project files. `workspace register` without a path discovers only upward from cwd.
@@ -131,7 +131,7 @@ Registration never copies, uploads, scans the disk, or deletes project files. `w
 Start one gateway for many concurrent local clients and workspaces:
 
 ```bash
-npx -y knowledge-rail@2.1.0 --transport http
+npx -y knowledge-rail@2.1.1 --transport http
 ```
 
 The default endpoint is `http://127.0.0.1:3333/mcp`; liveness only is available at `/healthz`. MCP requests require the random credential stored in the OS-protected per-user KnowledgeRail state directory. The desktop adapter reads it automatically, so it never belongs in project configuration or a repository.
@@ -168,7 +168,7 @@ KnowledgeRail exposes eight stable tools. Agents choose a domain directly and us
 | `knowledge_code` | Maintain and query deterministic code evidence. |
 | `knowledge_document_context` | Plan any document profile and compile section-specific evidence. |
 | `knowledge_document` | Write and review Markdown deliverables. |
-| `knowledge_admin` | Initialize, lint, and migrate KnowledgeRail data. |
+| `knowledge_admin` | Initialize, lint, detect code-evidence drift, and migrate KnowledgeRail data. |
 
 Every successful operation returns a machine-readable `state` and either one `nextAction` or `null`. `nextAction` identifies the next tool, action, required arguments, and safe suggested arguments. Optional `guidance` and `resultText` complete the shared output envelope. Clients that only render text also receive concise `Next:` and `Guidance:` lines when applicable.
 
@@ -189,7 +189,7 @@ agent reasoning and project work
     └──→ knowledge_document_context ──→ knowledge_document
 ```
 
-For a normal task, the agent calls `knowledge_context mode="task"` with a concrete objective. KnowledgeRail searches the canonical wiki and its derived lexical, graph, passage, code, and optional semantic indexes, ranks the available evidence, and returns a compact context envelope. Large page bodies are exposed as `knowledge-rail://` links instead of being inserted wholesale into the response; the client reads only the selected passages. Coverage is assessed over the full retrieved candidate set, independently of the smaller display budget, so retrieved-but-omitted evidence is reported as `budget_limited` instead of falsely described as absent. If the token budget alone excluded relevant evidence, the returned `nextAction` proposes one bounded widening step. Missing, stale, contradictory, or unresolved evidence remains an explicit gap and is never filled by guessing.
+For a normal task, the agent calls `knowledge_context mode="task"` with a concrete objective. KnowledgeRail searches the canonical wiki and its derived lexical, graph, passage, code, and optional semantic indexes, ranks the available evidence, and returns a compact context envelope. Large page bodies are exposed as `knowledge-rail://` links instead of being inserted wholesale into the response; the client reads only the selected passages. Coverage is assessed over both the full retrieved candidate set and the smaller display set. The full pool distinguishes truly missing evidence from evidence that is merely `budget_limited`; progressive widening stops only when the evidence returned to the model is sufficient. If the token budget alone excluded relevant evidence, the returned `nextAction` proposes one bounded widening step. Missing, stale, contradictory, or unresolved evidence remains an explicit gap and is never filled by guessing.
 
 Durable knowledge lives as Markdown under `wiki/`. Direct page operations preserve caller-owned content byte-for-byte. Larger source sets use `knowledge_ingest`: normalized sources are processed in bounded segments, claims are recorded in durable Evidence IR, coverage is reconciled, and finalization is blocked until every segment is represented or explicitly classified. Derived retrieval and graph indexes are refreshed from this canonical state rather than replacing it.
 
@@ -230,6 +230,30 @@ The budget bounds evidence sent to the model; it does not declare omitted knowle
 
 `response_detail="compact"` is recommended for normal agent use. `full` keeps the complete historical TaskContext payload for diagnostics and integrations that need it.
 
+## Code-backed claims and drift detection
+
+Evidence IR claims can cite a symbol returned by `knowledge_code action="search"` or `action="symbol"`. Pass that exact `code://repo/...#symbol-...` URI as the claim target's `code_resource_uri` during `knowledge_ingest action="apply_claims"`. If the symbol resolves against the current deterministic code index, KnowledgeRail stores a repository-relative line range, a trailing-whitespace-insensitive SHA-256 range hash, the parser version, and the capture time. A missing or stale symbol produces an explicit anchor warning; KnowledgeRail never fabricates an anchor.
+
+Run a complete read-only check through the MCP tool:
+
+```text
+knowledge_admin {
+  "action":"drift"
+}
+```
+
+For a bounded pre-commit or CI check, pass repository-relative files or directory prefixes:
+
+```text
+knowledge_admin {
+  "action":"drift",
+  "scope":"paths",
+  "paths":["src/payments.ts","src/invoices"]
+}
+```
+
+The action reads current code and writes only disposable state to `wiki/.knowledge-rail/drift/ledger.json`; it never edits claim text, canonical pages, or source code. A changed range, missing file, or invalidated line range becomes `drift_suspected`. Trailing-whitespace-only edits and a parser-version change with identical range content stay fresh. `knowledge_context` keeps affected evidence visible for provenance, marks it `stale` with reason `drift_suspected`, excludes it from clean evidence buckets, and returns an explicit `stale_evidence` gap. Re-verification and correction remain normal Evidence IR work—there is intentionally no automatic fix.
+
 ## Project data
 
 `knowledge_admin action="init"` creates this structure inside the selected project. The roots are intentionally stable: `wiki/` is canonical agent memory; `docs/` is the document plane for sources, normalized copies, durable evidence state, and deliverables.
@@ -240,7 +264,7 @@ project/
 │   ├── index.md
 │   ├── log.md
 │   ├── SCHEMA.md
-│   ├── .knowledge-rail/     # derived indexes, manifests and migration state
+│   ├── .knowledge-rail/     # derived indexes, drift ledger, manifests and migration state
 │   └── <page-type>/         # created lazily when the first typed page is written
 └── docs/
     ├── client/
@@ -354,6 +378,7 @@ npm run eval:widening:gate
 npm run eval:source-coverage:gate
 npm run eval:evidence-ir:gate
 npm run eval:code-evidence:gate
+npm run eval:drift:gate
 npm run eval:recovery:gate
 npm run eval:task-context:gate
 npm run eval:semantic:gate

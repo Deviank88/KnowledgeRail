@@ -40,6 +40,7 @@ export const EvidenceClaimInputSchema = z.object({
     page_path: z.string().optional(),
     page_title: z.string().optional(),
     page_type: z.enum(PAGE_TYPES).optional(),
+    code_resource_uri: z.string().startsWith("code://repo/").max(4_096).optional(),
   }).optional(),
   relations: z.array(z.object({
     type: z.enum(RELATION_TYPES),

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "fixtureVersion": 1,
+  "fixtureSha256": "fc48fad78c23f5e7986cb9018aeb3c1b73b9d69fef4f0b0e79c212a9101e616f",
+  "scenarioCount": 6,
+  "minimumVerdictAccuracy": 1,
+  "maximumFalsePositiveRate": 0,
+  "maximumSilentMissRate": 0,
+  "scaleAnchorCount": 1000,
+  "scopedAnchorCount": 100,
+  "scenarioIds": [
+    "unchanged",
+    "trailing-whitespace",
+    "content-change",
+    "file-missing",
+    "range-out-of-bounds",
+    "parser-version-only"
+  ]
+}

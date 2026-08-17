@@ -33,6 +33,8 @@ interface WideningQueryConfig {
   query?: string;
   initialBudget?: Partial<RetrievalBudget>;
   coverageRequirements?: RetrievalCoverageRequirements;
+  minimumWideningLevel?: RetrievalWideningLevel;
+  minimumFinalGraphDepth?: number;
 }
 
 interface ProgressiveFixture {
@@ -193,7 +195,7 @@ export async function evaluateProgressiveWidening(
         lostRelevantInitially: lostInitially.sort(),
         lostRelevantAfterWidening: lostAfter.sort(),
         wideningLevel: final.wideningLevel,
-        initialBudgetSuccess: initial.coverage.sufficient && lostInitially.length === 0,
+        initialBudgetSuccess: initial.coverage.displaySufficient && lostInitially.length === 0,
         finalQuality: qualityMetrics(
           asEvaluationHits(final.hits),
           evaluationQuery,

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "cases": [
     { "id": "exact-facet", "query": "audit", "displayBody": "Audit events are retained.", "expectedGap": false },
     { "id": "stem-deployment", "query": "deployment", "displayBody": "The service is deployed safely.", "expectedGap": false },
@@ -16,8 +16,11 @@
     { "id": "semantic-outage", "query": "outage", "displayBody": "The service failure was contained.", "semanticCoverage": true, "expectedGap": false },
     { "id": "semantic-customer", "query": "customer", "displayBody": "The client owns the approval policy.", "semanticCoverage": true, "expectedGap": false },
     { "id": "semantic-queue", "query": "queue", "displayBody": "The backlog drains in FIFO order.", "semanticCoverage": true, "expectedGap": false },
+    { "id": "semantic-latency", "query": "latency", "displayBody": "Response time stays within the service target.", "semanticCoverage": true, "expectedGap": false },
     { "id": "missing-facet", "query": "encryption", "displayBody": "Billing events are retained.", "expectedGap": true },
     { "id": "missing-entity", "query": "PaymentGateway", "displayBody": "The invoice worker is documented.", "expectedGap": true },
+    { "id": "single-word-entity-present", "query": "Review Payment behavior", "displayBody": "Review Payment behavior for the invoice worker.", "expectedGap": false },
+    { "id": "single-word-entity-substring-missing", "query": "Review Payment behavior", "displayBody": "Review behavior for the Prepayment worker.", "expectedGap": true },
     { "id": "missing-requirement", "query": "policy", "displayBody": "Policy analysis only.", "displayType": "analysis", "requiredPageTypes": ["requirement"], "expectedGap": true },
     { "id": "missing-test", "query": "verification", "displayBody": "Verification is planned.", "displayType": "request", "requiredPageTypes": ["test_result"], "expectedGap": true },
     { "id": "missing-source-diversity", "query": "audit", "displayBody": "Audit notes.", "displaySources": ["docs/one.md"], "minimumSourceDiversity": 2, "expectedGap": true },

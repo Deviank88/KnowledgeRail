@@ -231,6 +231,8 @@ test("compiler distinguishes a cap-excluded required category from true absence"
     });
 
     assert.equal(context.retrieval.coverageCandidateCount > context.retrieval.hitCount, true);
+    assert.equal(context.retrieval.coverageSufficient, false);
+    assert.equal(context.retrieval.evidenceGaps.some((gap) => gap.startsWith("display_budget:")), true);
     assert.equal(context.requirements.length, 0);
     assert.equal(context.unknowns.some((gap) =>
       gap.kind === "budget_limited" && gap.description.includes("requirements")

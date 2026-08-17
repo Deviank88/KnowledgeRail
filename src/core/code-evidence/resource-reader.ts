@@ -3,40 +3,11 @@ import * as fs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { safeResolveWithin } from "../paths.js";
 import { readCodeEvidenceSnapshot } from "./index.js";
+import { parseCodeResourceUri } from "./resource-uri.js";
 import { TYPESCRIPT_ADAPTER_VERSION, type CodeResourceRead } from "./types.js";
 
 const DEFAULT_MAX_CHARACTERS = 6_000;
 const MAX_CHARACTERS = 50_000;
-
-function parseCodeResourceUri(uri: string): { path: string; fragmentId: string } {
-  let parsed: URL;
-  try {
-    parsed = new URL(uri);
-  } catch {
-    throw new Error(`Invalid code evidence resource URI: ${uri}`);
-  }
-  if (parsed.protocol !== "code:" || parsed.hostname !== "repo") {
-    throw new Error(`Code evidence resources must use code://repo/: ${uri}`);
-  }
-  for (const key of parsed.searchParams.keys()) {
-    if (key !== "workspace_binding") {
-      throw new Error(`Unsupported code evidence resource URI parameter: ${key}`);
-    }
-  }
-  if (!parsed.hash) {
-    throw new Error("Code evidence resource URI must contain one symbol fragment.");
-  }
-  let path: string;
-  let fragmentId: string;
-  try {
-    path = parsed.pathname.slice(1).split("/").map(decodeURIComponent).join("/");
-    fragmentId = decodeURIComponent(parsed.hash.slice(1));
-  } catch {
-    throw new Error(`Code evidence resource URI contains invalid percent encoding: ${uri}`);
-  }
-  if (!path || !fragmentId) throw new Error("Code evidence resource URI is missing path or symbol.");
-  return { path, fragmentId };
-}
 
 function truncateCharacters(text: string, maxCharacters: number): {
   text: string;

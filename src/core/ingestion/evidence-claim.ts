@@ -1,5 +1,7 @@
 import * as path from "node:path";
 import { createHash } from "node:crypto";
+import { canonicalCodeResourceUri } from "../code-evidence/resource-uri.js";
+import type { CodeAnchor } from "../code-evidence/types.js";
 import { WIKI_PAGE_TYPES, type WikiPageType } from "../wiki-validation.js";
 
 export const EVIDENCE_CLAIM_KINDS = [
@@ -52,6 +54,7 @@ export interface EvidenceTargetHint {
   pagePath?: string;
   pageTitle?: string;
   pageType?: WikiPageType;
+  codeResourceUri?: string;
 }
 
 export interface EvidenceClaim {
@@ -64,6 +67,7 @@ export interface EvidenceClaim {
   confidence: number;
   status: EvidenceClaimStatus;
   target?: EvidenceTargetHint;
+  codeAnchor?: CodeAnchor;
   relations: EvidenceRelationHint[];
   createdAt: string;
   updatedAt: string;
@@ -122,15 +126,57 @@ function normalizeTarget(target: EvidenceTargetHint | undefined): EvidenceTarget
   const entityKey = target.entityKey?.replace(/\s+/g, " ").trim() || undefined;
   const pagePath = target.pagePath ? normalizedPagePath(target.pagePath) : undefined;
   const pageTitle = target.pageTitle?.replace(/\s+/g, " ").trim() || undefined;
+  const codeResourceUri = target.codeResourceUri
+    ? canonicalCodeResourceUri(target.codeResourceUri)
+    : undefined;
   if (target.pageType && !PAGE_TYPES.has(target.pageType)) {
     throw new Error(`Unsupported evidence target page type: ${target.pageType}.`);
   }
-  if (!entityKey && !pagePath && !pageTitle && !target.pageType) return undefined;
+  if (!entityKey && !pagePath && !pageTitle && !target.pageType && !codeResourceUri) return undefined;
   return {
     ...(entityKey ? { entityKey } : {}),
     ...(pagePath ? { pagePath } : {}),
     ...(pageTitle ? { pageTitle } : {}),
     ...(target.pageType ? { pageType: target.pageType } : {}),
+    ...(codeResourceUri ? { codeResourceUri } : {}),
+  };
+}
+
+function normalizeCodeAnchor(anchor: CodeAnchor | undefined): CodeAnchor | undefined {
+  if (!anchor) return undefined;
+  const normalizedPath = anchor.path.replace(/\\/g, "/").normalize("NFC");
+  if (
+    !normalizedPath || normalizedPath !== anchor.path || path.posix.isAbsolute(normalizedPath) ||
+    /^[A-Za-z]:/u.test(normalizedPath) ||
+    path.posix.normalize(normalizedPath) !== normalizedPath ||
+    normalizedPath.split("/").some((part) => !part || part === "." || part === "..")
+  ) {
+    throw new Error(`Evidence code anchor must be repository-relative: ${anchor.path}`);
+  }
+  if (
+    !Number.isInteger(anchor.startLine) || !Number.isInteger(anchor.endLine) ||
+    anchor.startLine < 1 || anchor.endLine < anchor.startLine
+  ) throw new Error("Evidence code anchor line range is invalid.");
+  if (!/^[a-f0-9]{64}$/.test(anchor.rangeHash)) {
+    throw new Error("Evidence code anchor rangeHash must be a lowercase SHA-256 digest.");
+  }
+  if (typeof anchor.parserVersion !== "string") {
+    throw new Error("Evidence code anchor parserVersion must be a string.");
+  }
+  const parserVersion = anchor.parserVersion.normalize("NFKC").trim();
+  if (!parserVersion || parserVersion.length > 256 || /[\u0000-\u001f\u007f]/.test(parserVersion)) {
+    throw new Error("Evidence code anchor parserVersion must contain 1-256 printable characters.");
+  }
+  if (typeof anchor.capturedAt !== "string" || Number.isNaN(Date.parse(anchor.capturedAt))) {
+    throw new Error("Evidence code anchor capturedAt must be ISO-8601 compatible.");
+  }
+  return {
+    path: normalizedPath,
+    startLine: anchor.startLine,
+    endLine: anchor.endLine,
+    rangeHash: anchor.rangeHash,
+    parserVersion,
+    capturedAt: anchor.capturedAt,
   };
 }
 
@@ -171,6 +217,7 @@ export function createEvidenceClaim(params: {
   sourceUri: string;
   segmentId: string;
   input: EvidenceClaimInput;
+  codeAnchor?: CodeAnchor;
   now?: string;
 }): EvidenceClaim {
   const sourceUri = normalizedSourceUri(params.sourceUri);
@@ -187,6 +234,10 @@ export function createEvidenceClaim(params: {
   const status = params.input.status ?? "active";
   if (!STATUSES.has(status)) throw new Error(`Unsupported evidence claim status: ${status}.`);
   const target = normalizeTarget(params.input.target);
+  const codeAnchor = normalizeCodeAnchor(params.codeAnchor);
+  if (codeAnchor && !target?.codeResourceUri) {
+    throw new Error("Evidence code anchors require a codeResourceUri target.");
+  }
   const id = evidenceClaimId({
     sourceUri,
     segmentId: params.segmentId,
@@ -208,6 +259,7 @@ export function createEvidenceClaim(params: {
     confidence: params.input.confidence,
     status,
     ...(target ? { target } : {}),
+    ...(codeAnchor ? { codeAnchor } : {}),
     relations: normalizeRelations(params.input.relations),
     createdAt: now,
     updatedAt: now,
@@ -239,6 +291,7 @@ export function evidenceClaimIsValid(value: unknown): value is EvidenceClaim {
         target: claim.target,
         relations: claim.relations,
       },
+      codeAnchor: claim.codeAnchor,
       now: claim.createdAt,
     });
     return normalized.sourceUri === claim.sourceUri && normalized.segmentId === claim.segmentId &&
@@ -246,6 +299,7 @@ export function evidenceClaimIsValid(value: unknown): value is EvidenceClaim {
       normalized.origin === claim.origin && normalized.confidence === claim.confidence &&
       normalized.status === claim.status &&
       JSON.stringify(normalized.target ?? null) === JSON.stringify(claim.target ?? null) &&
+      JSON.stringify(normalized.codeAnchor ?? null) === JSON.stringify(claim.codeAnchor ?? null) &&
       JSON.stringify(normalized.relations) === JSON.stringify(claim.relations);
   } catch {
     return false;

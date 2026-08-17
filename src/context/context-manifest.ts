@@ -33,6 +33,9 @@ export interface EvidenceRef {
   heading?: string;
   score: number;
   reason: string;
+  stale?: boolean;
+  staleReason?: "drift_suspected";
+  driftClaimIds?: string[];
   /** Existing wiki `sources` values are references/paths, not guaranteed URIs. */
   sourceRefs: string[];
   preview: string;
@@ -42,6 +45,9 @@ export interface EvidenceRef {
 export interface KnowledgeGap {
   kind: "missing_evidence" | "contradiction" | "stale_evidence" | "budget_limited";
   description: string;
+  reason?: "drift_suspected";
+  paths?: string[];
+  claimIds?: string[];
 }
 
 export interface ContextManifest {

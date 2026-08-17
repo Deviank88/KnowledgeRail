@@ -151,6 +151,81 @@ test("a truncated two-hop frontier widens deterministically and recovers require
   });
 });
 
+test("display gaps keep non-coverage retrieval widening until deep graph evidence is visible", async () => {
+  await withWiki("knowledge-rail-widen-display-depth-", async (wikiRoot) => {
+    await writePage(wikiRoot, "concepts/Seed.md", {
+      title: "Quartz recovery entry point",
+      type: "concept",
+      body: "# Entry\n\nQuartz recovery entry point telemetry is available here.",
+    });
+    await writePage(wikiRoot, "concepts/BridgeA.md", {
+      title: "Quartz recovery relay",
+      type: "concept",
+      body: "# Relay\n\nThe Quartz recovery relay delegates to [[BridgeB.md]].",
+    });
+    await writePage(wikiRoot, "concepts/BridgeB.md", {
+      title: "Second relay",
+      type: "concept",
+      body: "# Relay\n\nThe second relay delegates to [[BridgeC.md]].",
+    });
+    await writePage(wikiRoot, "concepts/BridgeC.md", {
+      title: "Terminal relay",
+      type: "concept",
+      body: "# Relay\n\nThe terminal relay delegates to [[Target.md]].",
+    });
+    await writePage(wikiRoot, "concepts/Target.md", {
+      title: "Epoch publication requirement",
+      type: "requirement",
+      body: "# Requirement\n\nPublication waits until the recovered epoch is revalidated.",
+    });
+    await writePage(wikiRoot, "concepts/DecoyA.md", {
+      title: "Quartz recovery overview",
+      type: "concept",
+      body: "# Overview\n\nQuartz recovery telemetry is summarized here.",
+    });
+    await writePage(wikiRoot, "concepts/DecoyB.md", {
+      title: "Quartz entry catalog",
+      type: "concept",
+      body: "# Catalog\n\nQuartz entry metadata is catalogued here.",
+    });
+    await writePage(wikiRoot, "requirements/PoolOnly.md", {
+      title: "Quartz archival requirement",
+      type: "requirement",
+      body: "# Archive\n\nQuartz archival notes satisfy only the pool-level type check.",
+    });
+
+    const result = await retrieveWikiHybrid({
+      wikiRoot,
+      query: "Quartz recovery entry point",
+      maxResults: 4,
+      lexicalPoolSize: 8,
+      graphWeight: 3,
+      initialBudget: {
+        maxSeedCandidates: 1,
+        maxVisitedNodes: 8,
+        maxDepth: 0,
+        maxEvidence: 1,
+        tokenBudget: 500,
+      },
+      maximumBudget: {
+        maxSeedCandidates: 4,
+        maxVisitedNodes: 32,
+        maxDepth: 3,
+        maxEvidence: 4,
+        tokenBudget: 1_600,
+      },
+      coverageRequirements: { requiredPageTypes: ["requirement"] },
+    });
+
+    assert.equal(result.attempts[0]?.coverage.sufficient, true,
+      "the full W0 pool deliberately covers the required type");
+    assert.equal(result.attempts[0]?.coverage.budgetLimitedGaps.includes("required_type:requirement"), true);
+    assert.equal(result.wideningLevel, 2);
+    assert.equal(result.graphResult.stats.maxDepthReached, 3);
+    assert.equal(result.hits.some((candidate) => candidate.path === "concepts/Target.md"), true);
+  });
+});
+
 test("W3 invokes an explicit fallback only after W0-W2 remain insufficient", async () => {
   await withWiki("knowledge-rail-widen-fallback-", async (wikiRoot) => {
     await writePage(wikiRoot, "requirements/Seed.md", {

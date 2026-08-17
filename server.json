@@ -8,12 +8,12 @@
     "source": "github",
     "id": "1229624545"
   },
-  "version": "2.1.0",
+  "version": "2.1.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "knowledge-rail",
-      "version": "2.1.0",
+      "version": "2.1.1",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

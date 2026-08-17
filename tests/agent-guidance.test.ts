@@ -61,6 +61,7 @@ test("action schemas reject incomplete calls before an operation can mutate stat
   const ingest = tools.get("knowledge_ingest")!.config.inputSchema;
   const code = tools.get("knowledge_code")!.config.inputSchema;
   const document = tools.get("knowledge_document")!.config.inputSchema;
+  const admin = tools.get("knowledge_admin")!.config.inputSchema;
 
   assert.equal(page.safeParse({ action: "edit", path: "a.md" }).success, false);
   assert.equal(page.safeParse({ action: "read", path: "a.md", resource_uri: "knowledge-rail://page/a.md" }).success, false);
@@ -68,6 +69,8 @@ test("action schemas reject incomplete calls before an operation can mutate stat
   assert.equal(ingest.safeParse({ action: "apply_claims", normalized_filename: "a.md", segment_id: "seg-x" }).success, false);
   assert.equal(ingest.safeParse({ action: "record_segment", normalized_filename: "a.md", segment_id: "seg-x" }).success, false);
   assert.equal(code.safeParse({ action: "record_fallback", query: "x" }).success, false);
+  assert.equal(admin.safeParse({ action: "drift", scope: "paths" }).success, false);
+  assert.equal(admin.safeParse({ action: "drift", scope: "paths", paths: ["src"] }).success, true);
   assert.equal(page.safeParse({ action: "delete", path: "a.md" }).success, true);
 });
 
@@ -90,6 +93,24 @@ test("tool results provide one machine-readable next action without a menu round
       requiredArguments: ["mode", "objective"],
       suggestedArguments: { mode: "task" },
     });
+    const drift = await tools.get("knowledge_admin")!.handler({ action: "drift" }, emptyContext);
+    assert.equal(drift.structuredContent?.state, "drift_complete");
+    assert.equal(drift.structuredContent?.nextAction, null);
+    assert.deepEqual(
+      (drift.structuredContent?.summary as { checkedAnchors?: number; driftSuspected?: number }),
+      {
+        checkedAt: (drift.structuredContent?.summary as { checkedAt?: string }).checkedAt,
+        scope: "all",
+        paths: [],
+        totalAnchors: 0,
+        checkedAnchors: 0,
+        fresh: 0,
+        driftSuspected: 0,
+        anchorUnresolvable: 0,
+        topDrifted: [],
+        recommendedClaimIds: [],
+      }
+    );
     await fs.writeFile(path.join(projectRoot, "docs", "client", "source.md"), "verified source", "utf8");
 
     const page = [

@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-08-18
+
+### Added
+
+- Added durable normalized code-range anchors to code-targeted Evidence IR claims, best-effort anchor backfill during migration apply, and a deterministic `knowledge_admin action="drift"` check with global and path-scoped modes.
+- Added derived drift state and explicit `stale`/`drift_suspected` context gaps in compact and full task-context responses.
+- Added a pinned drift-verdict gate covering unchanged code, formatting-only edits, substantive changes, deleted files, invalid ranges, parser upgrades, and a 1,000-anchor workload.
+
+### Fixed
+
+- Progressive widening now stops on coverage of the evidence actually returned to the model, while preserving full-pool coverage as the missing-vs-budget-limited oracle; task manifests expose display-budget gaps and per-attempt graph depth.
+- Restored conservative single-word proper-noun coverage (including named `Payment`/`System` concepts) without accepting substring-only token matches.
+- Scoped the missing-embedding notice to each active workspace and eliminated the duplicate coverage snapshot when no display subset is supplied.
+- Extended the pinned GAP fixture from 22 to 25 cases and added an enforced W2/depth-3 progressive-widening probe.
+
+### Changed
+
+- Stale code-backed pages remain traceable in returned evidence but no longer satisfy clean evidence buckets or change-impact claims until re-verified.
+
 ## [2.1.0] - 2026-08-18
 
 ### Added
@@ -119,7 +138,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Initial local-first MCP server with persistent evidence-backed knowledge, bounded retrieval, document workflows, and eight public `knowledge_*` tools.
 - Multi-workspace loopback HTTP gateway, opaque per-chat bindings, desktop adapter, and portable npm/npx distribution.
 
-[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.1.1...HEAD
+[2.1.1]: https://github.com/Deviank88/KnowledgeRail/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.5...v2.1.0
 [2.0.5]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.4...v2.0.5
 [2.0.4]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.3...v2.0.4
