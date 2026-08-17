@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://cdn.jsdelivr.net/npm/knowledge-rail@2.0.5/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
+  <img src="https://cdn.jsdelivr.net/npm/knowledge-rail@2.1.0/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
 </p>
 
 <h1 align="center">KnowledgeRail</h1>
@@ -8,7 +8,7 @@ KnowledgeRail is a local-first MCP server that turns project documentation and s
 
 It is designed for agents that need to understand, change, review, or document a codebase without loading the whole repository into the model context. Retrieval is bounded, provenance is preserved, missing evidence is reported explicitly, and difficult queries widen progressively instead of silently losing relevant information.
 
-> **Current status:** stable release `2.0.5`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
+> **Current status:** stable release `2.1.0`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
 
 ## What it provides
 
@@ -39,7 +39,7 @@ KnowledgeRail ships no browser or document renderer. Mermaid source remains ordi
 Run this from any directory inside the project you opened in VS Code, Cursor, a terminal, or another context-aware coding client:
 
 ```bash
-npx -y knowledge-rail@2.0.5
+npx -y knowledge-rail@2.1.0
 ```
 
 No project path is needed in the persistent MCP configuration. KnowledgeRail discovers the opened project independently for each process, so project X and project Y can be used at the same time by different agent sessions.
@@ -73,7 +73,7 @@ Use the standard `stdio` server shape once. Do not hard-code one repository:
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.0.5"]
+      "args": ["-y", "knowledge-rail@2.1.0"]
     }
   }
 }
@@ -105,7 +105,7 @@ A desktop chat does not open a filesystem folder, so it cannot safely infer a pr
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.0.5", "desktop"]
+      "args": ["-y", "knowledge-rail@2.1.0", "desktop"]
     }
   }
 }
@@ -118,10 +118,10 @@ In a new chat, ask KnowledgeRail to list workspaces, choose one entry, and confi
 Projects opened successfully by an IDE/terminal are added to the local catalog automatically without changing their clean eight-tool workflow. Operators can also manage catalog metadata locally:
 
 ```bash
-npx -y knowledge-rail@2.0.5 workspace list
-npx -y knowledge-rail@2.0.5 workspace register
-npx -y knowledge-rail@2.0.5 workspace register /absolute/project/path
-npx -y knowledge-rail@2.0.5 workspace unregister ws_example
+npx -y knowledge-rail@2.1.0 workspace list
+npx -y knowledge-rail@2.1.0 workspace register
+npx -y knowledge-rail@2.1.0 workspace register /absolute/project/path
+npx -y knowledge-rail@2.1.0 workspace unregister ws_example
 ```
 
 Registration never copies, uploads, scans the disk, or deletes project files. `workspace register` without a path discovers only upward from cwd.
@@ -131,7 +131,7 @@ Registration never copies, uploads, scans the disk, or deletes project files. `w
 Start one gateway for many concurrent local clients and workspaces:
 
 ```bash
-npx -y knowledge-rail@2.0.5 --transport http
+npx -y knowledge-rail@2.1.0 --transport http
 ```
 
 The default endpoint is `http://127.0.0.1:3333/mcp`; liveness only is available at `/healthz`. MCP requests require the random credential stored in the OS-protected per-user KnowledgeRail state directory. The desktop adapter reads it automatically, so it never belongs in project configuration or a repository.
@@ -189,7 +189,7 @@ agent reasoning and project work
     └──→ knowledge_document_context ──→ knowledge_document
 ```
 
-For a normal task, the agent calls `knowledge_context mode="task"` with a concrete objective. KnowledgeRail searches the canonical wiki and its derived lexical, graph, passage, code, and optional semantic indexes, ranks the available evidence, and returns a compact context envelope. Large page bodies are exposed as `knowledge-rail://` links instead of being inserted wholesale into the response; the client reads only the selected passages. If the token budget alone excluded relevant evidence, the returned `nextAction` proposes one bounded widening step. Missing, stale, contradictory, or unresolved evidence remains an explicit gap and is never filled by guessing.
+For a normal task, the agent calls `knowledge_context mode="task"` with a concrete objective. KnowledgeRail searches the canonical wiki and its derived lexical, graph, passage, code, and optional semantic indexes, ranks the available evidence, and returns a compact context envelope. Large page bodies are exposed as `knowledge-rail://` links instead of being inserted wholesale into the response; the client reads only the selected passages. Coverage is assessed over the full retrieved candidate set, independently of the smaller display budget, so retrieved-but-omitted evidence is reported as `budget_limited` instead of falsely described as absent. If the token budget alone excluded relevant evidence, the returned `nextAction` proposes one bounded widening step. Missing, stale, contradictory, or unresolved evidence remains an explicit gap and is never filled by guessing.
 
 Durable knowledge lives as Markdown under `wiki/`. Direct page operations preserve caller-owned content byte-for-byte. Larger source sets use `knowledge_ingest`: normalized sources are processed in bounded segments, claims are recorded in durable Evidence IR, coverage is reconciled, and finalization is blocked until every segment is represented or explicitly classified. Derived retrieval and graph indexes are refreshed from this canonical state rather than replacing it.
 
@@ -209,7 +209,7 @@ knowledge_context {
 }
 ```
 
-On MCP `2026-07-28`, `knowledge_context` returns selected `knowledge-rail://` resource links. The client materializes only the passages it needs with `resources/read`; clients that do not expose resource reads can use `knowledge_page action="read"` with the exact URI. When evidence was omitted only because of the budget, `nextAction` provides the next bounded widening request. Semantic, stale, or unresolved gaps are returned without a futile widening loop and must remain explicit unknowns.
+On MCP `2026-07-28`, `knowledge_context` returns selected `knowledge-rail://` resource links. The client materializes only the passages it needs with `resources/read`; clients that do not expose resource reads can use `knowledge_page action="read"` with the exact URI. The envelope always reports `retrieval.coverageMode` as `lexical` or `semantic`, plus any graceful-degradation warning. When evidence was omitted only because of the budget, `nextAction` provides the next bounded widening request. Semantic, stale, or unresolved gaps are returned without a futile widening loop and must remain explicit unknowns.
 
 The consolidated catalog is deliberately action-oriented, but validation remains action-specific. For example, `knowledge_page action="edit"` is rejected without `path`, `old_string`, and `new_string`; ingestion cannot finalize before complete coverage; document review reports blockers and delivery readiness for the exact inspected Markdown.
 
@@ -226,7 +226,7 @@ Use `evidence_status` for claims and recovery debt; it is intentionally separate
 
 ### Why context has a token budget
 
-The budget bounds evidence sent to the model; it does not declare omitted knowledge irrelevant. If coverage is insufficient because of the budget, the guided read workflow widens from `2,000` to `4,000`, `8,000`, and at most `12,000` heuristic tokens. Widening stops as soon as no evidence is budget-omitted; any remaining semantic or freshness gap is exposed rather than guessed.
+The budget bounds evidence sent to the model; it does not declare omitted knowledge irrelevant. If coverage is insufficient because of the budget, the guided read workflow widens both `max_evidence` (up to 20) and the heuristic token allowance from `2,000` to `4,000`, `8,000`, and at most `12,000`. Widening stops as soon as no evidence is budget-omitted; any remaining semantic or freshness gap is exposed rather than guessed.
 
 `response_detail="compact"` is recommended for normal agent use. `full` keeps the complete historical TaskContext payload for diagnostics and integrations that need it.
 
@@ -286,7 +286,18 @@ Common OCR variables:
 | `KNOWLEDGE_RAIL_OCR_TIMEOUT_MS` | Positive request timeout in milliseconds. |
 | `KNOWLEDGE_RAIL_OCR_RETRIES` | Retry count. |
 
-Semantic retrieval is optional. Without it, deterministic lexical/graph/passage retrieval remains available. To enable an OpenAI-compatible embeddings endpoint, set all three required variables:
+Semantic retrieval and semantic-aware coverage are optional. Without an embedding provider, deterministic lexical/graph/passage retrieval and delimiter-, stemming-, and artifact-equivalence-aware coverage remain fully available offline. With a provider, query facets and entities are additionally checked against indexed passage embeddings, which improves GAP precision. If the configured provider is unavailable, times out, or returns incompatible vectors, `knowledge_context` falls back to lexical coverage and reports the warning instead of failing.
+
+The recommended local-first setup is an OpenAI-compatible Ollama endpoint; choose a pinned local model and use its declared vector dimensions:
+
+```text
+KNOWLEDGE_RAIL_EMBEDDING_BASE_URL=http://localhost:11434/v1
+KNOWLEDGE_RAIL_EMBEDDING_MODEL=<pinned-local-embedding-model>
+KNOWLEDGE_RAIL_EMBEDDING_MODEL_VERSION=<pinned-version>
+KNOWLEDGE_RAIL_EMBEDDING_DIMENSIONS=<model-dimensions>
+```
+
+A remote OpenAI-compatible endpoint is also supported when explicitly configured:
 
 ```text
 KNOWLEDGE_RAIL_EMBEDDING_BASE_URL=https://provider.example/v1
@@ -295,6 +306,11 @@ KNOWLEDGE_RAIL_EMBEDDING_DIMENSIONS=1536
 ```
 
 Optional embedding variables are `KNOWLEDGE_RAIL_EMBEDDING_API_KEY`, `KNOWLEDGE_RAIL_EMBEDDING_MODEL_VERSION`, and `KNOWLEDGE_RAIL_EMBEDDING_TIMEOUT_MS`.
+
+| Coverage mode | Provider | Behavior |
+| --- | --- | --- |
+| `lexical` | none, or provider degraded | Offline deterministic coverage with normalized facets/entities and shared artifact equivalences. |
+| `semantic` | configured and healthy | Batched embedding similarity over indexed passages, with the same bounded display and explicit-gap guarantees. |
 
 ## Compatibility
 

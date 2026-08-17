@@ -122,6 +122,10 @@ export class OpenAiCompatibleEmbeddingProvider implements EmbeddingProvider {
     return this.embed(texts);
   }
 
+  embedQueries(texts: readonly string[]): Promise<readonly (readonly number[])[]> {
+    return this.embed(texts);
+  }
+
   async embedQuery(text: string): Promise<readonly number[]> {
     return (await this.embed([text]))[0]!;
   }

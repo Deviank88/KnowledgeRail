@@ -11,6 +11,8 @@ export interface EmbeddingProvider {
   readonly descriptor: EmbeddingProviderDescriptor;
   embedDocuments(texts: readonly string[]): Promise<readonly (readonly number[])[]>;
   embedQuery(text: string): Promise<readonly number[]>;
+  /** Optional batch form used to keep semantic coverage to one provider round trip. */
+  embedQueries?(texts: readonly string[]): Promise<readonly (readonly number[])[]>;
 }
 
 export interface AnnEngineDescriptor {
@@ -81,11 +83,35 @@ export interface SemanticSearchResult {
   diagnostics: SemanticSearchDiagnostics;
 }
 
+export interface SemanticCoverageQuery {
+  id: string;
+  text: string;
+}
+
+export interface SemanticCoveragePageScore {
+  pagePath: string;
+  score: number;
+}
+
+export interface SemanticCoverageScore {
+  id: string;
+  pages: SemanticCoveragePageScore[];
+}
+
 export interface SemanticIndex {
   readonly descriptor: SemanticIndexDescriptor;
   upsertPassages(pagePath: string, passages: WikiPassage[]): Promise<void>;
   removePage(pagePath: string): Promise<void>;
   search(query: string, k: number): Promise<SemanticHit[]>;
+  /**
+   * Scores coverage concepts against indexed passages on the requested pages.
+   * Implementations that cannot expose this operation still support semantic
+   * retrieval; callers gracefully retain lexical coverage in that case.
+   */
+  assessCoverage?(
+    queries: readonly SemanticCoverageQuery[],
+    pagePaths: readonly string[]
+  ): Promise<SemanticCoverageScore[]>;
 }
 
 export interface SynchronizableSemanticIndex extends SemanticIndex {

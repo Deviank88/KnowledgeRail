@@ -1,6 +1,6 @@
 {
   "name": "knowledge-rail",
-  "version": "2.0.5",
+  "version": "2.1.0",
   "mcpName": "io.github.Deviank88/knowledge-rail",
   "description": "Local-first MCP 2.0 server for persistent, evidence-backed project knowledge and task context",
   "license": "Apache-2.0",
@@ -64,6 +64,7 @@
     "eval:task-context:gate": "tsx benchmarks/task-context-compiler-baseline-gate.ts",
     "eval:semantic": "tsx benchmarks/semantic-retrieval-eval.ts",
     "eval:semantic:gate": "tsx benchmarks/semantic-retrieval-baseline-gate.ts",
+    "eval:coverage": "tsx benchmarks/coverage-quality-eval.ts",
     "eval:migration": "tsx benchmarks/legacy-migration-eval.ts",
     "eval:migration:gate": "tsx benchmarks/legacy-migration-baseline-gate.ts",
     "eval:quality": "tsx benchmarks/document-quality-eval.ts",

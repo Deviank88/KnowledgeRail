@@ -39,6 +39,7 @@ export type TaskContextEvidenceField =
 export interface TaskContextAttempt {
   level: RetrievalWideningLevel;
   hitCount: number;
+  coverageCandidateCount: number;
   visitedNodes: number;
   visitedEdges: number;
   maxVisitedNodes: number;
@@ -49,6 +50,8 @@ export interface TaskContextAttempt {
 
 export interface TaskContextRetrieval {
   strategy: "hybrid_progressive_widening";
+  coverageMode: RetrievalCoverage["coverageMode"];
+  coverageWarnings: string[];
   query: string;
   profile: RetrievalProfile;
   wideningLevel: RetrievalWideningLevel;
@@ -56,6 +59,7 @@ export interface TaskContextRetrieval {
   evidenceGaps: string[];
   estimatedContextTokens: number;
   hitCount: number;
+  coverageCandidateCount: number;
   selectedEvidenceCount: number;
   fallbackUsed: boolean;
   fullGraphScanAttempted: false;
@@ -520,6 +524,7 @@ function knowledgeGaps(params: {
   buckets: EvidenceBuckets;
   policy: IntentPolicy;
   selected: readonly ClassifiedCandidate[];
+  available: readonly ClassifiedCandidate[];
   requestedPaths: readonly string[];
   omittedEvidenceCount: number;
   tokenBudget: number;
@@ -529,19 +534,30 @@ function knowledgeGaps(params: {
     kind: gapKind(gap),
     description: `Hybrid coverage gap: ${gap}.`,
   }));
+  gaps.push(...params.coverage.budgetLimitedGaps.map((gap) => ({
+    kind: "budget_limited" as const,
+    description: `Hybrid coverage evidence was retrieved but omitted by the display budget: ${gap}.`,
+  })));
   for (const category of params.policy.requiredCategories) {
     if (params.buckets[category].length > 0) continue;
+    const availableBeyondDisplay = params.available.some((candidate) => candidate.categories.has(category));
     gaps.push({
-      kind: "missing_evidence",
-      description: `No ${CATEGORY_LABELS[category]} was recovered for intent ${params.intent}.`,
+      kind: availableBeyondDisplay ? "budget_limited" : "missing_evidence",
+      description: availableBeyondDisplay
+        ? `${CATEGORY_LABELS[category]} was retrieved but omitted by the display budget for intent ${params.intent}.`
+        : `No ${CATEGORY_LABELS[category]} was recovered for intent ${params.intent}.`,
     });
   }
   const selectedPaths = new Set(params.selected.map((candidate) => candidate.hit.path));
+  const availablePaths = new Set(params.available.map((candidate) => candidate.hit.path));
   for (const requestedPath of params.requestedPaths) {
     if (!selectedPaths.has(requestedPath)) {
+      const availableBeyondDisplay = availablePaths.has(requestedPath);
       gaps.push({
-        kind: "missing_evidence",
-        description: `Requested changed component was not recovered by the bounded hybrid path: ${requestedPath}.`,
+        kind: availableBeyondDisplay ? "budget_limited" : "missing_evidence",
+        description: availableBeyondDisplay
+          ? `Requested changed component was retrieved but omitted by the display budget: ${requestedPath}.`
+          : `Requested changed component was not recovered by the bounded hybrid path: ${requestedPath}.`,
       });
     }
   }
@@ -564,9 +580,12 @@ function knowledgeGaps(params: {
     });
   }
   if (params.intent === "document" && !params.selected.some((candidate) => candidate.hit.sources.length > 0)) {
+    const provenanceAvailable = params.available.some((candidate) => candidate.hit.sources.length > 0);
     gaps.push({
-      kind: "missing_evidence",
-      description: "No source provenance was recovered for the document task.",
+      kind: provenanceAvailable ? "budget_limited" : "missing_evidence",
+      description: provenanceAvailable
+        ? "Source provenance was retrieved but omitted by the display budget for the document task."
+        : "No source provenance was recovered for the document task.",
     });
   }
   if (params.omittedEvidenceCount > 0) {
@@ -670,6 +689,7 @@ function contextWithoutSize(params: {
   objective: string;
   requestedPaths: readonly string[];
   selected: readonly ClassifiedCandidate[];
+  available: readonly ClassifiedCandidate[];
   allHitCount: number;
   policy: IntentPolicy;
   graph: TaskGraphSlice;
@@ -684,6 +704,7 @@ function contextWithoutSize(params: {
     buckets,
     policy: params.policy,
     selected: params.selected,
+    available: params.available,
     requestedPaths: params.requestedPaths,
     omittedEvidenceCount,
     tokenBudget: params.tokenBudget,
@@ -799,16 +820,21 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
       tokenBudget,
     },
   });
-  const candidates: ClassifiedCandidate[] = hybrid.hits.map((hit) => ({
+  const availableCandidates: ClassifiedCandidate[] = hybrid.coverageHits.map((hit) => ({
     hit,
     categories: classifyCandidate(hit),
   }));
+  const candidateByPath = new Map(availableCandidates.map((candidate) => [candidate.hit.path, candidate] as const));
+  const candidates = hybrid.hits
+    .map((hit) => candidateByPath.get(hit.path))
+    .filter((candidate): candidate is ClassifiedCandidate => candidate !== undefined);
   const runtime = await getRuntimeWikiGraph(params.wikiRoot, false, {
     persist: params.persistDerivedIndexes ?? false,
   });
+  const availableGraph = localTaskGraph(runtime, availableCandidates);
+  markGraphDependencies(availableCandidates, availableGraph);
+  markContradictionGroups(availableCandidates);
   const taskGraph = localTaskGraph(runtime, candidates);
-  markGraphDependencies(candidates, taskGraph);
-  markContradictionGroups(candidates);
   const ordered = orderCandidates(candidates, policy.priorities);
   for (const candidate of ordered) {
     const categoryLabels = [...candidate.categories]
@@ -821,6 +847,8 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
   }
   const retrieval: TaskContextRetrieval = {
     strategy: "hybrid_progressive_widening",
+    coverageMode: hybrid.coverage.coverageMode,
+    coverageWarnings: [...hybrid.coverage.warnings],
     query: retrievalQuery,
     profile,
     wideningLevel: hybrid.wideningLevel,
@@ -828,12 +856,14 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
     evidenceGaps: [...hybrid.coverage.evidenceGaps],
     estimatedContextTokens: hybrid.estimatedContextTokens,
     hitCount: hybrid.hits.length,
+    coverageCandidateCount: hybrid.coverageHits.length,
     selectedEvidenceCount: hybrid.hits.length,
     fallbackUsed: hybrid.attempts.some((attempt) => attempt.fallbackUsed),
     fullGraphScanAttempted: false,
     attempts: hybrid.attempts.map((attempt) => ({
       level: attempt.level,
       hitCount: attempt.hitCount,
+      coverageCandidateCount: attempt.coverageCandidateCount,
       visitedNodes: attempt.visitedNodes,
       visitedEdges: attempt.visitedEdges,
       maxVisitedNodes: attempt.budget.maxVisitedNodes,
@@ -849,6 +879,7 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
     objective,
     requestedPaths,
     selected,
+    available: availableCandidates,
     allHitCount: ordered.length,
     policy,
     graph: taskGraph,
@@ -863,6 +894,7 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
       objective,
       requestedPaths,
       selected,
+      available: availableCandidates,
       allHitCount: ordered.length,
       policy,
       graph: taskGraph,

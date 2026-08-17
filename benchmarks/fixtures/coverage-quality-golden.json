@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "cases": [
+    { "id": "exact-facet", "query": "audit", "displayBody": "Audit events are retained.", "expectedGap": false },
+    { "id": "stem-deployment", "query": "deployment", "displayBody": "The service is deployed safely.", "expectedGap": false },
+    { "id": "entity-delimiter", "query": "OrderService", "displayTitle": "Order Service", "displayBody": "Order Service behavior.", "expectedGap": false },
+    { "id": "requirement-equivalence", "query": "behavior", "displayBody": "Approved behavior.", "displayType": "request", "requiredPageTypes": ["requirement"], "expectedGap": false },
+    { "id": "test-equivalence", "query": "regression", "displayBody": "Regression evidence.", "displayType": "analysis", "displayTags": ["test"], "requiredPageTypes": ["test_result"], "expectedGap": false },
+    { "id": "rank-nine-facet", "query": "rollout", "displayBody": "Unrelated billing notes.", "candidateBody": "The rollout is staged.", "expectedGap": false },
+    { "id": "plural-policy", "query": "policies", "displayBody": "The policy is enforced.", "expectedGap": false },
+    { "id": "italian-normalization", "query": "implementazione", "displayBody": "Implementare il servizio in modo atomico.", "displayType": "implementation", "expectedGap": false },
+    { "id": "semantic-auth", "query": "auth", "displayBody": "Authentication is mandatory.", "semanticCoverage": true, "expectedGap": false },
+    { "id": "semantic-rollout", "query": "deployment", "displayBody": "The rollout is staged.", "semanticCoverage": true, "expectedGap": false },
+    { "id": "semantic-setup", "query": "setup", "displayBody": "Configuration is loaded locally.", "semanticCoverage": true, "expectedGap": false },
+    { "id": "semantic-billing", "query": "billing", "displayBody": "Invoicing runs nightly.", "semanticCoverage": true, "expectedGap": false },
+    { "id": "semantic-outage", "query": "outage", "displayBody": "The service failure was contained.", "semanticCoverage": true, "expectedGap": false },
+    { "id": "semantic-customer", "query": "customer", "displayBody": "The client owns the approval policy.", "semanticCoverage": true, "expectedGap": false },
+    { "id": "semantic-queue", "query": "queue", "displayBody": "The backlog drains in FIFO order.", "semanticCoverage": true, "expectedGap": false },
+    { "id": "missing-facet", "query": "encryption", "displayBody": "Billing events are retained.", "expectedGap": true },
+    { "id": "missing-entity", "query": "PaymentGateway", "displayBody": "The invoice worker is documented.", "expectedGap": true },
+    { "id": "missing-requirement", "query": "policy", "displayBody": "Policy analysis only.", "displayType": "analysis", "requiredPageTypes": ["requirement"], "expectedGap": true },
+    { "id": "missing-test", "query": "verification", "displayBody": "Verification is planned.", "displayType": "request", "requiredPageTypes": ["test_result"], "expectedGap": true },
+    { "id": "missing-source-diversity", "query": "audit", "displayBody": "Audit notes.", "displaySources": ["docs/one.md"], "minimumSourceDiversity": 2, "expectedGap": true },
+    { "id": "missing-contradiction", "query": "limit", "displayBody": "The limit is documented once.", "requireContradictionCheck": true, "expectedGap": true },
+    { "id": "empty-corpus", "query": "retention", "expectedGap": true }
+  ]
+}

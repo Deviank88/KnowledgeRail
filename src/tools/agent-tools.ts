@@ -571,6 +571,7 @@ export function registerAgentTools(
             objective: args.objective,
             intent: args.intent,
             retrieval_profile: "coverage",
+            max_evidence: Math.min(args.max_evidence * 2, 20),
             heuristic_token_budget: Math.min(args.heuristic_token_budget * 2, 12_000),
           },
         } : null,

@@ -6,6 +6,10 @@ import {
   DEFAULT_SEMANTIC_FIXTURE,
   evaluateSemanticRetrieval,
 } from "./semantic-retrieval-eval.js";
+import {
+  DEFAULT_COVERAGE_FIXTURE,
+  evaluateCoverageQuality,
+} from "./coverage-quality-eval.js";
 
 interface SemanticBaseline {
   version: number;
@@ -27,6 +31,15 @@ interface SemanticBaseline {
   maximumNoBenefitTokenGrowthQueries: number;
   maximumFullVectorScanAttempts: number;
   maximumAnnCandidateRatio: number;
+  coverageFixtureVersion: number;
+  coverageFixtureSha256: string;
+  minimumCoverageCaseCount: number;
+  minimumLexicalGapPrecision: number;
+  minimumSemanticGapPrecision: number;
+  minimumLexicalPrecisionDelta: number;
+  minimumSemanticPrecisionDelta: number;
+  maximumLexicalSilentMiss: number;
+  maximumSemanticSilentMiss: number;
 }
 
 interface FixtureLocator {
@@ -58,6 +71,8 @@ async function main(): Promise<void> {
   const fixture = JSON.parse(fixtureBytes.toString("utf8")) as FixtureLocator;
   const baseFixtureBytes = await fs.readFile(path.resolve(path.dirname(fixturePath), fixture.baseFixture));
   const report = await evaluateSemanticRetrieval(fixturePath);
+  const coverageFixtureBytes = await fs.readFile(DEFAULT_COVERAGE_FIXTURE);
+  const coverage = await evaluateCoverageQuality();
   const metrics = report.metrics;
   const failures: string[] = [];
 
@@ -80,6 +95,25 @@ async function main(): Promise<void> {
   check(failures, "NoBenefitTokenGrowthQueries", metrics.NoBenefitTokenGrowthQueries <= baseline.maximumNoBenefitTokenGrowthQueries, metrics.NoBenefitTokenGrowthQueries);
   check(failures, "FullVectorScanAttempts", metrics.FullVectorScanAttempts <= baseline.maximumFullVectorScanAttempts, metrics.FullVectorScanAttempts);
   check(failures, "MaxAnnCandidateRatio", metrics.MaxAnnCandidateRatio <= baseline.maximumAnnCandidateRatio, metrics.MaxAnnCandidateRatio);
+  check(failures, "coverageFixtureVersion", coverage.fixtureVersion === baseline.coverageFixtureVersion, coverage.fixtureVersion);
+  check(failures, "coverageFixtureSha256", digest(coverageFixtureBytes) === baseline.coverageFixtureSha256, digest(coverageFixtureBytes));
+  check(failures, "coverageCaseCount", coverage.caseCount >= baseline.minimumCoverageCaseCount, coverage.caseCount);
+  check(failures, "LexicalGapPrecision", coverage.lexical.gapPrecision >= baseline.minimumLexicalGapPrecision, coverage.lexical.gapPrecision);
+  check(failures, "SemanticGapPrecision", coverage.semantic.gapPrecision >= baseline.minimumSemanticGapPrecision, coverage.semantic.gapPrecision);
+  check(
+    failures,
+    "LexicalGapPrecisionDelta",
+    coverage.lexical.gapPrecision - coverage.baseline205.gapPrecision >= baseline.minimumLexicalPrecisionDelta,
+    coverage.lexical.gapPrecision - coverage.baseline205.gapPrecision
+  );
+  check(
+    failures,
+    "SemanticGapPrecisionDelta",
+    coverage.semantic.gapPrecision - coverage.lexical.gapPrecision >= baseline.minimumSemanticPrecisionDelta,
+    coverage.semantic.gapPrecision - coverage.lexical.gapPrecision
+  );
+  check(failures, "LexicalSilentMiss", coverage.lexical.silentMiss <= baseline.maximumLexicalSilentMiss, coverage.lexical.silentMiss);
+  check(failures, "SemanticSilentMiss", coverage.semantic.silentMiss <= baseline.maximumSemanticSilentMiss, coverage.semantic.silentMiss);
 
   for (const query of report.queries) {
     check(failures, `${query.id}.recallInvariant`, query.semanticRecall >= query.baselineRecall, `${query.baselineRecall}->${query.semanticRecall}`);

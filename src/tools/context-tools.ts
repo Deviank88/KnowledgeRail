@@ -35,8 +35,11 @@ function compactManifestText(manifest: TaskContext): string {
     `Intent: ${manifest.task.intent}`,
     `Objective: ${manifest.task.objective}`,
     `Retrieval: ${manifest.retrieval.strategy} W${manifest.retrieval.wideningLevel}; ` +
-      `coverage=${manifest.retrieval.coverageSufficient}; fallback=${manifest.retrieval.fallbackUsed}.`,
+      `coverage=${manifest.retrieval.coverageSufficient}; mode=${manifest.retrieval.coverageMode}; ` +
+      `fallback=${manifest.retrieval.fallbackUsed}.`,
   ];
+
+  for (const warning of manifest.retrieval.coverageWarnings) lines.push(`WARNING: ${warning}`);
 
   for (const field of TASK_CONTEXT_EVIDENCE_FIELDS) {
     const evidenceItems = manifest[field];
@@ -85,10 +88,13 @@ function compactStructuredContext(manifest: TaskContext) {
     gaps: manifest.unknowns,
     retrieval: {
       profile: manifest.retrieval.profile,
+      coverageMode: manifest.retrieval.coverageMode,
+      coverageWarnings: manifest.retrieval.coverageWarnings,
       wideningLevel: manifest.retrieval.wideningLevel,
       coverageSufficient: manifest.retrieval.coverageSufficient,
       evidenceGaps: manifest.retrieval.evidenceGaps,
       estimatedContextTokens: manifest.retrieval.estimatedContextTokens,
+      coverageCandidateCount: manifest.retrieval.coverageCandidateCount,
       selectedEvidenceCount: manifest.retrieval.selectedEvidenceCount,
       fallbackUsed: manifest.retrieval.fallbackUsed,
     },

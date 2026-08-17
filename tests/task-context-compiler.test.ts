@@ -197,6 +197,50 @@ test("compiler reports budget omissions instead of silently dropping evidence", 
   });
 });
 
+test("compiler distinguishes a cap-excluded required category from true absence", async () => {
+  await withFixture(async (wikiRoot) => {
+    const conceptPath = path.join(wikiRoot, "concepts", "CapBudget.md");
+    const requestPath = path.join(wikiRoot, "requests", "CapBudget.md");
+    await fs.mkdir(path.dirname(conceptPath), { recursive: true });
+    await fs.mkdir(path.dirname(requestPath), { recursive: true });
+    await fs.writeFile(conceptPath, [
+      "---", 'title: "CapBudget exact anchor"', "type: concept", "tags: [cap-budget]", "---", "",
+      "# CapBudget", "", "CapBudget CapBudget CapBudget exact overview anchor.",
+    ].join("\n"), "utf8");
+    await fs.writeFile(requestPath, [
+      "---", 'title: "Retrieved request"', "type: request", "tags: [cap-budget]", "---", "",
+      "# Request", "", "CapBudget requested behavior.",
+    ].join("\n"), "utf8");
+    clearRetrievalIndexes();
+    clearRuntimeWikiGraphs();
+    invalidateWikiGraph(wikiRoot);
+
+    const context = await compileTaskContext({
+      wikiRoot,
+      intent: "understand",
+      objective: "Understand CapBudget",
+      query: "CapBudget",
+      maxEvidence: 1,
+      heuristicTokenBudget: 2_000,
+      evidencePolicy: {
+        replaceDefaults: true,
+        requiredCategories: ["requirements"],
+        priorityCategories: ["requirements"],
+        requiredPageTypes: ["requirement"],
+      },
+    });
+
+    assert.equal(context.retrieval.coverageCandidateCount > context.retrieval.hitCount, true);
+    assert.equal(context.requirements.length, 0);
+    assert.equal(context.unknowns.some((gap) =>
+      gap.kind === "budget_limited" && gap.description.includes("requirements")
+    ), true);
+    assert.equal(context.unknowns.some((gap) =>
+      gap.kind === "missing_evidence" && gap.description.includes("requirements")
+    ), false);
+  });
+});
+
 test("documentation about contradiction handling is not itself conflicting evidence", async () => {
   await withFixture(async (wikiRoot) => {
     const pagePath = path.join(wikiRoot, "implementations", "EvidenceIrHandling.md");

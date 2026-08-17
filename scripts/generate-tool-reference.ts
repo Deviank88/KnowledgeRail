@@ -65,11 +65,18 @@ function renderTool(tool: CatalogTool): string {
   const required = new Set(tool.inputSchema.required ?? []);
   const properties = Object.entries(tool.inputSchema.properties ?? {});
   const actions = tool.inputSchema.properties?.action?.enum ?? tool.inputSchema.properties?.mode?.enum ?? [];
+  const coverageNote = tool.name === "knowledge_context"
+    ? "Task responses report `retrieval.coverageMode` (`lexical` or `semantic`) and `coverageWarnings`. " +
+      "Coverage uses the full fused candidate set while returned evidence remains bounded; relevant " +
+      "evidence excluded from display is `budget_limited`, not `missing_evidence`. Configured embedding " +
+      "provider failures degrade to lexical mode without failing the tool call."
+    : undefined;
   return [
     `## \`${tool.name}\``,
     "",
     tool.description ?? "",
     "",
+    ...(coverageNote ? [coverageNote, ""] : []),
     ...(actions.length > 0 ? [`Actions/modes: ${actions.map((value) => `\`${value}\``).join(", ")}.`, ""] : []),
     "| Parameter | Type / values | Required | Default | Description |",
     "|---|---|---:|---|---|",

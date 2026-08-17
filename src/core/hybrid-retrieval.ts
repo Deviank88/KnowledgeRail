@@ -3,10 +3,12 @@ import {
   assessRetrievalCoverage,
   estimateRetrievalContextTokens,
   extractQueryEntities,
+  semanticCoverageQueries,
   type RetrievalBudget,
   type RetrievalCoverage,
   type RetrievalCoverageRequirements,
 } from "./retrieval-coverage.js";
+import { logger } from "./logger.js";
 import {
   getWikiPageRecords,
   searchRetrievalIndex,
@@ -24,6 +26,7 @@ import type {
   AnnSearchDiagnostics,
   SemanticIndex,
   SemanticIndexDescriptor,
+  SemanticCoverageScore,
   SynchronizableSemanticIndex,
 } from "./semantic/types.js";
 
@@ -53,6 +56,7 @@ export interface HybridRetrievalAttempt {
   budget: RetrievalBudget;
   coverage: RetrievalCoverage;
   hitCount: number;
+  coverageCandidateCount: number;
   estimatedContextTokens: number;
   lexicalPoolSize: number;
   semanticCandidateCount: number;
@@ -63,6 +67,8 @@ export interface HybridRetrievalAttempt {
 
 export interface HybridRetrievalResult {
   hits: HybridRetrievalHit[];
+  /** Full fused set used for coverage; never serialized as display evidence. */
+  coverageHits: HybridRetrievalHit[];
   lexicalHits: RetrievalHit[];
   semanticHits: RetrievalHit[];
   semantic: HybridSemanticDiagnostics;
@@ -129,6 +135,7 @@ export interface HybridRetrievalParams {
 
 interface AttemptResult {
   hits: HybridRetrievalHit[];
+  coverageHits: HybridRetrievalHit[];
   lexicalHits: RetrievalHit[];
   semanticHits: RetrievalHit[];
   semantic: HybridSemanticDiagnostics;
@@ -137,12 +144,16 @@ interface AttemptResult {
   lexicalPoolSize: number;
   semanticCandidateCount: number;
   fallbackUsed: boolean;
+  semanticIndex?: SemanticIndex;
 }
 
 interface ResolvedSemantic {
   hits: RetrievalHit[];
   diagnostics: HybridSemanticDiagnostics;
+  index?: SemanticIndex;
 }
+
+let missingEmbeddingNoticeEmitted = false;
 
 function positiveInteger(value: number | undefined, fallback: number): number {
   return Number.isInteger(value) && (value ?? 0) > 0 ? value! : fallback;
@@ -204,7 +215,16 @@ async function resolveSemantic(
     const index = request.semanticIndex ?? await configuredSemanticIndex(request.wikiRoot, {
       persist: request.persistDerivedIndexes,
     });
-    if (!index) return { hits: [], diagnostics: unavailable };
+    if (!index) {
+      if (!missingEmbeddingNoticeEmitted) {
+        missingEmbeddingNoticeEmitted = true;
+        logger.info("semantic-coverage", "lexical_mode_active", {
+          localOption: "Ollama",
+          configuration: "KNOWLEDGE_RAIL_EMBEDDING_*",
+        });
+      }
+      return { hits: [], diagnostics: unavailable };
+    }
     const poolSize = Math.min(1_000, Math.max(
       maxResults,
       positiveInteger(request.semanticPoolSize, Math.max(maxResults * 4, 20))
@@ -261,6 +281,7 @@ async function resolveSemantic(
     }
     return {
       hits: [...byPath.values()],
+      index,
       diagnostics: {
         enabled: true,
         available: true,
@@ -600,6 +621,7 @@ async function retrieveAttempt(params: {
   const hits = limitHitsByBudget(fused, maxResults, budget);
   return {
     hits,
+    coverageHits: fused,
     lexicalHits,
     semanticHits,
     semantic: semantic.diagnostics,
@@ -608,7 +630,59 @@ async function retrieveAttempt(params: {
     lexicalPoolSize,
     semanticCandidateCount: semanticHits.length,
     fallbackUsed: params.fallbackHits.length > 0,
+    semanticIndex: semantic.index,
   };
+}
+
+function lexicalCoverageWarning(semantic: HybridSemanticDiagnostics): string[] {
+  if (!semantic.enabled) return [];
+  if (semantic.error) {
+    return [`Semantic coverage degraded to lexical mode: ${semantic.error}`];
+  }
+  if (!semantic.available) {
+    return [
+      "Lexical coverage mode is active. Configure a local Ollama or remote OpenAI-compatible " +
+      "embedding provider with KNOWLEDGE_RAIL_EMBEDDING_* to improve GAP precision.",
+    ];
+  }
+  return ["Semantic retrieval is active, but this backend does not support semantic coverage; lexical coverage is active."];
+}
+
+async function assessAttemptCoverage(
+  request: HybridRetrievalParams,
+  result: AttemptResult
+): Promise<RetrievalCoverage> {
+  let coverageMode: RetrievalCoverage["coverageMode"] = "lexical";
+  let semanticScores: readonly SemanticCoverageScore[] = [];
+  let warnings = lexicalCoverageWarning(result.semantic);
+  if (result.semantic.available && result.semanticIndex?.assessCoverage) {
+    try {
+      semanticScores = await result.semanticIndex.assessCoverage(
+        semanticCoverageQueries(request.query, request.coverageRequirements),
+        result.coverageHits.map((hit) => hit.path)
+      );
+      coverageMode = "semantic";
+      warnings = [];
+    } catch (error: unknown) {
+      const safeError = safeSemanticError(error);
+      result.semantic = {
+        ...result.semantic,
+        available: false,
+        error: safeError,
+      };
+      warnings = [`Semantic coverage degraded to lexical mode: ${safeError}`];
+    }
+  }
+  return assessRetrievalCoverage({
+    query: request.query,
+    hits: result.coverageHits,
+    displayHits: result.hits,
+    graphResult: result.graphResult,
+    requirements: request.coverageRequirements,
+    coverageMode,
+    semanticScores,
+    warnings,
+  });
 }
 
 export async function retrieveWikiHybrid(
@@ -654,17 +728,13 @@ export async function retrieveWikiHybrid(
         return semanticPromise;
       },
     });
-    const coverage = assessRetrievalCoverage({
-      query: params.query,
-      hits: result.hits,
-      graphResult: result.graphResult,
-      requirements: params.coverageRequirements,
-    });
+    const coverage = await assessAttemptCoverage(params, result);
     attempts.push({
       level,
       budget,
       coverage,
       hitCount: result.hits.length,
+      coverageCandidateCount: result.coverageHits.length,
       estimatedContextTokens: result.estimatedContextTokens,
       lexicalPoolSize: result.lexicalPoolSize,
       semanticCandidateCount: result.semanticCandidateCount,
@@ -677,7 +747,10 @@ export async function retrieveWikiHybrid(
     finalCoverage = coverage;
     finalBudget = budget;
     finalLevel = level;
-    if (coverage.sufficient) break;
+    // The explicit coverage profile spends the bounded retrieval budget to
+    // maximize recall even after the known facets are covered. This avoids
+    // making graph depth depend on accidental false gaps from entity parsing.
+    if (coverage.sufficient && (params.profile !== "coverage" || level >= maxLevel)) break;
   }
 
   if (!finalAttempt || !finalCoverage) {
@@ -685,6 +758,7 @@ export async function retrieveWikiHybrid(
   }
   return {
     hits: finalAttempt.hits,
+    coverageHits: finalAttempt.coverageHits,
     lexicalHits: finalAttempt.lexicalHits,
     semanticHits: finalAttempt.semanticHits,
     semantic: finalAttempt.semantic,

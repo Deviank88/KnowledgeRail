@@ -1,12 +1,13 @@
 import type { SeededGraphQueryResult } from "./graph-runtime.js";
 import type { RetrievalHit } from "./retrieval-index.js";
-import {
-  normalizeSearchText,
-  queryCoverage,
-  tokenizeSearchText,
-} from "./text-analysis.js";
+import type { SemanticCoverageQuery, SemanticCoverageScore } from "./semantic/types.js";
+import { tokenizeSearchText } from "./text-analysis.js";
+
+export type RetrievalCoverageMode = "semantic" | "lexical";
 
 export interface RetrievalCoverage {
+  coverageMode: RetrievalCoverageMode;
+  warnings: string[];
   queryFacetCoverage: number;
   sourceDiversity: number;
   unresolvedEntities: string[];
@@ -14,6 +15,8 @@ export interface RetrievalCoverage {
   truncatedFrontierCount: number;
   contradictions: number;
   evidenceGaps: string[];
+  /** Gaps in the displayed subset that the full retrieved candidate set can cover. */
+  budgetLimitedGaps: string[];
   sufficient: boolean;
 }
 
@@ -54,6 +57,27 @@ const REQUIRED_TYPE_PATTERNS: ReadonlyArray<[string, RegExp]> = [
   ["analysis", /\b(incident|incidents|incidente|incidenti)\b/i],
 ];
 
+const COMPONENT_TYPES = new Set(["implementation", "api", "integration", "automation", "data_model"]);
+const SEMANTIC_FACET_THRESHOLD = 0.72;
+const SEMANTIC_ENTITY_THRESHOLD = 0.8;
+const SEMANTIC_ARTIFACT_THRESHOLD = 0.72;
+
+interface CoverageConcept {
+  id: string;
+  kind: "facet" | "entity" | "type";
+  value: string;
+  text: string;
+}
+
+interface CoverageSnapshot {
+  queryFacetCoverage: number;
+  sourceDiversity: number;
+  unresolvedEntities: string[];
+  unresolvedRelations: string[];
+  contradictions: number;
+  evidenceGaps: string[];
+}
+
 function uniqueStable(values: readonly string[]): string[] {
   return [...new Set(values)];
 }
@@ -67,14 +91,17 @@ function inferredRequiredTypes(query: string): string[] {
 export function extractQueryEntities(query: string): string[] {
   const subjectPattern = /\b(?:funzionamento|comportamento|architettura|contesto|functioning|behavior|behaviour|architecture|context)\s+(?:di|del|della|dei|degli|delle|su|sui|sulle|of|about|for)\s+(?:the\s+)?([A-Za-z][A-Za-z0-9_.#/-]*)/gi;
   const subjects = [...query.matchAll(subjectPattern)].map((match) => match[1]!).filter(Boolean);
-  const lexicalPattern = /\/?[A-Za-z][A-Za-z0-9_.]*(?:[-_/:#][A-Za-z0-9_.]+)+|\b[A-Z]{2,}[A-Z0-9]*\b|\b[A-Z][a-zA-Z]{2,}\b|\b\d{2,}\b/g;
+  const lexicalPattern = /\/?[A-Za-z][A-Za-z0-9_.]*(?:[-_/:#][A-Za-z0-9_.]+)+|\b[A-Z]{2,}[A-Z0-9]*\b|\b[A-Z][a-z]+(?:[A-Z][a-zA-Z0-9]*)+\b|\b\d{2,}\b/g;
   const lexical = [...query.matchAll(lexicalPattern)].flatMap((match) => {
     const candidate = match[0];
     const prefix = query.slice(Math.max(0, (match.index ?? 0) - 24), match.index ?? 0);
     if (/\b(?:client|cliente|project|progetto|system|sistema)\s+$/i.test(prefix)) return [];
     return [candidate];
   });
-  return uniqueStable([...subjects, ...lexical].filter((candidate) => {
+  const introduced = [...query.matchAll(/\b(?:il|lo|la|i|gli|le|un|una|the|a|an)\s+([A-Z][a-zA-Z]{2,})\b/g)]
+    .map((match) => match[1]!)
+    .filter(Boolean);
+  return uniqueStable([...subjects, ...lexical, ...introduced].filter((candidate) => {
     const normalized = candidate.toLowerCase();
     if (QUERY_STOP_WORDS.has(normalized)) return false;
     // Ordinary prose such as "automazioni/componenti" is not an identifier.
@@ -124,16 +151,142 @@ function searchableHitText(hit: RetrievalHit): string {
 }
 
 function relevantQueryTerms(query: string): string[] {
+  const entityTerms = new Set(extractQueryEntities(query).flatMap((entity) => tokenizeSearchText(entity)));
   return tokenizeSearchText(query).filter((term) =>
-    term.length >= 2 && !QUERY_STOP_WORDS.has(term)
+    term.length >= 2 && !QUERY_STOP_WORDS.has(term) && !entityTerms.has(term)
   );
 }
 
-function unresolvedEntities(query: string, hits: readonly RetrievalHit[]): string[] {
-  const haystack = normalizeSearchText(hits.map(searchableHitText).join(" "));
-  return extractQueryEntities(query).filter((entity) =>
-    !haystack.includes(normalizeSearchText(entity))
-  );
+function compactIdentifier(value: string): string {
+  return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function identifierAliases(hits: readonly RetrievalHit[]): Set<string> {
+  const aliases = new Set<string>();
+  for (const hit of hits) {
+    const rawTokens = searchableHitText(hit).normalize("NFKC").toLocaleLowerCase("en-US")
+      .match(/[\p{L}\p{N}]+/gu) ?? [];
+    for (let index = 0; index < rawTokens.length; index++) {
+      let value = "";
+      for (let width = 0; width < 3 && index + width < rawTokens.length; width++) {
+        value += rawTokens[index + width]!;
+        if (value.length >= 2) aliases.add(value);
+      }
+    }
+  }
+  return aliases;
+}
+
+function stemSearchTerm(value: string): string {
+  if (/[_./:#-]|\d/u.test(value) || value.length < 4) return value;
+  const englishSuffixes = ["izations", "isation", "ization", "ments", "ment", "ingly", "edly", "ing", "ies", "ed", "es", "s"];
+  for (const suffix of englishSuffixes) {
+    if (value.endsWith(suffix) && value.length - suffix.length >= 3) {
+      if (suffix === "ies") return `${value.slice(0, -suffix.length)}y`;
+      return value.slice(0, -suffix.length);
+    }
+  }
+  const italianSuffixes = [
+    "azioni", "azione", "amenti", "amento", "mente", "ando", "endo",
+    "ato", "ata", "ati", "ate", "are", "ere", "ire",
+  ];
+  for (const suffix of italianSuffixes) {
+    if (value.endsWith(suffix) && value.length - suffix.length >= 3) return value.slice(0, -suffix.length);
+  }
+  return value;
+}
+
+function lexicalCoverage(text: string, queryTerms: readonly string[]): number {
+  if (queryTerms.length === 0) return 0;
+  const tokens = new Set(tokenizeSearchText(text).flatMap((term) => [term, stemSearchTerm(term)]));
+  const matched = queryTerms.filter((term) =>
+    tokens.has(term) || tokens.has(stemSearchTerm(term))
+  ).length;
+  return matched / queryTerms.length;
+}
+
+function typeSemanticText(pageType: string): string {
+  if (pageType === "requirement") return "requirement requirements specification requested behavior";
+  if (pageType === "test_result") return "test tests verification regression result";
+  if (pageType === "implementation") return "implementation component service code integration";
+  return pageType.replace(/[_-]+/g, " ");
+}
+
+function entitySemanticText(entity: string): string {
+  return entity
+    .normalize("NFKC")
+    .replace(/([a-z\d])([A-Z])/g, "$1 $2")
+    .replace(/[_./:#-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function coverageConcepts(
+  query: string,
+  requirements: Required<RetrievalCoverageRequirements>
+): CoverageConcept[] {
+  return [
+    ...relevantQueryTerms(query).map((term, index) => ({
+      id: `facet:${index}`,
+      kind: "facet" as const,
+      value: term,
+      text: term,
+    })),
+    ...extractQueryEntities(query).map((entity, index) => ({
+      id: `entity:${index}`,
+      kind: "entity" as const,
+      value: entity,
+      text: entitySemanticText(entity),
+    })),
+    ...requirements.requiredPageTypes.map((pageType, index) => ({
+      id: `type:${index}`,
+      kind: "type" as const,
+      value: pageType,
+      text: typeSemanticText(pageType),
+    })),
+  ];
+}
+
+export function semanticCoverageQueries(
+  query: string,
+  explicit: RetrievalCoverageRequirements = {}
+): SemanticCoverageQuery[] {
+  const requirements = inferCoverageRequirements(query, explicit);
+  return coverageConcepts(query, requirements).map(({ id, text }) => ({ id, text }));
+}
+
+function semanticScoresByConcept(scores: readonly SemanticCoverageScore[]): Map<string, Map<string, number>> {
+  return new Map(scores.map((score) => [
+    score.id,
+    new Map(score.pages.map((page) => [page.pagePath, page.score] as const)),
+  ] as const));
+}
+
+function semanticConceptCovered(
+  id: string,
+  paths: ReadonlySet<string>,
+  scores: ReadonlyMap<string, ReadonlyMap<string, number>>,
+  threshold: number
+): boolean {
+  const byPage = scores.get(id);
+  if (!byPage) return false;
+  for (const pagePath of paths) {
+    if ((byPage.get(pagePath) ?? -1) >= threshold) return true;
+  }
+  return false;
+}
+
+function hitSatisfiesRequiredType(hit: RetrievalHit, requiredType: string): boolean {
+  if (hit.type === requiredType) return true;
+  if (requiredType === "requirement") {
+    return ["request", "candidate_request"].includes(hit.type);
+  }
+  if (requiredType === "implementation") return COMPONENT_TYPES.has(hit.type);
+  if (requiredType === "test_result") {
+    return hit.type === "analysis" &&
+      /\b(test|tests|verification|regression|verifica|collaudo)\b/i.test(hit.tags.join(" "));
+  }
+  return false;
 }
 
 function contradictionCount(hits: readonly RetrievalHit[]): number {
@@ -164,51 +317,113 @@ function contradictionCount(hits: readonly RetrievalHit[]): number {
 
 export function assessRetrievalCoverage(params: {
   query: string;
+  /** Full fused candidate set, independent of the display budget. */
   hits: readonly RetrievalHit[];
+  /** Budget-limited subset returned to the caller. Defaults to the full set. */
+  displayHits?: readonly RetrievalHit[];
   graphResult: SeededGraphQueryResult;
   requirements?: RetrievalCoverageRequirements;
+  coverageMode?: RetrievalCoverageMode;
+  semanticScores?: readonly SemanticCoverageScore[];
+  warnings?: readonly string[];
 }): RetrievalCoverage {
   const requirements = inferCoverageRequirements(params.query, params.requirements);
   const queryTerms = relevantQueryTerms(params.query);
-  const candidateText = params.hits.map(searchableHitText).join(" ");
-  const facetCoverage = queryTerms.length === 0 ? 1 : queryCoverage(candidateText, queryTerms);
-  // Broad task queries intentionally span multiple evidence passages. Measure
-  // the selected passage set as a whole; requiring one passage to cover every
-  // facet incorrectly marks a coherent multi-document answer as missing.
-  const passageCoverage = params.hits.length === 0
-    ? 0
-    : queryCoverage(
-      params.hits.map((hit) => `${hit.heading} ${hit.excerpt}`).join(" "),
-      queryTerms
-    );
-  const sources = new Set(params.hits.flatMap((hit) => hit.sources));
-  const presentTypes = new Set(params.hits.map((hit) => hit.type));
-  const missingTypes = requirements.requiredPageTypes.filter((pageType) => !presentTypes.has(pageType));
-  const missingEntities = unresolvedEntities(params.query, params.hits);
-  const contradictions = contradictionCount(params.hits);
-  const unresolvedRelations = [
-    ...missingTypes.map((pageType) => `required_type:${pageType}`),
-    ...(requirements.requireContradictionCheck && contradictions === 0
-      ? ["contradiction_evidence"]
-      : []),
-  ];
-  const evidenceGaps: string[] = [];
-  if (facetCoverage < requirements.minimumQueryFacetCoverage) evidenceGaps.push("query_facets");
-  if (passageCoverage < requirements.minimumPassageCoverage) evidenceGaps.push("passage_evidence");
-  if (sources.size < requirements.minimumSourceDiversity) evidenceGaps.push("source_diversity");
-  if (params.graphResult.stats.truncatedFrontierCount > 0) evidenceGaps.push("truncated_frontier");
-  evidenceGaps.push(...missingEntities.map((entity) => `entity:${entity}`));
-  evidenceGaps.push(...unresolvedRelations);
+  const mode = params.coverageMode ?? "lexical";
+  const concepts = coverageConcepts(params.query, requirements);
+  const semanticScores = semanticScoresByConcept(params.semanticScores ?? []);
 
-  const stableGaps = uniqueStable(evidenceGaps);
+  const snapshot = (hits: readonly RetrievalHit[]): CoverageSnapshot => {
+    const paths = new Set(hits.map((hit) => hit.path));
+    const candidateText = hits.map(searchableHitText).join(" ");
+    const passageText = hits.map((hit) => `${hit.heading} ${hit.excerpt}`).join(" ");
+    const facetConcepts = concepts.filter((concept) => concept.kind === "facet");
+    const semanticFacetCoverage = (text: string): number => {
+      if (facetConcepts.length === 0) return 1;
+      const lexicalTerms = new Set(tokenizeSearchText(text).flatMap((term) => [term, stemSearchTerm(term)]));
+      const matched = facetConcepts.filter((concept) =>
+        semanticConceptCovered(concept.id, paths, semanticScores, SEMANTIC_FACET_THRESHOLD) ||
+        lexicalTerms.has(concept.value) || lexicalTerms.has(stemSearchTerm(concept.value))
+      ).length;
+      return matched / facetConcepts.length;
+    };
+    const facetCoverage = queryTerms.length === 0
+      ? 1
+      : mode === "semantic"
+        ? semanticFacetCoverage(candidateText)
+        : lexicalCoverage(candidateText, queryTerms);
+    // Broad task queries intentionally span multiple evidence passages. The
+    // aggregate is bounded by selected pages rather than by one passage.
+    const passageCoverage = hits.length === 0
+      ? 0
+      : queryTerms.length === 0
+        ? 1
+      : mode === "semantic"
+        ? semanticFacetCoverage(passageText)
+        : lexicalCoverage(passageText, queryTerms);
+    const aliases = identifierAliases(hits);
+    const entityConcepts = concepts.filter((concept) => concept.kind === "entity");
+    const missingEntities = entityConcepts.filter((concept) => {
+      const lexicalMatch = aliases.has(compactIdentifier(concept.value));
+      return !lexicalMatch && !(
+        mode === "semantic" &&
+        semanticConceptCovered(concept.id, paths, semanticScores, SEMANTIC_ENTITY_THRESHOLD)
+      );
+    }).map((concept) => concept.value);
+    const typeConcepts = concepts.filter((concept) => concept.kind === "type");
+    const missingTypes = typeConcepts.filter((concept) => {
+      const classifiedMatch = hits.some((hit) => hitSatisfiesRequiredType(hit, concept.value));
+      return !classifiedMatch && !(
+        mode === "semantic" &&
+        semanticConceptCovered(concept.id, paths, semanticScores, SEMANTIC_ARTIFACT_THRESHOLD)
+      );
+    }).map((concept) => concept.value);
+    const contradictions = contradictionCount(hits);
+    const unresolvedRelations = [
+      ...missingTypes.map((pageType) => `required_type:${pageType}`),
+      ...(requirements.requireContradictionCheck && contradictions === 0
+        ? ["contradiction_evidence"]
+        : []),
+    ];
+    const sources = new Set(hits.flatMap((hit) => hit.sources));
+    const evidenceGaps: string[] = [];
+    if (facetCoverage < requirements.minimumQueryFacetCoverage) evidenceGaps.push("query_facets");
+    if (passageCoverage < requirements.minimumPassageCoverage) evidenceGaps.push("passage_evidence");
+    if (sources.size < requirements.minimumSourceDiversity) evidenceGaps.push("source_diversity");
+    evidenceGaps.push(...missingEntities.map((entity) => `entity:${entity}`));
+    evidenceGaps.push(...unresolvedRelations);
+    return {
+      queryFacetCoverage: facetCoverage,
+      sourceDiversity: sources.size,
+      unresolvedEntities: missingEntities,
+      unresolvedRelations,
+      contradictions,
+      evidenceGaps: uniqueStable(evidenceGaps),
+    };
+  };
+
+  const full = snapshot(params.hits);
+  const displayed = snapshot(params.displayHits ?? params.hits);
+  const fullGaps = [...full.evidenceGaps];
+  const displayedGaps = [...displayed.evidenceGaps];
+  if (params.graphResult.stats.truncatedFrontierCount > 0) {
+    fullGaps.push("truncated_frontier");
+    displayedGaps.push("truncated_frontier");
+  }
+  const stableGaps = uniqueStable(fullGaps);
+  const missingSet = new Set(stableGaps);
+  const budgetLimitedGaps = uniqueStable(displayedGaps.filter((gap) => !missingSet.has(gap)));
   return {
-    queryFacetCoverage: facetCoverage,
-    sourceDiversity: sources.size,
-    unresolvedEntities: missingEntities,
-    unresolvedRelations,
+    coverageMode: mode,
+    warnings: uniqueStable(params.warnings ?? []),
+    queryFacetCoverage: full.queryFacetCoverage,
+    sourceDiversity: full.sourceDiversity,
+    unresolvedEntities: full.unresolvedEntities,
+    unresolvedRelations: full.unresolvedRelations,
     truncatedFrontierCount: params.graphResult.stats.truncatedFrontierCount,
-    contradictions,
+    contradictions: full.contradictions,
     evidenceGaps: stableGaps,
+    budgetLimitedGaps,
     sufficient: stableGaps.length === 0,
   };
 }
