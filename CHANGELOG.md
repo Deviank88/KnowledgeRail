@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.0.4] - 2026-08-17
+
+### Fixed
+
+- Made desktop workspace selection portable across MCP hosts by advertising its output schema and returning the opaque per-chat binding in both structured output and text content.
+- Extended desktop regressions and installed-package smoke coverage through legacy negotiation and a real `list` → `select` → authenticated domain-call flow.
+
 ## [2.0.3] - 2026-08-17
 
 ### Changed
@@ -89,7 +96,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Initial local-first MCP server with persistent evidence-backed knowledge, bounded retrieval, document workflows, and eight public `knowledge_*` tools.
 - Multi-workspace loopback HTTP gateway, opaque per-chat bindings, desktop adapter, and portable npm/npx distribution.
 
-[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.3...HEAD
+[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.4...HEAD
+[2.0.4]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.3...v2.0.4
 [2.0.3]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.0...v2.0.1
