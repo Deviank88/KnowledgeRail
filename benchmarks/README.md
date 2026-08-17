@@ -253,6 +253,6 @@ The evaluator materializes the same realistic knowledge, custom frontmatter, kno
 
 Each case is then rolled back and must recover its original format and canonical digest. Absolute migration latency is reported but not hard-gated on shared runners.
 
-`tests/migration-compatibility.test.ts` and `tests/legacy-migration-v4.test.ts` additionally cover automatic rollback after a failed backfill, corrupt ledgers, idempotent v4 repair and refusal to overwrite newer post-migration knowledge.
+`tests/migration-compatibility.test.ts`, `tests/legacy-migration-v4.test.ts`, `tests/legacy-namespace-migration.test.ts`, and `tests/fs-manifest.test.ts` additionally cover automatic rollback after a failed backfill, corrupt ledgers, idempotent v4 repair, refusal to overwrite newer post-migration knowledge, the pre-rebrand `.llm-wiki` namespace, v1 manifest compatibility, coverage-ledger import, dual-namespace conflicts, unsafe or incomplete legacy metadata, and byte-identical manifest v2 output across CRLF/LF, Unicode NFD/NFC path, and filesystem timestamp variants.
 
 Migration must preserve unknown/custom canonical fields and must not silently reinterpret old pages into new semantic classes such as `invariant` or `inference`.

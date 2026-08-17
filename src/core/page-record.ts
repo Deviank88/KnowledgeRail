@@ -123,7 +123,7 @@ export async function listWikiPagePaths(wikiRoot: string): Promise<string[]> {
     dot: false,
     onlyFiles: true,
     followSymbolicLinks: false,
-    ignore: [".knowledge-rail/**"],
+    ignore: [".knowledge-rail/**", ".llm-wiki/**"],
   }).catch(() => [] as string[]);
   return files
     .map((file) => file.replace(/\\/g, "/"))
