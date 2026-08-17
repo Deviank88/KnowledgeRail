@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.0.5] - 2026-08-17
+
+### Fixed
+
+- Aligned README status and installation examples with the package version, and served its packaged logo from a versioned public URL that renders on both GitHub and npm.
+- Extended release verification to reject stale README versions, non-portable logo references, and invalid packaged PNG assets.
+
 ## [2.0.4] - 2026-08-17
 
 ### Fixed
@@ -96,7 +103,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Initial local-first MCP server with persistent evidence-backed knowledge, bounded retrieval, document workflows, and eight public `knowledge_*` tools.
 - Multi-workspace loopback HTTP gateway, opaque per-chat bindings, desktop adapter, and portable npm/npx distribution.
 
-[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.4...HEAD
+[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.5...HEAD
+[2.0.5]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.4...v2.0.5
 [2.0.4]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.3...v2.0.4
 [2.0.3]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.1...v2.0.2
