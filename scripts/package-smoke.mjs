@@ -91,7 +91,14 @@ try {
   const packed = await runNpm(["pack", "--json", "--pack-destination", packDirectory], { cwd: process.cwd() });
   const packResult = JSON.parse(packed.stdout)[0];
   const packedPaths = new Set(packResult.files.map((entry) => entry.path));
-  for (const required of ["dist/index.js", "README.md", "LICENSE", "package.json", "server.json"]) {
+  for (const required of [
+    "dist/index.js",
+    "README.md",
+    "LICENSE",
+    "package.json",
+    "server.json",
+    "assets/knowledge-rail-logo.png",
+  ]) {
     if (!packedPaths.has(required)) throw new Error(`Packed artifact is missing ${required}.`);
   }
   for (const forbidden of ["milestones/", "tests/", ".env", "wiki/", "docs/"]) {

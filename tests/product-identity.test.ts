@@ -38,6 +38,28 @@ test("the current package version has a dated changelog release", async () => {
   assert.match(changelog, new RegExp(`^## \\[${version}\\] - \\d{4}-\\d{2}-\\d{2}$`, "m"));
 });
 
+test("README release examples and public logo remain publishable", async () => {
+  const packageJson = await readJson("package.json");
+  const [readme, logo] = await Promise.all([
+    readFile(path.join(repositoryRoot, "README.md"), "utf8"),
+    readFile(path.join(repositoryRoot, "assets", "knowledge-rail-logo.png")),
+  ]);
+  const version = String(packageJson.version);
+  const packageFiles = packageJson.files as string[];
+  const pinnedVersions = [...readme.matchAll(/knowledge-rail@(\d+\.\d+\.\d+)/g)]
+    .map((match) => match[1]);
+
+  assert.equal(readme.includes(`stable release \`${version}\``), true);
+  assert.ok(pinnedVersions.length > 0);
+  assert.deepEqual(new Set(pinnedVersions), new Set([version]));
+  const publicLogo = readme.match(
+    /<img src="https:\/\/cdn\.jsdelivr\.net\/npm\/knowledge-rail@(\d+\.\d+\.\d+)\/assets\/knowledge-rail-logo\.png"/
+  );
+  assert.equal(publicLogo?.[1], version);
+  assert.ok(packageFiles.includes("assets/knowledge-rail-logo.png"));
+  assert.deepEqual([...logo.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+});
+
 test("public documentation distinguishes local self-hosting from future remote service", async () => {
   const [readme, selfHosting, security] = await Promise.all([
     readFile(path.join(repositoryRoot, "README.md"), "utf8"),
