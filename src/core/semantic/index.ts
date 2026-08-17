@@ -17,6 +17,8 @@ import { configuredEmbeddingProvider } from "./provider.js";
 import type {
   AnnEngine,
   EmbeddingProvider,
+  SemanticCoverageQuery,
+  SemanticCoverageScore,
   SemanticHit,
   SemanticIndexDescriptor,
   SemanticSearchResult,
@@ -100,6 +102,33 @@ function pageFingerprint(pagePath: string, passages: readonly WikiPassage[]): st
 
 function passageInput(passage: { heading: string; text: string }): string {
   return `${passage.heading}\n${passage.text}`.normalize("NFC").trim();
+}
+
+function coverageQueryInput(query: SemanticCoverageQuery): SemanticCoverageQuery {
+  const id = query.id.normalize("NFKC").trim();
+  const text = query.text.normalize("NFKC").replace(/\s+/g, " ").trim();
+  if (
+    !id || id.length > 512 || /[\u0000-\u001f\u007f]/.test(id) ||
+    !text || text.length > 4_096 || text.includes("\0")
+  ) {
+    throw new Error("Semantic coverage queries require a printable id and 1-4,096 characters of text.");
+  }
+  return { id, text };
+}
+
+function cosineSimilarity(left: readonly number[], right: readonly number[]): number {
+  let dot = 0;
+  let leftMagnitude = 0;
+  let rightMagnitude = 0;
+  for (let index = 0; index < left.length; index++) {
+    const leftValue = left[index]!;
+    const rightValue = right[index]!;
+    dot += leftValue * rightValue;
+    leftMagnitude += leftValue * leftValue;
+    rightMagnitude += rightValue * rightValue;
+  }
+  if (leftMagnitude <= 0 || rightMagnitude <= 0) return -1;
+  return dot / Math.sqrt(leftMagnitude * rightMagnitude);
 }
 
 function preparedPage(pagePath: string, passages: readonly WikiPassage[]): PreparedPage {
@@ -244,6 +273,7 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
   private loadPromise: Promise<void> | undefined;
   private generatedAt: string | undefined;
   private mutationQueue: Promise<void> = Promise.resolve();
+  private readonly coverageVectorCache = new Map<string, Promise<readonly (readonly number[])[]>>();
 
   constructor(
     private readonly wikiRoot: string,
@@ -466,6 +496,62 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
 
   async search(query: string, k: number): Promise<SemanticHit[]> {
     return (await this.searchWithDiagnostics(query, k)).hits;
+  }
+
+  async assessCoverage(
+    queries: readonly SemanticCoverageQuery[],
+    pagePaths: readonly string[]
+  ): Promise<SemanticCoverageScore[]> {
+    await this.load();
+    await this.mutationQueue.catch(() => undefined);
+    if (queries.length === 0) return [];
+    if (queries.length > 256) throw new Error("Semantic coverage is limited to 256 concepts per request.");
+    const normalizedQueries = queries.map(coverageQueryInput);
+    if (new Set(normalizedQueries.map((query) => query.id)).size !== normalizedQueries.length) {
+      throw new Error("Semantic coverage query ids must be unique.");
+    }
+    const normalizedPaths = [...new Set(pagePaths.map(normalizedPagePath))].sort((left, right) =>
+      left.localeCompare(right)
+    );
+    const wantedPaths = new Set(normalizedPaths);
+    const passages = [...this.passages.values()]
+      .filter((passage) => wantedPaths.has(passage.pagePath))
+      .sort((left, right) => left.pagePath.localeCompare(right.pagePath) || left.id.localeCompare(right.id));
+    const cacheKey = JSON.stringify(normalizedQueries.map((query) => query.text));
+    let vectorPromise = this.coverageVectorCache.get(cacheKey);
+    if (!vectorPromise) {
+      vectorPromise = this.provider.embedQueries
+        ? this.provider.embedQueries(normalizedQueries.map((query) => query.text))
+        : Promise.all(normalizedQueries.map((query) => this.provider.embedQuery(query.text)));
+      this.coverageVectorCache.set(cacheKey, vectorPromise);
+      if (this.coverageVectorCache.size > 32) {
+        const oldest = this.coverageVectorCache.keys().next().value as string | undefined;
+        if (oldest !== undefined && oldest !== cacheKey) this.coverageVectorCache.delete(oldest);
+      }
+      vectorPromise.catch(() => this.coverageVectorCache.delete(cacheKey));
+    }
+    const vectors = await vectorPromise;
+    if (vectors.length !== normalizedQueries.length) {
+      throw new Error("Embedding provider returned an invalid semantic coverage result count.");
+    }
+    return normalizedQueries.map((query, queryIndex) => {
+      const vector = vectors[queryIndex]!;
+      if (!validVector(vector, this.provider.descriptor.dimensions)) {
+        throw new Error("Embedding provider returned an invalid semantic coverage vector.");
+      }
+      const byPage = new Map<string, number>();
+      for (const passage of passages) {
+        const score = cosineSimilarity(vector, passage.vector);
+        const current = byPage.get(passage.pagePath);
+        if (current === undefined || score > current) byPage.set(passage.pagePath, score);
+      }
+      return {
+        id: query.id,
+        pages: [...byPage.entries()]
+          .map(([pagePath, score]) => ({ pagePath, score }))
+          .sort((left, right) => right.score - left.score || left.pagePath.localeCompare(right.pagePath)),
+      };
+    });
   }
 }
 

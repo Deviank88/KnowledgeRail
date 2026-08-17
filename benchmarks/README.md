@@ -233,6 +233,8 @@ A change is not release-ready merely because it is faster. It must preserve or i
 
 `npm test` uses `scripts/run-tests.mjs`, which discovers test files explicitly rather than relying on shell glob expansion. Files run in isolated Node processes with bounded concurrency and a configurable per-file timeout. This makes execution consistent across Windows, Linux and macOS and prevents one leaked handle from indefinitely blocking the full suite.
 
+`npm run eval:coverage` reports GAP precision and silent-miss for the pinned 22-case coverage fixture. The same fixture is enforced by `eval:semantic:gate`, which requires lexical coverage to improve over the reproduced 2.0.5 exact-match path, semantic coverage to improve further, and both tiers to retain zero silent misses.
+
 Useful environment variables:
 
 ```text

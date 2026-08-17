@@ -86,18 +86,25 @@ test("semantic-only passages enter the RRF seed union without bypassing lexical 
     });
     assert.equal(baseline.hits.some((hit) => hit.path === semanticHit.pagePath), false);
 
+    const semanticCoverageIndex = injectedIndex([semanticHit]);
+    semanticCoverageIndex.assessCoverage = async (queries, pagePaths) => queries.map((query) => ({
+      id: query.id,
+      pages: pagePaths.map((pagePath) => ({ pagePath, score: 0.99 })),
+    }));
     const enhanced = await retrieveWikiHybrid({
       wikiRoot,
       query: "keep platform responsive during demand spikes",
       maxResults: 4,
       progressiveWidening: false,
-      semanticIndex: injectedIndex([semanticHit]),
+      semanticIndex: semanticCoverageIndex,
     });
     assert.equal(enhanced.hits[0]?.path, semanticHit.pagePath);
     assert.equal(enhanced.hits[0]?.channels.lexicalRank, undefined);
     assert.equal(enhanced.hits[0]?.channels.semanticRank, 1);
     assert.equal(enhanced.graphResult.stats.seedCount, 1, "semantic candidates must seed graph traversal");
     assert.equal(enhanced.semantic.available, true);
+    assert.equal(enhanced.coverage.coverageMode, "semantic");
+    assert.deepEqual(enhanced.coverage.warnings, []);
     assert.equal(enhanced.lexicalHits.length, 0, "the exact/BM25 channel remains independently observable");
 
     const exact = await retrieveWikiHybrid({
@@ -140,6 +147,8 @@ test("semantic backend failures degrade safely to lexical retrieval", async () =
     assert.equal(result.hits[0]?.path, "requirements/Exact.md");
     assert.equal(result.semantic.available, false);
     assert.equal(result.semantic.error?.includes("\n"), false);
+    assert.equal(result.coverage.coverageMode, "lexical");
+    assert.equal(result.coverage.warnings.some((warning) => warning.includes("degraded")), true);
   } finally {
     clearRetrievalIndexes();
     clearRuntimeWikiGraphs();

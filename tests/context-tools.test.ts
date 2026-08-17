@@ -94,6 +94,8 @@ test("modern knowledge_context returns resource links without registering a redu
     });
     const retrieval = context.structuredContent.retrieval as Record<string, unknown>;
     assert.equal(retrieval.strategy, "hybrid_progressive_widening");
+    assert.equal(retrieval.coverageMode, "lexical");
+    assert.equal(Array.isArray(retrieval.coverageWarnings), true);
     const requirements = context.structuredContent.requirements as Array<Record<string, unknown>>;
     assert.equal(requirements[0]?.path, "requirements/REQ_42.md");
     const evidence = context.structuredContent.evidence as Array<Record<string, unknown>>;

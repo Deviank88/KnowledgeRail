@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-08-18
+
+### Added
+
+- Added opt-in semantic-aware coverage for query facets, entities, and required artifacts, with `coverageMode` and graceful provider-degradation warnings in task-context responses.
+- Added a deterministic 22-case GAP-quality evaluation to the semantic quality gate, measuring both GAP precision and silent misses for lexical and semantic coverage.
+
+### Changed
+
+- Coverage now evaluates the full fused candidate set independently of the bounded evidence display and shares artifact equivalences with task classification.
+- Improved offline lexical coverage with conservative stemming, delimiter-tolerant entity matching, and tighter entity extraction.
+
+### Fixed
+
+- Reclassified retrieved evidence omitted by count or token budgets as `budget_limited` instead of `missing_evidence`.
+
 ## [2.0.5] - 2026-08-17
 
 ### Fixed
@@ -103,7 +119,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Initial local-first MCP server with persistent evidence-backed knowledge, bounded retrieval, document workflows, and eight public `knowledge_*` tools.
 - Multi-workspace loopback HTTP gateway, opaque per-chat bindings, desktop adapter, and portable npm/npx distribution.
 
-[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.5...HEAD
+[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.5...v2.1.0
 [2.0.5]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.4...v2.0.5
 [2.0.4]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.3...v2.0.4
 [2.0.3]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.2...v2.0.3

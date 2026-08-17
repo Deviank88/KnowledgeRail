@@ -61,6 +61,8 @@ Actions/modes: `rebuild`, `update`, `remove`, `search`, `symbol`, `references`, 
 
 Project evidence and gaps; page list/search; relation graph.
 
+Task responses report `retrieval.coverageMode` (`lexical` or `semantic`) and `coverageWarnings`. Coverage uses the full fused candidate set while returned evidence remains bounded; relevant evidence excluded from display is `budget_limited`, not `missing_evidence`. Configured embedding provider failures degrade to lexical mode without failing the tool call.
+
 Actions/modes: `task`, `list`, `search`, `graph`.
 
 | Parameter | Type / values | Required | Default | Description |

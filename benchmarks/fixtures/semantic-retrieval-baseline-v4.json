@@ -47,5 +47,14 @@
   "maximumExactIdentifierRankDelta": 0,
   "maximumNoBenefitTokenGrowthQueries": 0,
   "maximumFullVectorScanAttempts": 0,
-  "maximumAnnCandidateRatio": 0.02
+  "maximumAnnCandidateRatio": 0.02,
+  "coverageFixtureVersion": 1,
+  "coverageFixtureSha256": "3954f5e886563793bd35df2eef3247a3d3ea123f237271d1073ae5bc019e4d0b",
+  "minimumCoverageCaseCount": 22,
+  "minimumLexicalGapPrecision": 0.5,
+  "minimumSemanticGapPrecision": 1,
+  "minimumLexicalPrecisionDelta": 0.16,
+  "minimumSemanticPrecisionDelta": 0.5,
+  "maximumLexicalSilentMiss": 0,
+  "maximumSemanticSilentMiss": 0
 }
