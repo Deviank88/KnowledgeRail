@@ -150,7 +150,13 @@ try {
     process.platform === "win32" ? "knowledge-rail.cmd" : "knowledge-rail"
   );
   await fs.access(installedShim);
-  const shimVersion = await run(installedShim, ["--version"], { cwd: projectDirectory });
+  const shimVersion = process.platform === "win32"
+    ? await run(
+      process.env.ComSpec ?? "cmd.exe",
+      ["/d", "/s", "/c", `"${installedShim}" --version`],
+      { cwd: projectDirectory }
+    )
+    : await run(installedShim, ["--version"], { cwd: projectDirectory });
   if (shimVersion.stdout.trim() !== installedPackage.version) {
     throw new Error("Installed knowledge-rail command shim is missing or reports the wrong version.");
   }
