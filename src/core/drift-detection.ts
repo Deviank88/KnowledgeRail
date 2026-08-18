@@ -40,6 +40,11 @@ export interface DriftEvaluation {
   observedRangeHash?: string;
 }
 
+export interface StaleClaimsForPage {
+  claimIds: string[];
+  reason: Exclude<DriftVerdict, "fresh">;
+}
+
 export interface DriftSummary {
   checkedAt: string;
   scope: "all" | "paths";
@@ -206,23 +211,29 @@ async function writeDriftLedger(wikiRoot: string, ledger: DriftLedger): Promise<
   await atomicWriteText(driftLedgerFile(wikiRoot), `${JSON.stringify(ledger, null, 2)}\n`);
 }
 
-async function readCurrentCode(repositoryRoot: string, relativePath: string): Promise<string | null> {
-  const lexicalTarget = safeResolveWithin(repositoryRoot, relativePath);
+type CurrentCodeRead =
+  | { status: "readable"; content: string }
+  | { status: "missing" }
+  | { status: "unresolvable" };
+
+async function readCurrentCode(
+  repositoryRoot: string,
+  repositoryRootReal: string,
+  relativePath: string
+): Promise<CurrentCodeRead> {
   try {
-    const [rootReal, targetReal] = await Promise.all([
-      fs.realpath(repositoryRoot),
-      fs.realpath(lexicalTarget),
-    ]);
-    const relative = path.relative(rootReal, targetReal);
+    const lexicalTarget = safeResolveWithin(repositoryRoot, relativePath);
+    const targetReal = await fs.realpath(lexicalTarget);
+    const relative = path.relative(repositoryRootReal, targetReal);
     if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
       throw new Error(`Drift anchor resolves outside the repository root: ${relativePath}`);
     }
     const stat = await fs.stat(targetReal);
     if (!stat.isFile()) throw new Error(`Drift anchor is not a regular file: ${relativePath}`);
-    return await fs.readFile(targetReal, "utf8");
+    return { status: "readable", content: await fs.readFile(targetReal, "utf8") };
   } catch (error: unknown) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
-    throw error;
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return { status: "missing" };
+    return { status: "unresolvable" };
   }
 }
 
@@ -252,22 +263,29 @@ export async function detectCodeDrift(params: {
   if (!validIsoTimestamp(checkedAt)) throw new Error("Drift checkedAt must be ISO-8601 compatible.");
   const prefixes = [...new Set((params.paths ?? []).map(normalizeRepositoryPath))].sort();
   const scope = prefixes.length > 0 ? "paths" as const : "all" as const;
+  const repositoryRootReal = await fs.realpath(params.repositoryRoot);
+  if (!(await fs.stat(repositoryRootReal)).isDirectory()) {
+    throw new Error("Drift repository root is not a directory.");
+  }
   const store = await readEvidenceIrStore(params.wikiRoot);
   const allAnchored = store.claims.filter((claim) => claim.codeAnchor !== undefined);
   const selected = allAnchored.filter((claim) =>
     scope === "all" || pathMatches(claim.codeAnchor!.path, prefixes)
   );
   const pages = pagePathsByClaim(store);
-  const fileCache = new Map<string, Promise<string | null>>();
+  const fileCache = new Map<string, Promise<CurrentCodeRead>>();
   const entries: DriftLedgerEntry[] = [];
   for (const claim of selected) {
     const anchor = claim.codeAnchor!;
     let content = fileCache.get(anchor.path);
     if (!content) {
-      content = readCurrentCode(params.repositoryRoot, anchor.path);
+      content = readCurrentCode(params.repositoryRoot, repositoryRootReal, anchor.path);
       fileCache.set(anchor.path, content);
     }
-    const evaluation = evaluateCodeAnchor({ anchor, content: await content });
+    const current = await content;
+    const evaluation: DriftEvaluation = current.status === "unresolvable"
+      ? { verdict: "anchor_unresolvable" }
+      : evaluateCodeAnchor({ anchor, content: current.status === "missing" ? null : current.content });
     entries.push({
       claimId: claim.id,
       pagePaths: pages.get(claim.id) ?? [],
@@ -312,6 +330,20 @@ export async function detectCodeDrift(params: {
     }))
     .sort((left, right) => right.citationCount - left.citationCount || left.claimId.localeCompare(right.claimId));
   const topLimit = Math.max(1, Math.min(100, params.topLimit ?? 20));
+  const unresolvable = entries
+    .filter((entry) => entry.verdict === "anchor_unresolvable")
+    .map((entry) => ({
+      claimId: entry.claimId,
+      citationCount: entry.pagePaths.length + (inboundRelations.get(entry.claimId) ?? 0),
+    }))
+    .sort((left, right) => right.citationCount - left.citationCount || left.claimId.localeCompare(right.claimId));
+  const recommendedClaimIds = [
+    ...drifted.map((entry) => ({ claimId: entry.claimId, citationCount: entry.citationCount })),
+    ...unresolvable,
+  ]
+    .sort((left, right) => right.citationCount - left.citationCount || left.claimId.localeCompare(right.claimId))
+    .slice(0, 5)
+    .map((entry) => entry.claimId);
   const summary: DriftSummary = {
     checkedAt,
     scope,
@@ -322,21 +354,25 @@ export async function detectCodeDrift(params: {
     driftSuspected: drifted.length,
     anchorUnresolvable: entries.filter((entry) => entry.verdict === "anchor_unresolvable").length,
     topDrifted: drifted.slice(0, topLimit),
-    recommendedClaimIds: drifted.slice(0, 5).map((entry) => entry.claimId),
+    recommendedClaimIds,
   };
   return { summary, entries };
 }
 
-export async function driftedClaimsByPage(wikiRoot: string): Promise<Map<string, string[]>> {
+export async function staleClaimsByPage(wikiRoot: string): Promise<Map<string, StaleClaimsForPage>> {
   const ledger = await readDriftLedger(wikiRoot);
-  const byPage = new Map<string, Set<string>>();
+  const byPage = new Map<string, { claimIds: Set<string>; reason: Exclude<DriftVerdict, "fresh"> }>();
   for (const entry of ledger.entries) {
-    if (entry.verdict !== "drift_suspected") continue;
+    if (entry.verdict === "fresh") continue;
     for (const pagePath of entry.pagePaths) {
-      const claimIds = byPage.get(pagePath) ?? new Set<string>();
-      claimIds.add(entry.claimId);
-      byPage.set(pagePath, claimIds);
+      const state = byPage.get(pagePath) ?? { claimIds: new Set<string>(), reason: entry.verdict };
+      state.claimIds.add(entry.claimId);
+      if (entry.verdict === "anchor_unresolvable") state.reason = "anchor_unresolvable";
+      byPage.set(pagePath, state);
     }
   }
-  return new Map([...byPage].map(([pagePath, claimIds]) => [pagePath, [...claimIds].sort()]));
+  return new Map([...byPage].map(([pagePath, state]) => [pagePath, {
+    claimIds: [...state.claimIds].sort(),
+    reason: state.reason,
+  }]));
 }

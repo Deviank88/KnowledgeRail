@@ -20,10 +20,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Restored conservative single-word proper-noun coverage (including named `Payment`/`System` concepts) without accepting substring-only token matches.
 - Scoped the missing-embedding notice to each active workspace and eliminated the duplicate coverage snapshot when no display subset is supplied.
 - Extended the pinned GAP fixture from 22 to 25 cases and added an enforced W2/depth-3 progressive-widening probe.
+- Drift checks now isolate unreadable, unsafe, or non-file anchors as `anchor_unresolvable` instead of aborting the run, and stale evidence omitted from the display still produces an explicit category GAP.
+- Code-anchor capture and backfill now refresh only referenced code paths on the ingestion hot path; a complete repository rebuild is reserved for index recovery or parser-version migration.
 
 ### Changed
 
-- Stale code-backed pages remain traceable in returned evidence but no longer satisfy clean evidence buckets or change-impact claims until re-verified.
+- Stale or unresolvable code-backed pages remain traceable in returned evidence but no longer satisfy clean evidence buckets or change-impact claims until re-verified.
 
 ## [2.1.0] - 2026-08-18
 

@@ -937,6 +937,13 @@ export function registerAgentTools(
             `${entry.claimId}: ${entry.path}:${entry.startLine}-${entry.endLine} (${entry.reason}); ` +
               `pages=${entry.pagePaths.join(", ") || "none"}.`
           ),
+          ...result.entries
+            .filter((entry) => entry.verdict === "anchor_unresolvable")
+            .slice(0, 20)
+            .map((entry) =>
+              `${entry.claimId}: ${entry.anchor.path}:${entry.anchor.startLine}-${entry.anchor.endLine} ` +
+                `(anchor_unresolvable); pages=${entry.pagePaths.join(", ") || "none"}.`
+            ),
         ];
         const next = summary.recommendedClaimIds.length > 0 ? {
           tool: "knowledge_ingest" as const,

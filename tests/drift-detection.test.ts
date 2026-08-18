@@ -247,7 +247,54 @@ test("code anchors detect substantive drift without formatting false positives",
       paths: ["src/service.ts"],
       checkedAt: "2026-08-18T08:03:00.000Z",
     });
+    assert.equal(missing.entries[0]?.verdict, "drift_suspected");
     assert.equal(missing.entries[0]?.reason, "file_missing");
+
+    await fs.mkdir(fixture.servicePath);
+    const unresolvable = await detectCodeDrift({
+      repositoryRoot: fixture.root,
+      wikiRoot: fixture.wikiRoot,
+      checkedAt: "2026-08-18T08:04:00.000Z",
+    });
+    assert.deepEqual(
+      {
+        checked: unresolvable.summary.checkedAnchors,
+        fresh: unresolvable.summary.fresh,
+        drift: unresolvable.summary.driftSuspected,
+        unresolvable: unresolvable.summary.anchorUnresolvable,
+      },
+      { checked: 2, fresh: 1, drift: 0, unresolvable: 1 }
+    );
+    assert.equal(
+      unresolvable.entries.find((entry) => entry.claimId === fixture.serviceClaimId)?.verdict,
+      "anchor_unresolvable"
+    );
+    assert.equal(
+      unresolvable.entries.find((entry) => entry.claimId === fixture.otherClaimId)?.verdict,
+      "fresh"
+    );
+    assert.deepEqual(unresolvable.summary.recommendedClaimIds, [fixture.serviceClaimId]);
+
+    clearRetrievalIndexes();
+    clearRuntimeWikiGraphs();
+    invalidateWikiGraph(fixture.wikiRoot);
+    const unresolvedContext = await compileTaskContext({
+      wikiRoot: fixture.wikiRoot,
+      intent: "understand",
+      objective: "Understand the invoice retry limit implementation",
+      query: "invoice retry limit invoiceRetryLimit",
+      maxEvidence: 8,
+      heuristicTokenBudget: 4_000,
+    });
+    const unresolvedEvidence = unresolvedContext.evidence.find((evidence) =>
+      evidence.path === fixture.servicePage
+    );
+    assert.equal(unresolvedEvidence?.stale, true);
+    assert.equal(unresolvedEvidence?.staleReason, "anchor_unresolvable");
+    assert.equal(unresolvedContext.gaps.some((gap) =>
+      gap.kind === "stale_evidence" && gap.reason === "anchor_unresolvable" &&
+      gap.claimIds?.includes(fixture.serviceClaimId)
+    ), true);
 
     const parserOnly = evaluateCodeAnchor({
       anchor: fixture.anchor,
@@ -296,9 +343,68 @@ test("path-scoped drift checks replace only their slice of the derived ledger", 
   }
 });
 
+test("claim anchoring refreshes only targeted code files", async () => {
+  const fixture = await createFixture();
+  try {
+    const index = new PersistentCodeEvidenceIndex({ repositoryRoot: fixture.root, wikiRoot: fixture.wikiRoot });
+    const snapshot = await index.snapshot();
+    const fragment = snapshot.fragments.find((candidate) =>
+      candidate.path === "src/service.ts" && candidate.symbol === "invoiceRetryLimit"
+    );
+    assert.ok(fragment);
+    const targetUri = codeResourceUri(fragment);
+    const unrelatedPath = path.join(fixture.root, "src/unrelated-after-index.ts");
+    await fs.writeFile(unrelatedPath, "export const unrelatedAfterIndex = true;\n", "utf8");
+    await fs.writeFile(fixture.servicePath, fixture.serviceContent.replace("return 3", "return 7"), "utf8");
+
+    const sourceUri = "docs/normalized/incremental-anchor.md";
+    const sourceContent = "# Incremental anchor\n\nThe retry limit is currently implemented by invoiceRetryLimit.\n";
+    const plan = await sourceCompilePlan({
+      wikiRoot: fixture.wikiRoot,
+      sourceUri,
+      content: sourceContent,
+      segmentMaxChars: 4_096,
+    });
+    const recorded = await recordEvidenceClaims({
+      wikiRoot: fixture.wikiRoot,
+      sourceUri,
+      sourceContent,
+      segmentId: plan.ledger.segments[0]!.id,
+      claims: [{
+        text: "The retry limit is currently implemented by invoiceRetryLimit.",
+        kind: "behavior",
+        origin: "explicit",
+        confidence: 1,
+        target: {
+          pagePath: "implementations/IncrementalInvoiceRetry.md",
+          pageTitle: "Incremental invoice retry",
+          pageType: "implementation",
+          codeResourceUri: targetUri,
+        },
+      }],
+    });
+
+    assert.equal(recorded.anchorWarnings.length, 0);
+    assert.ok(recorded.claims[0]?.codeAnchor);
+    const after = await index.snapshot();
+    assert.equal(after.files.some((file) => file.path === "src/unrelated-after-index.ts"), false);
+    assert.notEqual(
+      after.files.find((file) => file.path === "src/service.ts")?.contentHash,
+      snapshot.files.find((file) => file.path === "src/service.ts")?.contentHash
+    );
+  } finally {
+    await cleanupFixture(fixture);
+  }
+});
+
 test("migration backfill anchors only code targets that still resolve", async () => {
   const fixture = await createFixture();
   try {
+    await fs.writeFile(
+      path.join(fixture.root, "src/unrelated-before-backfill.ts"),
+      "export const unrelatedBeforeBackfill = true;\n",
+      "utf8"
+    );
     await mutateEvidenceIrStore(fixture.wikiRoot, (store) => {
       delete store.claims.find((claim) => claim.id === fixture.serviceClaimId)!.codeAnchor;
     });
@@ -313,6 +419,11 @@ test("migration backfill anchors only code targets that still resolve", async ()
     assert.equal(
       store.claims.find((claim) => claim.target?.codeResourceUri?.includes("src/missing.ts"))?.codeAnchor,
       undefined
+    );
+    const index = new PersistentCodeEvidenceIndex({ repositoryRoot: fixture.root, wikiRoot: fixture.wikiRoot });
+    assert.equal(
+      (await index.snapshot()).files.some((file) => file.path === "src/unrelated-before-backfill.ts"),
+      false
     );
   } finally {
     await cleanupFixture(fixture);

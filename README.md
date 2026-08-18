@@ -252,7 +252,7 @@ knowledge_admin {
 }
 ```
 
-The action reads current code and writes only disposable state to `wiki/.knowledge-rail/drift/ledger.json`; it never edits claim text, canonical pages, or source code. A changed range, missing file, or invalidated line range becomes `drift_suspected`. Trailing-whitespace-only edits and a parser-version change with identical range content stay fresh. `knowledge_context` keeps affected evidence visible for provenance, marks it `stale` with reason `drift_suspected`, excludes it from clean evidence buckets, and returns an explicit `stale_evidence` gap. Re-verification and correction remain normal Evidence IR work—there is intentionally no automatic fix.
+The action reads current code and writes only disposable state to `wiki/.knowledge-rail/drift/ledger.json`; it never edits claim text, canonical pages, or source code. A changed range, missing file, or invalidated line range becomes `drift_suspected`. An unreadable path, a non-file target, or a symlink that escapes the repository becomes `anchor_unresolvable` without aborting checks for other anchors. Trailing-whitespace-only edits and a parser-version change with identical range content stay fresh. `knowledge_context` keeps affected evidence visible for provenance, marks it `stale` with the corresponding reason, excludes it from clean evidence buckets, and returns an explicit `stale_evidence` gap even when stale evidence was retrieved but omitted from the display. Re-verification and correction remain normal Evidence IR work—there is intentionally no automatic fix.
 
 ## Project data
 

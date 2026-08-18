@@ -11,6 +11,8 @@ export type ContextIntent =
   | "review"
   | "document";
 
+export type EvidenceStaleReason = "drift_suspected" | "anchor_unresolvable";
+
 export interface ContextSizeEstimate {
   characters: number;
   utf8Bytes: number;
@@ -34,7 +36,7 @@ export interface EvidenceRef {
   score: number;
   reason: string;
   stale?: boolean;
-  staleReason?: "drift_suspected";
+  staleReason?: EvidenceStaleReason;
   driftClaimIds?: string[];
   /** Existing wiki `sources` values are references/paths, not guaranteed URIs. */
   sourceRefs: string[];
@@ -45,7 +47,7 @@ export interface EvidenceRef {
 export interface KnowledgeGap {
   kind: "missing_evidence" | "contradiction" | "stale_evidence" | "budget_limited";
   description: string;
-  reason?: "drift_suspected";
+  reason?: EvidenceStaleReason;
   paths?: string[];
   claimIds?: string[];
 }

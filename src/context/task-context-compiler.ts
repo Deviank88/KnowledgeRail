@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { driftedClaimsByPage } from "../core/drift-detection.js";
+import { staleClaimsByPage } from "../core/drift-detection.js";
 import type { GraphEdge, GraphEdgeKind, GraphNode } from "../core/graph-index.js";
 import { getRuntimeWikiGraph, type RuntimeGraph } from "../core/graph-runtime.js";
 import {
@@ -16,6 +16,7 @@ import {
   type ContextIntent,
   type ContextSizeEstimate,
   type EvidenceRef,
+  type EvidenceStaleReason,
   type KnowledgeGap,
 } from "./context-manifest.js";
 
@@ -167,6 +168,7 @@ interface ClassifiedCandidate {
   categories: Set<TaskContextEvidenceField>;
   evidence?: EvidenceRef;
   driftClaimIds?: string[];
+  staleReason?: EvidenceStaleReason;
 }
 
 interface TaskGraphSlice {
@@ -544,13 +546,34 @@ function knowledgeGaps(params: {
   })));
   for (const category of params.policy.requiredCategories) {
     if (params.buckets[category].length > 0) continue;
-    const staleAvailable = params.available.some((candidate) =>
-      candidate.categories.has(category) && Boolean(candidate.driftClaimIds?.length)
-    );
-    if (staleAvailable) continue;
     const availableBeyondDisplay = params.available.some((candidate) =>
       candidate.categories.has(category) && !candidate.driftClaimIds?.length
     );
+    if (!availableBeyondDisplay) {
+      const staleAvailable = params.available.filter((candidate) =>
+        candidate.categories.has(category) && Boolean(candidate.driftClaimIds?.length)
+      );
+      if (staleAvailable.length > 0) {
+        const staleSelected = params.selected.some((candidate) =>
+          candidate.categories.has(category) && Boolean(candidate.driftClaimIds?.length)
+        );
+        if (!staleSelected) {
+          const reason: EvidenceStaleReason = staleAvailable.some((candidate) =>
+            candidate.staleReason === "anchor_unresolvable"
+          ) ? "anchor_unresolvable" : "drift_suspected";
+          const stalePaths = uniqueSorted(staleAvailable.map((candidate) => candidate.hit.path));
+          gaps.push({
+            kind: "stale_evidence",
+            reason,
+            paths: stalePaths,
+            claimIds: uniqueSorted(staleAvailable.flatMap((candidate) => candidate.driftClaimIds ?? [])),
+            description: `${CATEGORY_LABELS[category]} is covered only by stale evidence that requires ` +
+              `re-verification for intent ${params.intent}: ${stalePaths.join(", ")}.`,
+          });
+        }
+        continue;
+      }
+    }
     gaps.push({
       kind: availableBeyondDisplay ? "budget_limited" : "missing_evidence",
       description: availableBeyondDisplay
@@ -582,15 +605,20 @@ function knowledgeGaps(params: {
       description: `Potentially stale evidence requires validation: ${uniqueSorted(stale).join(", ")}.`,
     });
   }
-  const drifted = params.selected.filter((candidate) => candidate.driftClaimIds?.length);
-  if (drifted.length > 0) {
+  for (const reason of ["drift_suspected", "anchor_unresolvable"] as const) {
+    const staleEvidence = params.selected.filter((candidate) =>
+      candidate.driftClaimIds?.length && candidate.staleReason === reason
+    );
+    if (staleEvidence.length === 0) continue;
     gaps.push({
       kind: "stale_evidence",
-      reason: "drift_suspected",
-      paths: uniqueSorted(drifted.map((candidate) => candidate.hit.path)),
-      claimIds: uniqueSorted(drifted.flatMap((candidate) => candidate.driftClaimIds ?? [])),
-      description: `Code-backed evidence changed and requires re-verification: ${
-        uniqueSorted(drifted.map((candidate) => candidate.hit.path)).join(", ")
+      reason,
+      paths: uniqueSorted(staleEvidence.map((candidate) => candidate.hit.path)),
+      claimIds: uniqueSorted(staleEvidence.flatMap((candidate) => candidate.driftClaimIds ?? [])),
+      description: `${reason === "drift_suspected"
+        ? "Code-backed evidence changed"
+        : "Code-backed evidence could not be resolved safely"} and requires re-verification: ${
+        uniqueSorted(staleEvidence.map((candidate) => candidate.hit.path)).join(", ")
       }.`,
     });
   }
@@ -847,10 +875,13 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
     hit,
     categories: classifyCandidate(hit),
   }));
-  const driftClaims = await driftedClaimsByPage(params.wikiRoot);
+  const staleClaims = await staleClaimsByPage(params.wikiRoot);
   for (const candidate of availableCandidates) {
-    const claimIds = driftClaims.get(candidate.hit.path);
-    if (claimIds?.length) candidate.driftClaimIds = claimIds;
+    const stale = staleClaims.get(candidate.hit.path);
+    if (stale?.claimIds.length) {
+      candidate.driftClaimIds = stale.claimIds;
+      candidate.staleReason = stale.reason;
+    }
   }
   const candidateByPath = new Map(availableCandidates.map((candidate) => [candidate.hit.path, candidate] as const));
   const candidates = hybrid.hits
@@ -874,9 +905,9 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
     );
     candidate.evidence = candidate.driftClaimIds?.length ? {
       ...evidence,
-      reason: `${evidence.reason}; stale: drift_suspected`,
+      reason: `${evidence.reason}; stale: ${candidate.staleReason ?? "drift_suspected"}`,
       stale: true,
-      staleReason: "drift_suspected",
+      staleReason: candidate.staleReason ?? "drift_suspected",
       driftClaimIds: [...candidate.driftClaimIds],
     } : evidence;
   }

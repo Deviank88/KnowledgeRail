@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { safeResolveWithin } from "../paths.js";
 import { captureCodeAnchor } from "../code-evidence/code-anchor.js";
 import { PersistentCodeEvidenceIndex } from "../code-evidence/index.js";
+import { parseCodeResourceUri } from "../code-evidence/resource-uri.js";
 import type { CodeAnchor } from "../code-evidence/types.js";
 import { readSourceCoverageLedger } from "./coverage-ledger.js";
 import {
@@ -20,6 +21,41 @@ function sameImmutableClaim(left: EvidenceClaim, right: EvidenceClaim): boolean 
   return left.id === right.id && left.sourceUri === right.sourceUri &&
     left.segmentId === right.segmentId && left.text === right.text &&
     left.kind === right.kind && left.origin === right.origin;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function requiresCompleteCodeIndexRefresh(error: unknown): boolean {
+  const message = errorMessage(error);
+  return message.includes("parser version changed") || message.includes("Cannot read code evidence index");
+}
+
+async function refreshCodeTargetPaths(
+  index: PersistentCodeEvidenceIndex,
+  paths: readonly string[]
+): Promise<Map<string, string>> {
+  const uniquePaths = [...new Set(paths)].sort();
+  const failures = new Map<string, string>();
+  for (const targetPath of uniquePaths) {
+    try {
+      await index.updateFile(targetPath);
+    } catch (error: unknown) {
+      if (requiresCompleteCodeIndexRefresh(error)) {
+        try {
+          await index.rebuild();
+          return failures;
+        } catch (rebuildError: unknown) {
+          const message = `Code anchor index recovery failed: ${errorMessage(rebuildError)}`;
+          for (const path of uniquePaths) failures.set(path, message);
+          return failures;
+        }
+      }
+      failures.set(targetPath, errorMessage(error));
+    }
+  }
+  return failures;
 }
 
 export async function recordEvidenceClaims(params: {
@@ -50,26 +86,43 @@ export async function recordEvidenceClaims(params: {
     .filter(({ claim }) => Boolean(claim.target?.codeResourceUri));
   if (targetedClaims.length > 0) {
     const index = new PersistentCodeEvidenceIndex({ repositoryRoot, wikiRoot: params.wikiRoot });
-    try {
-      await index.rebuild();
-      for (const targeted of targetedClaims) {
-        try {
-          capturedAnchors.set(targeted.index, await captureCodeAnchor({
-            repositoryRoot,
-            wikiRoot: params.wikiRoot,
-            resourceUri: targeted.claim.target!.codeResourceUri!,
-            capturedAt: now,
-          }));
-        } catch (error: unknown) {
-          anchorWarnings.push(
-            `Claim ${targeted.index + 1} code target was not anchored: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
+    const parsedTargets = new Map<number, { path: string; resourceUri: string }>();
+    for (const targeted of targetedClaims) {
+      const resourceUri = targeted.claim.target!.codeResourceUri!;
+      try {
+        parsedTargets.set(targeted.index, {
+          path: parseCodeResourceUri(resourceUri, { allowWorkspaceBinding: false }).path,
+          resourceUri,
+        });
+      } catch (error: unknown) {
+        anchorWarnings.push(`Claim ${targeted.index + 1} code target was not anchored: ${errorMessage(error)}`);
       }
-    } catch (error: unknown) {
-      anchorWarnings.push(
-        `Code anchor index refresh failed: ${error instanceof Error ? error.message : String(error)}`
-      );
+    }
+    const refreshFailures = await refreshCodeTargetPaths(
+      index,
+      [...parsedTargets.values()].map((target) => target.path)
+    );
+    for (const targeted of targetedClaims) {
+      const target = parsedTargets.get(targeted.index);
+      if (!target) continue;
+      const refreshFailure = refreshFailures.get(target.path);
+      if (refreshFailure) {
+        anchorWarnings.push(
+          `Claim ${targeted.index + 1} code target was not anchored: ` +
+          `Code evidence target is not indexed or readable: ${target.resourceUri} (${refreshFailure})`
+        );
+        continue;
+      }
+      try {
+        capturedAnchors.set(targeted.index, await captureCodeAnchor({
+          repositoryRoot,
+          wikiRoot: params.wikiRoot,
+          resourceUri: target.resourceUri,
+          capturedAt: now,
+        }));
+      } catch (error: unknown) {
+        anchorWarnings.push(`Claim ${targeted.index + 1} code target was not anchored: ${errorMessage(error)}`);
+      }
     }
   }
 
@@ -172,28 +225,44 @@ export async function backfillEvidenceCodeAnchors(wikiRoot: string): Promise<{
   const captured = new Map<string, { anchor: CodeAnchor; resourceUri: string }>();
   const warnings: string[] = [];
   const index = new PersistentCodeEvidenceIndex({ repositoryRoot, wikiRoot });
-  try {
-    await index.rebuild();
-    for (const claim of eligible) {
-      try {
-        const resourceUri = claim.target!.codeResourceUri!;
-        captured.set(claim.id, {
-          resourceUri,
-          anchor: await captureCodeAnchor({
-            repositoryRoot,
-            wikiRoot,
-            resourceUri,
-            capturedAt,
-          }),
-        });
-      } catch (error: unknown) {
-        warnings.push(
-          `${claim.id} was not anchored: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
+  const parsedTargets = new Map<string, { path: string; resourceUri: string }>();
+  for (const claim of eligible) {
+    const resourceUri = claim.target!.codeResourceUri!;
+    try {
+      parsedTargets.set(claim.id, {
+        path: parseCodeResourceUri(resourceUri, { allowWorkspaceBinding: false }).path,
+        resourceUri,
+      });
+    } catch (error: unknown) {
+      warnings.push(`${claim.id} was not anchored: ${errorMessage(error)}`);
     }
-  } catch (error: unknown) {
-    warnings.push(`Code anchor index refresh failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const refreshFailures = await refreshCodeTargetPaths(
+    index,
+    [...parsedTargets.values()].map((target) => target.path)
+  );
+  for (const claim of eligible) {
+    const target = parsedTargets.get(claim.id);
+    if (!target) continue;
+    const refreshFailure = refreshFailures.get(target.path);
+    if (refreshFailure) {
+      warnings.push(`${claim.id} was not anchored: Code evidence target is not indexed or readable: ` +
+        `${target.resourceUri} (${refreshFailure})`);
+      continue;
+    }
+    try {
+      captured.set(claim.id, {
+        resourceUri: target.resourceUri,
+        anchor: await captureCodeAnchor({
+          repositoryRoot,
+          wikiRoot,
+          resourceUri: target.resourceUri,
+          capturedAt,
+        }),
+      });
+    } catch (error: unknown) {
+      warnings.push(`${claim.id} was not anchored: ${errorMessage(error)}`);
+    }
   }
 
   let anchored = 0;
