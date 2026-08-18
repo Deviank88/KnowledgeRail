@@ -540,15 +540,25 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
         throw new Error("Embedding provider returned an invalid semantic coverage vector.");
       }
       const byPage = new Map<string, number>();
+      const passagesByPage = new Map<string, Array<{ passageId: string; score: number }>>();
       for (const passage of passages) {
         const score = cosineSimilarity(vector, passage.vector);
         const current = byPage.get(passage.pagePath);
         if (current === undefined || score > current) byPage.set(passage.pagePath, score);
+        const pagePassages = passagesByPage.get(passage.pagePath) ?? [];
+        pagePassages.push({ passageId: passage.passageId, score });
+        passagesByPage.set(passage.pagePath, pagePassages);
       }
       return {
         id: query.id,
         pages: [...byPage.entries()]
-          .map(([pagePath, score]) => ({ pagePath, score }))
+          .map(([pagePath, score]) => ({
+            pagePath,
+            score,
+            passages: (passagesByPage.get(pagePath) ?? []).sort((left, right) =>
+              right.score - left.score || left.passageId.localeCompare(right.passageId)
+            ),
+          }))
           .sort((left, right) => right.score - left.score || left.pagePath.localeCompare(right.pagePath)),
       };
     });

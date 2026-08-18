@@ -146,7 +146,7 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
     inputSchema: z.object({
       document_type: DocumentTypeSchema,
       project_name: z.string().optional(),
-      objective: z.string().optional(),
+      objective: z.string().max(4_096).optional(),
       audience: z.string().optional(),
       language: z.string().optional().describe("Output language; defaults to the user's current request language."),
       max_sections: z.number().int().positive().optional(),
@@ -227,7 +227,7 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
     description: "Internal bounded section-context operation with explicit gaps and optional diagram evidence.",
     inputSchema: z.object({
       section_title: z.string(),
-      query: z.string().optional(),
+      query: z.string().max(4_096).optional(),
       document_type: DocumentTypeSchema,
       language: z.string().optional(),
       diagram_mode: DiagramModeSchema,

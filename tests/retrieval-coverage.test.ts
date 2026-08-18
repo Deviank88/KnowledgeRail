@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { performance } from "node:perf_hooks";
+import { wikiPassageId } from "../src/context/passage-id.js";
 import type { SeededGraphQueryResult } from "../src/core/graph-runtime.js";
 import { parseWikiPageRecord } from "../src/core/page-record.js";
 import type { RetrievalHit } from "../src/core/retrieval-index.js";
@@ -61,6 +63,10 @@ function graphResult(): SeededGraphQueryResult {
   };
 }
 
+function selectedPassage(hit: RetrievalHit) {
+  return hit.record.passages.find((passage) => passage.heading === hit.heading);
+}
+
 test("entity extraction ignores task verbs and ordinary slash-separated prose", () => {
   const entities = extractQueryEntities(
     "Spiegare i Lease nel progetto SilverFir: data model, automazioni/componenti, test e rilasci per Asset__c REQ-808 /services/data/v1"
@@ -75,6 +81,10 @@ test("entity extraction ignores task verbs and ordinary slash-separated prose", 
   assert.equal(entities.includes("/services/data/v1"), true);
   assert.equal(extractQueryEntities("SilverFir Lease lifecycle").includes("SilverFir"), true);
   assert.equal(extractQueryEntities("Checkout loads the next page").includes("Checkout"), false);
+  assert.equal(extractQueryEntities("Ledger contain an audit trail").includes("Ledger"), false);
+  assert.equal(extractQueryEntities("Ledger write audit events").includes("Ledger"), false);
+  assert.equal(extractQueryEntities("Checkout carica la pagina successiva").includes("Checkout"), false);
+  assert.equal(extractQueryEntities("Spiega Pagamento e Sistema").includes("Sistema"), true);
 
   const guidedTaskEntities = extractQueryEntities(
     "Capire il funzionamento dei lease nel progetto SilverFir, includendo data model, automazioni e componenti, validazioni, test e rilasci, evidenziando limiti e gap documentali."
@@ -104,6 +114,17 @@ test("single-word proper nouns remain coverage entities without substring matche
     graphResult: graphResult(),
   });
   assert.equal(exact.unresolvedEntities.includes("Payment"), false);
+});
+
+test("entity extraction remains bounded for adversarial camel-case input", { timeout: 1_000 }, () => {
+  const objective = `${"Aa".repeat(2_047)}_`;
+  const started = performance.now();
+  const entities = extractQueryEntities(objective);
+  const elapsed = performance.now() - started;
+
+  assert.deepEqual(entities, []);
+  assert.equal(elapsed < 500, true, `entity extraction took ${elapsed.toFixed(2)}ms`);
+  assert.deepEqual(extractQueryEntities("Explain OrderService behavior"), ["OrderService"]);
 });
 
 test("coverage uses the full candidate set and labels display exclusions as budget limited", () => {
@@ -159,7 +180,11 @@ test("semantic scores cover paraphrase facets while preserving entity and type e
 
   const semanticScores = semanticCoverageQueries("auth OrderService", requirements).map((query) => ({
     id: query.id,
-    pages: [{ pagePath: request.path, score: 0.95 }],
+    pages: [{
+      pagePath: request.path,
+      score: 0.95,
+      passages: [{ passageId: wikiPassageId(selectedPassage(request)!), score: 0.95 }],
+    }],
   }));
   const semantic = assessRetrievalCoverage({
     query: "auth OrderService",
@@ -173,4 +198,103 @@ test("semantic scores cover paraphrase facets while preserving entity and type e
   assert.equal(semantic.coverageMode, "semantic");
   assert.deepEqual(semantic.evidenceGaps, []);
   assert.equal(semantic.sufficient, true);
+});
+
+test("semantic passage coverage does not inherit a page-level maximum", () => {
+  const page = hit(1, [
+    "## Hidden rationale",
+    "Adaptive admission control protects the queue.",
+    "",
+    "## Displayed excerpt",
+    "Audit events remain immutable.",
+  ].join("\n"));
+  const hidden = page.record.passages.find((passage) => passage.heading === "Hidden rationale")!;
+  const displayed = page.record.passages.find((passage) => passage.heading === "Displayed excerpt")!;
+  page.heading = displayed.heading;
+  page.excerpt = displayed.text;
+  const semanticScores = semanticCoverageQueries("adaptive admission").map((query) => ({
+    id: query.id,
+    pages: [{
+      pagePath: page.path,
+      score: 0.95,
+      passages: [
+        { passageId: wikiPassageId(hidden), score: 0.95 },
+        { passageId: wikiPassageId(displayed), score: 0.1 },
+      ],
+    }],
+  }));
+
+  const coverage = assessRetrievalCoverage({
+    query: "adaptive admission",
+    hits: [page],
+    graphResult: graphResult(),
+    coverageMode: "semantic",
+    semanticScores,
+  });
+
+  assert.equal(coverage.evidenceGaps.includes("query_facets"), false);
+  assert.equal(coverage.evidenceGaps.includes("passage_evidence"), true);
+  assert.equal(coverage.sufficient, false);
+});
+
+test("empty excerpts cannot inherit semantic coverage from a same-heading sibling", () => {
+  const page = hit(1, [
+    "## Shared section",
+    "Adaptive admission control protects the queue.",
+    "",
+    "## Shared section",
+    "Audit events remain immutable.",
+  ].join("\n"));
+  const shared = page.record.passages.filter((passage) => passage.heading === "Shared section");
+  assert.equal(shared.length, 2);
+  page.heading = "Shared section";
+  page.excerpt = "";
+  const semanticScores = semanticCoverageQueries("adaptive admission").map((query) => ({
+    id: query.id,
+    pages: [{
+      pagePath: page.path,
+      score: 0.95,
+      passages: [
+        { passageId: wikiPassageId(shared[0]!), score: 0.95 },
+        { passageId: wikiPassageId(shared[1]!), score: 0.1 },
+      ],
+    }],
+  }));
+
+  const coverage = assessRetrievalCoverage({
+    query: "adaptive admission",
+    hits: [page],
+    graphResult: graphResult(),
+    coverageMode: "semantic",
+    semanticScores,
+  });
+
+  assert.equal(coverage.evidenceGaps.includes("query_facets"), false);
+  assert.equal(coverage.evidenceGaps.includes("passage_evidence"), true);
+});
+
+test("a non-matching heading resolves an unambiguous non-empty excerpt", () => {
+  const page = hit(1, "Authentication is mandatory for every request.");
+  const passage = selectedPassage(page)!;
+  page.heading = "Generated heading";
+  page.excerpt = passage.text;
+  const semanticScores = semanticCoverageQueries("auth").map((query) => ({
+    id: query.id,
+    pages: [{
+      pagePath: page.path,
+      score: 0.95,
+      passages: [{ passageId: wikiPassageId(passage), score: 0.95 }],
+    }],
+  }));
+
+  const coverage = assessRetrievalCoverage({
+    query: "auth",
+    hits: [page],
+    graphResult: graphResult(),
+    coverageMode: "semantic",
+    semanticScores,
+  });
+
+  assert.equal(coverage.evidenceGaps.includes("passage_evidence"), false);
+  assert.equal(coverage.sufficient, true);
 });

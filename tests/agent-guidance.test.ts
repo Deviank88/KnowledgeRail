@@ -60,6 +60,8 @@ test("action schemas reject incomplete calls before an operation can mutate stat
   const page = tools.get("knowledge_page")!.config.inputSchema;
   const ingest = tools.get("knowledge_ingest")!.config.inputSchema;
   const code = tools.get("knowledge_code")!.config.inputSchema;
+  const taskContext = tools.get("knowledge_context")!.config.inputSchema;
+  const documentContext = tools.get("knowledge_document_context")!.config.inputSchema;
   const document = tools.get("knowledge_document")!.config.inputSchema;
   const admin = tools.get("knowledge_admin")!.config.inputSchema;
 
@@ -72,6 +74,13 @@ test("action schemas reject incomplete calls before an operation can mutate stat
   assert.equal(admin.safeParse({ action: "drift", scope: "paths" }).success, false);
   assert.equal(admin.safeParse({ action: "drift", scope: "paths", paths: ["src"] }).success, true);
   assert.equal(page.safeParse({ action: "delete", path: "a.md" }).success, true);
+  assert.equal(taskContext.safeParse({ mode: "task", objective: "Explain OrderService" }).success, true);
+  assert.equal(taskContext.safeParse({ mode: "task", objective: "x".repeat(4_097) }).success, false);
+  assert.equal(documentContext.safeParse({
+    action: "plan",
+    document_type: "custom",
+    objective: "x".repeat(4_097),
+  }).success, false);
 });
 
 test("tool results provide one machine-readable next action without a menu round trip", async () => {

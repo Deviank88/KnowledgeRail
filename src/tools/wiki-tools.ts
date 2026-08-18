@@ -555,7 +555,7 @@ export function registerWikiTools(
             }));
 
   server.registerTool(toolName("search", era), { description: "Internal lexical diagnostic used by knowledge_context mode=search.", inputSchema: z.object({
-              query: z.string().optional(),
+              query: z.string().max(4_096).optional(),
               max_results: z.number().int().positive().optional().default(10),
               page_types: z.array(z.string()).optional(),
               retrieval_profile: z.enum(["precision", "balanced", "coverage"]).optional().default("balanced"),
@@ -581,7 +581,7 @@ export function registerWikiTools(
             });
 
   server.registerTool(toolName("graphQuery", era), { description: "Internal graph diagnostic used by knowledge_context mode=graph.", inputSchema: z.object({
-              query: z.string().optional().default(""),
+              query: z.string().max(4_096).optional().default(""),
               max_nodes: z.number().int().positive().optional().default(12),
               max_depth: z.number().int().min(0).optional().default(1),
               page_types: z.array(z.string()).optional(),

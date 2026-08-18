@@ -130,6 +130,9 @@ test("semantic passage index is derived, incremental, versioned and leaves Markd
     assert.deepEqual(secondCoverage, firstCoverage, "semantic coverage scores must be deterministic");
     assert.equal(provider.queryInputs.length, coverageQueries.length);
     assert.equal(firstCoverage.every((score) => score.pages.length === 2), true);
+    assert.equal(firstCoverage.every((score) =>
+      score.pages.every((page) => (page.passages?.length ?? 0) > 0)
+    ), true, "coverage must retain per-passage scores as well as page maxima");
 
     const warmProvider = new CountingEmbeddingProvider();
     const warmIndex = new PersistentSemanticIndex(wikiRoot, warmProvider);

@@ -63,7 +63,7 @@ Actions/modes: `rebuild`, `update`, `remove`, `search`, `symbol`, `references`, 
 
 Project evidence and gaps; page list/search; relation graph.
 
-Task responses report `retrieval.coverageMode` (`lexical` or `semantic`) and `coverageWarnings`. The full fused pool classifies evidence as missing or display-budget-limited, while `coverageSufficient` and the widening stop condition refer to evidence actually returned to the model. Configured embedding provider failures degrade to lexical mode without failing the tool call; the configuration notice is emitted once per active workspace.
+Task responses report `retrieval.coverageMode` (`lexical` or `semantic`) and `coverageWarnings`. Coverage uses the full fused candidate set while returned evidence remains bounded; relevant evidence excluded from display is `budget_limited`, not `missing_evidence`. Configured embedding provider failures degrade to lexical mode without failing the tool call.
 
 Actions/modes: `task`, `list`, `search`, `graph`.
 
@@ -160,10 +160,10 @@ Actions/modes: `start`, `next`, `apply_claims`, `record_segment`, `source_status
 |---|---|---:|---|---|
 | `action` | `start` &#124; `next` &#124; `apply_claims` &#124; `record_segment` &#124; `source_status` &#124; `evidence_status` &#124; `finalize` &#124; `report` &#124; `record_recovery` &#124; `resolve_recovery` | yes | — | start=begin; next=segment; apply_claims=integrate; record_segment=classify; source_status=coverage; evidence_status=debt; finalize=close; report=drafts; record_recovery=track; resolve_recovery=resolve. |
 | `normalized_filename` | string | no | — | docs/normalized file. |
-| `max_chars` | integer | no | `12000` | Next response limit. |
+| `max_chars` | integer | no | `12000` | Response limit. |
 | `segment_max_chars` | integer | no | — | Start segment size. |
 | `segment_id` | string | no | — | ID from next. |
-| `claims` | array<object> | no | — | Claim: text, kind, origin, confidence; optional target/relations. |
+| `claims` | array<object> | no | — | Claim fields; optional target/relations. |
 | `segment_status` | `irrelevant` &#124; `unresolved` &#124; `legacy_unverified` | no | — | record_segment class. |
 | `evidence_refs` | array<string> | no | — | — |
 | `page_refs` | array<string> | no | — | — |
@@ -172,7 +172,7 @@ Actions/modes: `start`, `next`, `apply_claims`, `record_segment`, `source_status
 | `claim_ids` | array<string> | no | — | Claim IDs filter. |
 | `include_resolved` | boolean | no | `false` | Include resolved. |
 | `total_evidence_used` | integer | no | — | — |
-| `recovery_events` | array<object> | no | — | Recovery: evidence_ref, source_uri, discovered_by, reason; optional pages. |
+| `recovery_events` | array<object> | no | — | Recovery fields; optional pages. |
 | `recovery_event_id` | string | no | — | Recovery event ID. |
 | `recovery_resolution` | `page_updated` &#124; `new_page` &#124; `ledger_updated` &#124; `intentionally_ignored` | no | — | Recovery disposition. |
 | `recovery_page_refs` | array<string> | no | — | Representing pages. |
