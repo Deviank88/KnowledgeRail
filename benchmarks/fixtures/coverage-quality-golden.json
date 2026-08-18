@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "cases": [
     { "id": "exact-facet", "query": "audit", "displayBody": "Audit events are retained.", "expectedGap": false },
     { "id": "stem-deployment", "query": "deployment", "displayBody": "The service is deployed safely.", "expectedGap": false },

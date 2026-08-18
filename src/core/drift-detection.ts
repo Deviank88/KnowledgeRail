@@ -4,9 +4,9 @@ import { atomicWriteText } from "./fs-service.js";
 import { readEvidenceIrStore } from "./ingestion/evidence-store.js";
 import { withWikiFileLock } from "./lock-service.js";
 import { wikiMetaDir } from "./manifest-service.js";
-import { safeResolveWithin } from "./paths.js";
 import { readFileSafe } from "./utils.js";
 import { codeAnchorHash } from "./code-evidence/code-anchor.js";
+import { readConfinedRepositoryFile } from "./code-evidence/confined-reader.js";
 import { TYPESCRIPT_ADAPTER_VERSION, type CodeAnchor } from "./code-evidence/types.js";
 
 export const DRIFT_LEDGER_VERSION = 1 as const;
@@ -222,17 +222,15 @@ async function readCurrentCode(
   relativePath: string
 ): Promise<CurrentCodeRead> {
   try {
-    const lexicalTarget = safeResolveWithin(repositoryRoot, relativePath);
-    const targetReal = await fs.realpath(lexicalTarget);
-    const relative = path.relative(repositoryRootReal, targetReal);
-    if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
-      throw new Error(`Drift anchor resolves outside the repository root: ${relativePath}`);
-    }
-    const stat = await fs.stat(targetReal);
-    if (!stat.isFile()) throw new Error(`Drift anchor is not a regular file: ${relativePath}`);
-    return { status: "readable", content: await fs.readFile(targetReal, "utf8") };
+    const content = await readConfinedRepositoryFile({
+      repositoryRoot,
+      repositoryRootReal,
+      relativePath,
+      missing: "null",
+      label: "Drift anchor",
+    });
+    return content === null ? { status: "missing" } : { status: "readable", content };
   } catch (error: unknown) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return { status: "missing" };
     return { status: "unresolvable" };
   }
 }

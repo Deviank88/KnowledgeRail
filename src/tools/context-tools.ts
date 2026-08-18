@@ -121,8 +121,8 @@ export function registerContextTools(
       description: "Internal bounded task-context operation with explicit unknowns and provenance.",
       inputSchema: z.object({
         intent: z.enum(["understand", "implement", "modify", "debug", "review", "document"]),
-        objective: z.string().min(1),
-        query: z.string().min(1).optional().describe("Retrieval query; defaults to objective."),
+        objective: z.string().min(1).max(4_096),
+        query: z.string().min(1).max(4_096).optional().describe("Retrieval query; defaults to objective."),
         changed_paths: z.array(z.string().min(1).max(1_024)).max(20).optional()
           .describe("Wiki-relative changed components for impact analysis."),
         page_types: z.array(z.string().min(1).max(128)).max(20).optional(),

@@ -91,6 +91,11 @@ export interface SemanticCoverageQuery {
 export interface SemanticCoveragePageScore {
   pagePath: string;
   score: number;
+  /** Scores for the individual passages used to compute the page maximum. */
+  passages?: Array<{
+    passageId: string;
+    score: number;
+  }>;
 }
 
 export interface SemanticCoverageScore {

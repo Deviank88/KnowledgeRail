@@ -34,10 +34,15 @@ interface SemanticBaseline {
   coverageFixtureVersion: number;
   coverageFixtureSha256: string;
   minimumCoverageCaseCount: number;
+  minimumLegacyDisplayGapPrecision: number;
+  minimumLegacyFullPoolGapPrecision: number;
   minimumLexicalGapPrecision: number;
   minimumSemanticGapPrecision: number;
+  minimumPoolPrecisionDelta: number;
   minimumLexicalPrecisionDelta: number;
   minimumSemanticPrecisionDelta: number;
+  maximumLegacyDisplaySilentMiss: number;
+  maximumLegacyFullPoolSilentMiss: number;
   maximumLexicalSilentMiss: number;
   maximumSemanticSilentMiss: number;
 }
@@ -98,13 +103,21 @@ async function main(): Promise<void> {
   check(failures, "coverageFixtureVersion", coverage.fixtureVersion === baseline.coverageFixtureVersion, coverage.fixtureVersion);
   check(failures, "coverageFixtureSha256", digest(coverageFixtureBytes) === baseline.coverageFixtureSha256, digest(coverageFixtureBytes));
   check(failures, "coverageCaseCount", coverage.caseCount >= baseline.minimumCoverageCaseCount, coverage.caseCount);
+  check(failures, "LegacyDisplayGapPrecision", coverage.baseline205.gapPrecision >= baseline.minimumLegacyDisplayGapPrecision, coverage.baseline205.gapPrecision);
+  check(failures, "LegacyFullPoolGapPrecision", coverage.baseline205FullPool.gapPrecision >= baseline.minimumLegacyFullPoolGapPrecision, coverage.baseline205FullPool.gapPrecision);
   check(failures, "LexicalGapPrecision", coverage.lexical.gapPrecision >= baseline.minimumLexicalGapPrecision, coverage.lexical.gapPrecision);
   check(failures, "SemanticGapPrecision", coverage.semantic.gapPrecision >= baseline.minimumSemanticGapPrecision, coverage.semantic.gapPrecision);
   check(
     failures,
-    "LexicalGapPrecisionDelta",
-    coverage.lexical.gapPrecision - coverage.baseline205.gapPrecision >= baseline.minimumLexicalPrecisionDelta,
-    coverage.lexical.gapPrecision - coverage.baseline205.gapPrecision
+    "PoolGapPrecisionDelta",
+    coverage.baseline205FullPool.gapPrecision - coverage.baseline205.gapPrecision >= baseline.minimumPoolPrecisionDelta,
+    coverage.baseline205FullPool.gapPrecision - coverage.baseline205.gapPrecision
+  );
+  check(
+    failures,
+    "LexicalMatchingGapPrecisionDelta",
+    coverage.lexical.gapPrecision - coverage.baseline205FullPool.gapPrecision >= baseline.minimumLexicalPrecisionDelta,
+    coverage.lexical.gapPrecision - coverage.baseline205FullPool.gapPrecision
   );
   check(
     failures,
@@ -112,6 +125,8 @@ async function main(): Promise<void> {
     coverage.semantic.gapPrecision - coverage.lexical.gapPrecision >= baseline.minimumSemanticPrecisionDelta,
     coverage.semantic.gapPrecision - coverage.lexical.gapPrecision
   );
+  check(failures, "LegacyDisplaySilentMiss", coverage.baseline205.silentMiss <= baseline.maximumLegacyDisplaySilentMiss, coverage.baseline205.silentMiss);
+  check(failures, "LegacyFullPoolSilentMiss", coverage.baseline205FullPool.silentMiss <= baseline.maximumLegacyFullPoolSilentMiss, coverage.baseline205FullPool.silentMiss);
   check(failures, "LexicalSilentMiss", coverage.lexical.silentMiss <= baseline.maximumLexicalSilentMiss, coverage.lexical.silentMiss);
   check(failures, "SemanticSilentMiss", coverage.semantic.silentMiss <= baseline.maximumSemanticSilentMiss, coverage.semantic.silentMiss);
 

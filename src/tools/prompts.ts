@@ -24,7 +24,7 @@ const PlanDocumentPromptSchema = z.object({
     z.string().trim().min(1).max(160).regex(/^[^\r\n]+$/)
   ).max(30).optional(),
   project_name: z.string().optional(),
-  objective: z.string().optional(),
+  objective: z.string().max(4_096).optional(),
   audience: z.string().optional(),
   language: z.string().optional().describe("Output language; defaults to the user's current request language."),
 });

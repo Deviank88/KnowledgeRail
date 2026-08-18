@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-08-19
+
+### Fixed
+
+- Kept semantic page coverage separate from displayed-passage coverage, rejecting empty or ambiguous excerpt mappings so a strong body passage cannot hide an irrelevant excerpt or suppress `passage_evidence` gaps.
+- Replaced the ambiguous entity-matching pattern with bounded linear matching, capped public task objectives and queries at 4,096 characters, and made sentence-initial prose handling symmetric for English and Italian.
+- Split the GAP-quality baseline into legacy-display, legacy-full-pool, lexical-full-pool, and semantic-full-pool arms, with precision and silent-miss gates for each stage and no lowered thresholds.
+
+### Changed
+
+- Centralized repository-confined code reads used by code-anchor capture and drift detection while preserving their distinct missing-file verdicts.
+
 ## [2.2.0] - 2026-08-18
 
 ### Added
@@ -140,7 +152,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Initial local-first MCP server with persistent evidence-backed knowledge, bounded retrieval, document workflows, and eight public `knowledge_*` tools.
 - Multi-workspace loopback HTTP gateway, opaque per-chat bindings, desktop adapter, and portable npm/npx distribution.
 
-[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.2.1...HEAD
+[2.2.1]: https://github.com/Deviank88/KnowledgeRail/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.5...v2.1.0
 [2.0.5]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.4...v2.0.5

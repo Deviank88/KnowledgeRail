@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { SeededGraphQueryResult } from "../src/core/graph-runtime.js";
 import { parseWikiPageRecord } from "../src/core/page-record.js";
 import type { RetrievalHit } from "../src/core/retrieval-index.js";
+import { wikiPassageId } from "../src/context/passage-id.js";
 import {
   assessRetrievalCoverage,
   semanticCoverageQueries,
@@ -45,12 +46,14 @@ export interface CoverageQualityReport {
   fixtureVersion: number;
   caseCount: number;
   baseline205: GapQualityMetrics;
+  baseline205FullPool: GapQualityMetrics;
   lexical: GapQualityMetrics;
   semantic: GapQualityMetrics;
   cases: Array<{
     id: string;
     expectedGap: boolean;
     baselineGap: boolean;
+    baselineFullPoolGap: boolean;
     lexicalGap: boolean;
     semanticGap: boolean;
   }>;
@@ -159,7 +162,8 @@ export async function evaluateCoverageQuality(
 ): Promise<CoverageQualityReport> {
   const fixture = JSON.parse(await fs.readFile(fixturePath, "utf8")) as CoverageFixture;
   const expected: boolean[] = [];
-  const baseline: boolean[] = [];
+  const baselineDisplay: boolean[] = [];
+  const baselineFullPool: boolean[] = [];
   const lexical: boolean[] = [];
   const semantic: boolean[] = [];
   const cases: CoverageQualityReport["cases"] = [];
@@ -179,7 +183,14 @@ export async function evaluateCoverageQuality(
     const semanticScores = config.semanticCoverage
       ? semanticCoverageQueries(config.query, explicit).map((query) => ({
           id: query.id,
-          pages: candidates.map((candidate) => ({ pagePath: candidate.path, score: 0.95 })),
+          pages: candidates.map((candidate) => ({
+            pagePath: candidate.path,
+            score: 0.95,
+            passages: candidate.record.passages.map((passage) => ({
+              passageId: wikiPassageId(passage),
+              score: 0.95,
+            })),
+          })),
         }))
       : [];
     const semanticCoverage = assessRetrievalCoverage({
@@ -192,16 +203,19 @@ export async function evaluateCoverageQuality(
       semanticScores,
     });
     const baselinePrediction = legacyGap(config, displayed);
+    const baselineFullPoolPrediction = legacyGap(config, candidates);
     const lexicalPrediction = lexicalCoverage.evidenceGaps.length > 0;
     const semanticPrediction = semanticCoverage.evidenceGaps.length > 0;
     expected.push(config.expectedGap);
-    baseline.push(baselinePrediction);
+    baselineDisplay.push(baselinePrediction);
+    baselineFullPool.push(baselineFullPoolPrediction);
     lexical.push(lexicalPrediction);
     semantic.push(semanticPrediction);
     cases.push({
       id: config.id,
       expectedGap: config.expectedGap,
       baselineGap: baselinePrediction,
+      baselineFullPoolGap: baselineFullPoolPrediction,
       lexicalGap: lexicalPrediction,
       semanticGap: semanticPrediction,
     });
@@ -209,7 +223,8 @@ export async function evaluateCoverageQuality(
   return {
     fixtureVersion: fixture.version,
     caseCount: fixture.cases.length,
-    baseline205: metrics(expected, baseline),
+    baseline205: metrics(expected, baselineDisplay),
+    baseline205FullPool: metrics(expected, baselineFullPool),
     lexical: metrics(expected, lexical),
     semantic: metrics(expected, semantic),
     cases,

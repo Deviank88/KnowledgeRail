@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto";
-import * as fs from "node:fs/promises";
-import * as nodePath from "node:path";
-import { safeResolveWithin } from "../paths.js";
 import { readCodeEvidenceSnapshot } from "./index.js";
+import { readConfinedRepositoryFile } from "./confined-reader.js";
 import { parseCodeResourceUri } from "./resource-uri.js";
 import {
   TYPESCRIPT_ADAPTER_VERSION,
@@ -31,21 +29,6 @@ export function codeAnchorHash(content: string, startLine: number, endLine: numb
   return codeRangeHash(lines.slice(startLine - 1, endLine));
 }
 
-async function readConfinedCodeFile(repositoryRoot: string, relativePath: string): Promise<string> {
-  const lexicalTarget = safeResolveWithin(repositoryRoot, relativePath);
-  const [rootReal, targetReal] = await Promise.all([
-    fs.realpath(repositoryRoot),
-    fs.realpath(lexicalTarget),
-  ]);
-  const relativeReal = nodePath.relative(rootReal, targetReal);
-  if (relativeReal === "" || relativeReal.startsWith("..") || nodePath.isAbsolute(relativeReal)) {
-    throw new Error(`Code anchor resolves outside the repository root: ${relativePath}`);
-  }
-  const stat = await fs.stat(targetReal);
-  if (!stat.isFile()) throw new Error(`Code anchor is not a regular file: ${relativePath}`);
-  return fs.readFile(targetReal, "utf8");
-}
-
 export async function captureCodeAnchor(params: {
   repositoryRoot: string;
   wikiRoot: string;
@@ -59,7 +42,12 @@ export async function captureCodeAnchor(params: {
     candidate.id === reference.fragmentId && candidate.path === reference.path
   );
   if (!file || !fragment) throw new Error(`Code evidence target is not indexed: ${params.resourceUri}`);
-  const content = await readConfinedCodeFile(params.repositoryRoot, reference.path);
+  const content = await readConfinedRepositoryFile({
+    repositoryRoot: params.repositoryRoot,
+    relativePath: reference.path,
+    missing: "throw",
+    label: "Code anchor",
+  });
   const contentHash = createHash("sha256").update(content).digest("hex");
   if (file.contentHash !== contentHash) {
     throw new Error(`Code evidence target is stale: ${reference.path}`);

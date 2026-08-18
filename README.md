@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://cdn.jsdelivr.net/npm/knowledge-rail@2.2.0/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
+  <img src="https://cdn.jsdelivr.net/npm/knowledge-rail@2.2.1/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
 </p>
 
 <h1 align="center">KnowledgeRail</h1>
@@ -8,7 +8,7 @@ KnowledgeRail is a local-first MCP server that turns project documentation and s
 
 It is designed for agents that need to understand, change, review, or document a codebase without loading the whole repository into the model context. Retrieval is bounded, provenance is preserved, missing evidence is reported explicitly, and difficult queries widen progressively instead of silently losing relevant information.
 
-> **Current status:** stable release `2.2.0`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
+> **Current status:** stable release `2.2.1`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
 
 ## What it provides
 
@@ -39,7 +39,7 @@ KnowledgeRail ships no browser or document renderer. Mermaid source remains ordi
 Run this from any directory inside the project you opened in VS Code, Cursor, a terminal, or another context-aware coding client:
 
 ```bash
-npx -y knowledge-rail@2.2.0
+npx -y knowledge-rail@2.2.1
 ```
 
 No project path is needed in the persistent MCP configuration. KnowledgeRail discovers the opened project independently for each process, so project X and project Y can be used at the same time by different agent sessions.
@@ -73,7 +73,7 @@ Use the standard `stdio` server shape once. Do not hard-code one repository:
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.2.0"]
+      "args": ["-y", "knowledge-rail@2.2.1"]
     }
   }
 }
@@ -105,7 +105,7 @@ A desktop chat does not open a filesystem folder, so it cannot safely infer a pr
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.2.0", "desktop"]
+      "args": ["-y", "knowledge-rail@2.2.1", "desktop"]
     }
   }
 }
@@ -118,10 +118,10 @@ In a new chat, ask KnowledgeRail to list workspaces, choose one entry, and confi
 Projects opened successfully by an IDE/terminal are added to the local catalog automatically without changing their clean eight-tool workflow. Operators can also manage catalog metadata locally:
 
 ```bash
-npx -y knowledge-rail@2.2.0 workspace list
-npx -y knowledge-rail@2.2.0 workspace register
-npx -y knowledge-rail@2.2.0 workspace register /absolute/project/path
-npx -y knowledge-rail@2.2.0 workspace unregister ws_example
+npx -y knowledge-rail@2.2.1 workspace list
+npx -y knowledge-rail@2.2.1 workspace register
+npx -y knowledge-rail@2.2.1 workspace register /absolute/project/path
+npx -y knowledge-rail@2.2.1 workspace unregister ws_example
 ```
 
 Registration never copies, uploads, scans the disk, or deletes project files. `workspace register` without a path discovers only upward from cwd.
@@ -131,7 +131,7 @@ Registration never copies, uploads, scans the disk, or deletes project files. `w
 Start one gateway for many concurrent local clients and workspaces:
 
 ```bash
-npx -y knowledge-rail@2.2.0 --transport http
+npx -y knowledge-rail@2.2.1 --transport http
 ```
 
 The default endpoint is `http://127.0.0.1:3333/mcp`; liveness only is available at `/healthz`. MCP requests require the random credential stored in the OS-protected per-user KnowledgeRail state directory. The desktop adapter reads it automatically, so it never belongs in project configuration or a repository.
@@ -310,7 +310,7 @@ Common OCR variables:
 | `KNOWLEDGE_RAIL_OCR_TIMEOUT_MS` | Positive request timeout in milliseconds. |
 | `KNOWLEDGE_RAIL_OCR_RETRIES` | Retry count. |
 
-Semantic retrieval and semantic-aware coverage are optional. Without an embedding provider, deterministic lexical/graph/passage retrieval and delimiter-, stemming-, and artifact-equivalence-aware coverage remain fully available offline. With a provider, query facets and entities are additionally checked against indexed passage embeddings, which improves GAP precision. If the configured provider is unavailable, times out, or returns incompatible vectors, `knowledge_context` falls back to lexical coverage and reports the warning instead of failing.
+Semantic retrieval and semantic-aware coverage are optional. Without an embedding provider, deterministic lexical/graph/passage retrieval and delimiter-, stemming-, and artifact-equivalence-aware coverage remain fully available offline. With a provider, query facets and entities are additionally checked against indexed passage embeddings, which improves GAP precision. Page coverage uses the strongest indexed passage, while displayed-passage coverage is scored only against the excerpt actually selected; a relevant page therefore cannot hide a weak displayed excerpt. If the configured provider is unavailable, times out, or returns incompatible vectors, `knowledge_context` falls back to lexical coverage and reports the warning instead of failing.
 
 The recommended local-first setup is an OpenAI-compatible Ollama endpoint; choose a pinned local model and use its declared vector dimensions:
 

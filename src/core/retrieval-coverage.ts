@@ -2,6 +2,7 @@ import type { SeededGraphQueryResult } from "./graph-runtime.js";
 import type { RetrievalHit } from "./retrieval-index.js";
 import type { SemanticCoverageQuery, SemanticCoverageScore } from "./semantic/types.js";
 import { tokenizeSearchText } from "./text-analysis.js";
+import { wikiPassageId } from "../context/passage-id.js";
 
 export type RetrievalCoverageMode = "semantic" | "lexical";
 
@@ -64,7 +65,16 @@ const COMPONENT_TYPES = new Set(["implementation", "api", "integration", "automa
 const SEMANTIC_FACET_THRESHOLD = 0.72;
 const SEMANTIC_ENTITY_THRESHOLD = 0.8;
 const SEMANTIC_ARTIFACT_THRESHOLD = 0.72;
-const LEADING_PROSE_VERB = /^(?:loads?|returns?|reads?|writes?|uses?|contains?|includes?|creates?|updates?|deletes?|runs?|handles?|supports?|allows?|requires?|provides?|stores?|sends?|receives?)\b/i;
+const LEADING_PROSE_VERBS = new Set([
+  "allow", "allows", "carica", "caricano", "contain", "contains", "contiene", "contengono", "create", "creates",
+  "crea", "creano", "delete", "deletes", "elimina", "eliminano", "gestisce", "gestiscono", "handle",
+  "handles", "include", "includes", "legge", "leggono", "load", "loads", "permette", "permettono",
+  "provide", "provides", "read", "reads", "receive", "receives", "restituisce", "restituiscono", "require",
+  "requires", "return", "returns", "riceve", "ricevono", "run", "runs", "scrive", "scrivono", "send",
+  "sends", "store", "stores", "support", "supports", "usa", "usano", "use", "uses", "update", "updates",
+  "write", "writes",
+]);
+const NAMED_DOMAIN_STOP_WORDS = new Set(["system", "sistema"]);
 
 interface CoverageConcept {
   id: string;
@@ -95,32 +105,36 @@ function inferredRequiredTypes(query: string): string[] {
 export function extractQueryEntities(query: string): string[] {
   const subjectPattern = /\b(?:funzionamento|comportamento|architettura|contesto|functioning|behavior|behaviour|architecture|context)\s+(?:di|del|della|dei|degli|delle|su|sui|sulle|of|about|for)\s+(?:the\s+)?([A-Za-z][A-Za-z0-9_.#/-]*)/gi;
   const subjects = [...query.matchAll(subjectPattern)].map((match) => match[1]!).filter(Boolean);
-  const lexicalPattern = /\/?[A-Za-z][A-Za-z0-9_.]*(?:[-_/:#][A-Za-z0-9_.]+)+|\b[A-Z]{2,}[A-Z0-9]*\b|\b[A-Z][a-z]+(?:[A-Z][a-zA-Z0-9]*)+\b|\b\d{2,}\b/g;
-  const lexical = [...query.matchAll(lexicalPattern)].flatMap((match) => {
+  // Delimiters cannot overlap with the adjacent identifier components, so
+  // matching remains linear even for adversarial delimiter-heavy input.
+  const technicalPattern = /\/?[A-Za-z][A-Za-z0-9]*(?:[-_./:#]+[A-Za-z0-9]+)+|\b[A-Z]{2,}[A-Z0-9]*\b|\b\d{2,}\b/g;
+  const technical = [...query.matchAll(technicalPattern)].flatMap((match) => {
     const candidate = match[0];
     const prefix = query.slice(Math.max(0, (match.index ?? 0) - 24), match.index ?? 0);
     if (/\b(?:client|cliente|project|progetto|system|sistema)\s+$/i.test(prefix)) return [];
     return [candidate];
   });
-  const standalone = [...query.matchAll(/\b[A-Z][a-zA-Z]{2,}\b/g)].flatMap((match) => {
+  const standalone = [...query.matchAll(/\b[A-Z][a-zA-Z0-9]{2,}\b/g)].flatMap((match) => {
     const candidate = match[0];
     const index = match.index ?? 0;
     const prefix = query.slice(Math.max(0, index - 24), index);
     if (/\b(?:client|cliente|project|progetto|system|sistema)\s+$/i.test(prefix)) return [];
     // Avoid treating ordinary sentence-initial prose ("Checkout loads …") as
     // an entity while retaining leading proper nouns in noun-phrase queries.
-    if (index === 0 && LEADING_PROSE_VERB.test(query.slice(candidate.length).trimStart())) return [];
+    const followingWord = query.slice(index + candidate.length).trimStart().match(/^[A-Za-z]+/)?.[0]?.toLowerCase();
+    if (index === 0 && followingWord && LEADING_PROSE_VERBS.has(followingWord)) return [];
     return [candidate];
   });
   const introduced = [...query.matchAll(/\b(?:il|lo|la|i|gli|le|un|una|the|a|an)\s+([A-Z][a-zA-Z]{2,})\b/g)]
     .map((match) => match[1]!)
     .filter(Boolean);
-  return uniqueStable([...subjects, ...lexical, ...standalone, ...introduced].filter((candidate) => {
+  return uniqueStable([...subjects, ...technical, ...standalone, ...introduced].filter((candidate) => {
     const normalized = candidate.toLowerCase();
-    // A capitalized "System" can be a named domain concept. Lowercase system
-    // remains a stop word, so generic prose does not become an entity facet.
-    const namedSystem = candidate === "System";
-    if (QUERY_STOP_WORDS.has(normalized) && !namedSystem) return false;
+    // Generic domain nouns become named concepts only when deliberately
+    // capitalized; ordinary lowercase prose remains excluded in both languages.
+    const namedDomainConcept = candidate[0] === candidate[0]?.toUpperCase() &&
+      NAMED_DOMAIN_STOP_WORDS.has(normalized);
+    if (QUERY_STOP_WORDS.has(normalized) && !namedDomainConcept) return false;
     // Ordinary prose such as "automazioni/componenti" is not an identifier.
     // Keep paths and compounds that carry an actual technical signal.
     if (
@@ -272,25 +286,70 @@ export function semanticCoverageQueries(
   return coverageConcepts(query, requirements).map(({ id, text }) => ({ id, text }));
 }
 
-function semanticScoresByConcept(scores: readonly SemanticCoverageScore[]): Map<string, Map<string, number>> {
-  return new Map(scores.map((score) => [
-    score.id,
-    new Map(score.pages.map((page) => [page.pagePath, page.score] as const)),
-  ] as const));
+interface ConceptSemanticScores {
+  pages: Map<string, number>;
+  passages: Map<string, number>;
+}
+
+function semanticPassageKey(pagePath: string, passageId: string): string {
+  return `${pagePath}\0${passageId}`;
+}
+
+function semanticScoresByConcept(scores: readonly SemanticCoverageScore[]): Map<string, ConceptSemanticScores> {
+  return new Map(scores.map((score) => [score.id, {
+    pages: new Map(score.pages.map((page) => [page.pagePath, page.score] as const)),
+    passages: new Map(score.pages.flatMap((page) => (page.passages ?? []).map((passage) => [
+      semanticPassageKey(page.pagePath, passage.passageId),
+      passage.score,
+    ] as const))),
+  }] as const));
 }
 
 function semanticConceptCovered(
   id: string,
   paths: ReadonlySet<string>,
-  scores: ReadonlyMap<string, ReadonlyMap<string, number>>,
+  scores: ReadonlyMap<string, ConceptSemanticScores>,
   threshold: number
 ): boolean {
-  const byPage = scores.get(id);
-  if (!byPage) return false;
+  const conceptScores = scores.get(id);
+  if (!conceptScores) return false;
   for (const pagePath of paths) {
-    if ((byPage.get(pagePath) ?? -1) >= threshold) return true;
+    if ((conceptScores.pages.get(pagePath) ?? -1) >= threshold) return true;
   }
   return false;
+}
+
+function hitPassageId(hit: RetrievalHit): string | undefined {
+  const excerpt = hit.excerpt.replace(/\s+/g, " ").trim();
+  if (!excerpt) return undefined;
+  const sameHeading = hit.record.passages.filter((passage) => passage.heading === hit.heading);
+  const uniqueMatch = (passages: typeof hit.record.passages) => {
+    const normalized = passages.map((passage) => ({
+      passage,
+      text: passage.text.replace(/\s+/g, " ").trim(),
+    }));
+    const exact = normalized.filter((candidate) => candidate.text === excerpt);
+    if (exact.length === 1) return exact[0]!.passage;
+    const prefixed = normalized.filter((candidate) => candidate.text.startsWith(excerpt));
+    return prefixed.length === 1 ? prefixed[0]!.passage : undefined;
+  };
+  const passage = uniqueMatch(sameHeading) ?? uniqueMatch(hit.record.passages);
+  return passage === undefined ? undefined : wikiPassageId(passage);
+}
+
+function semanticPassageConceptCovered(
+  id: string,
+  hits: readonly RetrievalHit[],
+  scores: ReadonlyMap<string, ConceptSemanticScores>,
+  threshold: number
+): boolean {
+  const conceptScores = scores.get(id);
+  if (!conceptScores) return false;
+  return hits.some((hit) => {
+    const passageId = hitPassageId(hit);
+    return passageId !== undefined &&
+      (conceptScores.passages.get(semanticPassageKey(hit.path, passageId)) ?? -1) >= threshold;
+  });
 }
 
 function hitSatisfiesRequiredType(hit: RetrievalHit, requiredType: string): boolean {
@@ -355,11 +414,13 @@ export function assessRetrievalCoverage(params: {
     const candidateText = hits.map(searchableHitText).join(" ");
     const passageText = hits.map((hit) => `${hit.heading} ${hit.excerpt}`).join(" ");
     const facetConcepts = concepts.filter((concept) => concept.kind === "facet");
-    const semanticFacetCoverage = (text: string): number => {
+    const semanticFacetCoverage = (text: string, scope: "page" | "passage"): number => {
       if (facetConcepts.length === 0) return 1;
       const lexicalTerms = new Set(tokenizeSearchText(text).flatMap((term) => [term, stemSearchTerm(term)]));
       const matched = facetConcepts.filter((concept) =>
-        semanticConceptCovered(concept.id, paths, semanticScores, SEMANTIC_FACET_THRESHOLD) ||
+        (scope === "page"
+          ? semanticConceptCovered(concept.id, paths, semanticScores, SEMANTIC_FACET_THRESHOLD)
+          : semanticPassageConceptCovered(concept.id, hits, semanticScores, SEMANTIC_FACET_THRESHOLD)) ||
         lexicalTerms.has(concept.value) || lexicalTerms.has(stemSearchTerm(concept.value))
       ).length;
       return matched / facetConcepts.length;
@@ -367,7 +428,7 @@ export function assessRetrievalCoverage(params: {
     const facetCoverage = queryTerms.length === 0
       ? 1
       : mode === "semantic"
-        ? semanticFacetCoverage(candidateText)
+        ? semanticFacetCoverage(candidateText, "page")
         : lexicalCoverage(candidateText, queryTerms);
     // Broad task queries intentionally span multiple evidence passages. The
     // aggregate is bounded by selected pages rather than by one passage.
@@ -376,7 +437,7 @@ export function assessRetrievalCoverage(params: {
       : queryTerms.length === 0
         ? 1
       : mode === "semantic"
-        ? semanticFacetCoverage(passageText)
+        ? semanticFacetCoverage(passageText, "passage")
         : lexicalCoverage(passageText, queryTerms);
     const aliases = identifierAliases(hits);
     const entityConcepts = concepts.filter((concept) => concept.kind === "entity");
