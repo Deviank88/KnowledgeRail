@@ -29,7 +29,12 @@ interface WideningFixture {
   baseFixture: string;
   initialBudget: Budget;
   maximumBudget: Budget;
-  queries: Array<{ id: string; difficulty: "easy" | "difficult" }>;
+  queries: Array<{
+    id: string;
+    difficulty: "easy" | "difficult";
+    minimumWideningLevel?: number;
+    minimumFinalGraphDepth?: number;
+  }>;
 }
 
 interface WideningBaseline {
@@ -183,7 +188,8 @@ async function main(): Promise<void> {
         failures.push(`Unexpected evaluated query: ${query.id}.`);
         continue;
       }
-      if (!query.finalCoverage.sufficient) failures.push(`${query.id}: final coverage remains insufficient.`);
+      if (!query.finalCoverage.sufficient) failures.push(`${query.id}: final pool coverage remains insufficient.`);
+      if (!query.finalCoverage.displaySufficient) failures.push(`${query.id}: final display coverage remains insufficient.`);
       if (query.lostRelevantAfterWidening.length > 0) {
         failures.push(`${query.id}: final evidence loss: ${query.lostRelevantAfterWidening.join(", ")}.`);
       }
@@ -195,6 +201,18 @@ async function main(): Promise<void> {
       }
       if (query.difficulty === "difficult" && query.wideningLevel === 0) {
         failures.push(`${query.id}: difficult query did not widen.`);
+      }
+      const config = fixture.queries.find((candidate) => candidate.id === query.id);
+      if ((config?.minimumWideningLevel ?? 0) > query.wideningLevel) {
+        failures.push(
+          `${query.id}: widening level W${query.wideningLevel} is below W${config?.minimumWideningLevel}.`
+        );
+      }
+      const finalDepth = query.attempts.at(-1)?.maxDepthReached ?? 0;
+      if ((config?.minimumFinalGraphDepth ?? 0) > finalDepth) {
+        failures.push(
+          `${query.id}: final graph depth ${finalDepth} is below ${config?.minimumFinalGraphDepth}.`
+        );
       }
       const recovered = new Set(query.finalRecoveredEvidence);
       for (const evidence of golden.relevant) {

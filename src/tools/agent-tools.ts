@@ -9,8 +9,10 @@ import {
 import { z } from "zod";
 import { EDITORIAL_EVIDENCE_KINDS } from "../config/editorial-plans.js";
 import { DIAGRAM_MODES } from "../core/document-workflow.js";
+import { detectCodeDrift } from "../core/drift-detection.js";
 import { resolveEvidenceClaims } from "../core/ingestion/evidence-linker.js";
 import {
+  backfillEvidenceCodeAnchors,
   reconcileEvidenceCoverage,
   recordEvidenceClaims,
 } from "../core/ingestion/evidence-pipeline.js";
@@ -21,7 +23,7 @@ import {
 import {
   KNOWLEDGE_RECOVERY_RESOLUTIONS,
 } from "../core/knowledge-recovery.js";
-import { docsCategoryFilePath, wikiDir } from "../core/paths.js";
+import { docsCategoryFilePath, getWikiRoot, wikiDir } from "../core/paths.js";
 import { FILE_CATEGORIES } from "../core/report-workflow.js";
 import { readFileSafe } from "../core/utils.js";
 import {
@@ -159,13 +161,13 @@ const IngestSchema = z.object({
     .describe("Claim: text, kind, origin, confidence; optional target/relations."),
   segment_status: z.enum(["irrelevant", "unresolved", "legacy_unverified"]).optional()
     .describe("record_segment class."),
-  evidence_refs: z.array(z.string()).optional().describe("Evidence refs."),
-  page_refs: z.array(z.string()).optional().describe("Page refs."),
+  evidence_refs: z.array(z.string()).optional(),
+  page_refs: z.array(z.string()).optional(),
   reason: z.string().optional().describe("Classification reason."),
   report_filename: z.string().optional().describe("docs/reports file."),
   claim_ids: z.array(z.string()).optional().describe("Claim IDs filter."),
   include_resolved: z.boolean().default(false).describe("Include resolved."),
-  total_evidence_used: z.number().int().nonnegative().optional().describe("Evidence total."),
+  total_evidence_used: z.number().int().nonnegative().optional(),
   recovery_events: z.array(z.record(z.string(), z.unknown())).max(100).optional()
     .describe("Recovery: evidence_ref, source_uri, discovered_by, reason; optional pages."),
   recovery_event_id: z.string().optional().describe("Recovery event ID."),
@@ -282,8 +284,8 @@ const DocumentSchema = z.object({
 });
 
 const AdminSchema = z.object({
-  action: z.enum(["init", "lint", "migrate"])
-    .describe("init=bootstrap; lint=validate broken links/orphans; migrate=upgrade storage format."),
+  action: z.enum(["init", "lint", "drift", "migrate"])
+    .describe("init=bootstrap; lint=broken links/orphans; drift=stale code; migrate=upgrade stored knowledge."),
   force: z.boolean().default(false),
   include_orphans: z.boolean().default(true),
   include_missing: z.boolean().default(true),
@@ -293,9 +295,20 @@ const AdminSchema = z.object({
   dry_run: z.boolean().optional(),
   backup: z.boolean().default(false),
   run_id: z.string().optional(),
+  scope: z.literal("paths").optional(),
+  paths: z.array(z.string()).optional(),
 }).superRefine((value, context) => {
   if (value.action === "migrate" && value.migration_action === "rollback" && !value.run_id) {
     context.addIssue({ code: "custom", path: ["run_id"], message: "migration_action=rollback requires run_id." });
+  }
+  if (value.action === "drift" && value.scope === "paths" && !value.paths?.length) {
+    context.addIssue({ code: "custom", path: ["paths"], message: "action=drift scope=paths requires paths." });
+  }
+  if (value.action === "drift" && value.paths?.length && value.scope !== "paths") {
+    context.addIssue({ code: "custom", path: ["scope"], message: "action=drift paths requires scope=paths." });
+  }
+  if (value.action === "drift" && (value.paths?.length ?? 0) > 100) {
+    context.addIssue({ code: "custom", path: ["paths"], message: "action=drift accepts at most 100 paths." });
   }
 });
 
@@ -340,6 +353,7 @@ export const AGENT_STATES = [
   "document_needs_revision",
   "workspace_initialized",
   "lint_complete",
+  "drift_complete",
   "migration_plan_complete",
   "migration_apply_complete",
   "migration_rollback_complete",
@@ -441,6 +455,7 @@ async function applyEvidenceSegment(args: z.output<typeof IngestSchema>): Promis
         pagePath: claim.target.page_path,
         pageTitle: claim.target.page_title,
         pageType: claim.target.page_type,
+        codeResourceUri: claim.target.code_resource_uri,
       } : undefined,
       relations: claim.relations?.map((relation) => ({
         type: relation.type,
@@ -462,6 +477,9 @@ async function applyEvidenceSegment(args: z.output<typeof IngestSchema>): Promis
       text: [
         `Segmento applicato: ${segmentId}.`,
         `Claim: ${recorded.claims.length} (${recorded.created} nuovi, ${recorded.reused} riusati).`,
+        ...(recorded.anchorWarnings.length > 0
+          ? recorded.anchorWarnings.map((warning) => `Anchor warning: ${warning}`)
+          : []),
         `Resolutions: ${resolutions.length}; validated drafts: ${planned.length}; pages updated: ${drafts.length}.`,
         `Coverage: ${coverage.segmentsRecorded} segmenti rappresentati; ${coverage.segmentsPending} pending.`,
         index,
@@ -473,6 +491,7 @@ async function applyEvidenceSegment(args: z.output<typeof IngestSchema>): Promis
       resolutions,
       pages: drafts.map((draft) => ({ path: draft.pagePath, mode: draft.mode, claimIds: draft.claimIds })),
       coverage,
+      anchorWarnings: recorded.anchorWarnings,
     },
   };
 }
@@ -884,7 +903,7 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.admin, {
-    description: "Initialize, lint or migrate storage.",
+    description: "Initialize, lint, check drift, or migrate.",
     inputSchema: schemas.admin,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
@@ -903,13 +922,76 @@ export function registerAgentTools(
           include_broken_links: args.include_broken_links,
         }, context), "lint_complete", null);
       }
-      const result = await call("migrate", {
+      if (args.action === "drift") {
+        const result = await detectCodeDrift({
+          repositoryRoot: getWikiRoot(),
+          wikiRoot: wikiDir(),
+          ...(args.scope === "paths" ? { paths: args.paths } : {}),
+        });
+        const summary = result.summary;
+        const lines = [
+          `Drift check complete: ${summary.checkedAnchors}/${summary.totalAnchors} anchor(s) checked; ` +
+            `${summary.fresh} fresh, ${summary.driftSuspected} drift suspected, ` +
+            `${summary.anchorUnresolvable} unresolvable.`,
+          ...summary.topDrifted.map((entry) =>
+            `${entry.claimId}: ${entry.path}:${entry.startLine}-${entry.endLine} (${entry.reason}); ` +
+              `pages=${entry.pagePaths.join(", ") || "none"}.`
+          ),
+          ...result.entries
+            .filter((entry) => entry.verdict === "anchor_unresolvable")
+            .slice(0, 20)
+            .map((entry) =>
+              `${entry.claimId}: ${entry.anchor.path}:${entry.anchor.startLine}-${entry.anchor.endLine} ` +
+                `(anchor_unresolvable); pages=${entry.pagePaths.join(", ") || "none"}.`
+            ),
+        ];
+        const next = summary.recommendedClaimIds.length > 0 ? {
+          tool: "knowledge_ingest" as const,
+          action: "evidence_status",
+          requiredArguments: ["action", "claim_ids"],
+          suggestedArguments: {
+            action: "evidence_status",
+            claim_ids: summary.recommendedClaimIds,
+          },
+        } : null;
+        return withGuidance({
+          content: [{ type: "text" as const, text: lines.join("\n") }],
+          structuredContent: {
+            action: "drift",
+            summary,
+          },
+        }, "drift_complete", next);
+      }
+      let result = await call("migrate", {
         action: args.migration_action,
         target_version: args.target_version,
         dry_run: args.dry_run,
         backup: args.backup,
         run_id: args.run_id,
       }, context);
+      if (
+        args.migration_action === "apply" && args.dry_run !== true &&
+        isCallToolResult(result) && result.isError !== true
+      ) {
+        const backfill = await backfillEvidenceCodeAnchors(wikiDir());
+        result = {
+          ...result,
+          content: [
+            ...result.content,
+            {
+              type: "text",
+              text: `Code-anchor backfill: ${backfill.anchored}/${backfill.eligible} anchored; ` +
+                `${backfill.unresolved} unresolved.`,
+            },
+          ],
+          structuredContent: {
+            ...(result.structuredContent && typeof result.structuredContent === "object"
+              ? result.structuredContent as Record<string, unknown>
+              : {}),
+            codeAnchorBackfill: backfill,
+          },
+        };
+      }
       const next = args.migration_action === "plan" ? {
         tool: "knowledge_admin" as const,
         action: "migrate",

@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { staleClaimsByPage } from "../core/drift-detection.js";
 import type { GraphEdge, GraphEdgeKind, GraphNode } from "../core/graph-index.js";
 import { getRuntimeWikiGraph, type RuntimeGraph } from "../core/graph-runtime.js";
 import {
@@ -15,6 +16,7 @@ import {
   type ContextIntent,
   type ContextSizeEstimate,
   type EvidenceRef,
+  type EvidenceStaleReason,
   type KnowledgeGap,
 } from "./context-manifest.js";
 
@@ -42,6 +44,7 @@ export interface TaskContextAttempt {
   coverageCandidateCount: number;
   visitedNodes: number;
   visitedEdges: number;
+  maxDepthReached: number;
   maxVisitedNodes: number;
   maxEvidence: number;
   tokenBudget: number;
@@ -164,6 +167,8 @@ interface ClassifiedCandidate {
   hit: HybridRetrievalHit;
   categories: Set<TaskContextEvidenceField>;
   evidence?: EvidenceRef;
+  driftClaimIds?: string[];
+  staleReason?: EvidenceStaleReason;
 }
 
 interface TaskGraphSlice {
@@ -478,6 +483,7 @@ function emptyBuckets(): EvidenceBuckets {
 function buildBuckets(candidates: readonly ClassifiedCandidate[]): EvidenceBuckets {
   const buckets = emptyBuckets();
   for (const candidate of candidates) {
+    if (candidate.driftClaimIds?.length) continue;
     const evidence = compactTaskEvidence(candidate.evidence!);
     for (const category of candidate.categories) buckets[category].push(evidence);
   }
@@ -540,7 +546,34 @@ function knowledgeGaps(params: {
   })));
   for (const category of params.policy.requiredCategories) {
     if (params.buckets[category].length > 0) continue;
-    const availableBeyondDisplay = params.available.some((candidate) => candidate.categories.has(category));
+    const availableBeyondDisplay = params.available.some((candidate) =>
+      candidate.categories.has(category) && !candidate.driftClaimIds?.length
+    );
+    if (!availableBeyondDisplay) {
+      const staleAvailable = params.available.filter((candidate) =>
+        candidate.categories.has(category) && Boolean(candidate.driftClaimIds?.length)
+      );
+      if (staleAvailable.length > 0) {
+        const staleSelected = params.selected.some((candidate) =>
+          candidate.categories.has(category) && Boolean(candidate.driftClaimIds?.length)
+        );
+        if (!staleSelected) {
+          const reason: EvidenceStaleReason = staleAvailable.some((candidate) =>
+            candidate.staleReason === "anchor_unresolvable"
+          ) ? "anchor_unresolvable" : "drift_suspected";
+          const stalePaths = uniqueSorted(staleAvailable.map((candidate) => candidate.hit.path));
+          gaps.push({
+            kind: "stale_evidence",
+            reason,
+            paths: stalePaths,
+            claimIds: uniqueSorted(staleAvailable.flatMap((candidate) => candidate.driftClaimIds ?? [])),
+            description: `${CATEGORY_LABELS[category]} is covered only by stale evidence that requires ` +
+              `re-verification for intent ${params.intent}: ${stalePaths.join(", ")}.`,
+          });
+        }
+        continue;
+      }
+    }
     gaps.push({
       kind: availableBeyondDisplay ? "budget_limited" : "missing_evidence",
       description: availableBeyondDisplay
@@ -570,6 +603,23 @@ function knowledgeGaps(params: {
     gaps.push({
       kind: "stale_evidence",
       description: `Potentially stale evidence requires validation: ${uniqueSorted(stale).join(", ")}.`,
+    });
+  }
+  for (const reason of ["drift_suspected", "anchor_unresolvable"] as const) {
+    const staleEvidence = params.selected.filter((candidate) =>
+      candidate.driftClaimIds?.length && candidate.staleReason === reason
+    );
+    if (staleEvidence.length === 0) continue;
+    gaps.push({
+      kind: "stale_evidence",
+      reason,
+      paths: uniqueSorted(staleEvidence.map((candidate) => candidate.hit.path)),
+      claimIds: uniqueSorted(staleEvidence.flatMap((candidate) => candidate.driftClaimIds ?? [])),
+      description: `${reason === "drift_suspected"
+        ? "Code-backed evidence changed"
+        : "Code-backed evidence could not be resolved safely"} and requires re-verification: ${
+        uniqueSorted(staleEvidence.map((candidate) => candidate.hit.path)).join(", ")
+      }.`,
     });
   }
   if (params.buckets.contradictions.length > 0) {
@@ -711,6 +761,7 @@ function contextWithoutSize(params: {
     intent: params.intent,
   });
   const evidence = uniqueEvidence(params.selected.map((candidate) => candidate.evidence!));
+  const cleanSelected = params.selected.filter((candidate) => !candidate.driftClaimIds?.length);
   return {
     version: 2,
     task: { intent: params.intent, objective: params.objective },
@@ -719,7 +770,7 @@ function contextWithoutSize(params: {
     changeImpact: impactFor({
       policy: params.policy,
       requestedPaths: params.requestedPaths,
-      selected: params.selected,
+      selected: cleanSelected,
       buckets,
       graph: params.graph,
     }),
@@ -824,6 +875,14 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
     hit,
     categories: classifyCandidate(hit),
   }));
+  const staleClaims = await staleClaimsByPage(params.wikiRoot);
+  for (const candidate of availableCandidates) {
+    const stale = staleClaims.get(candidate.hit.path);
+    if (stale?.claimIds.length) {
+      candidate.driftClaimIds = stale.claimIds;
+      candidate.staleReason = stale.reason;
+    }
+  }
   const candidateByPath = new Map(availableCandidates.map((candidate) => [candidate.hit.path, candidate] as const));
   const candidates = hybrid.hits
     .map((hit) => candidateByPath.get(hit.path))
@@ -840,10 +899,17 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
     const categoryLabels = [...candidate.categories]
       .map((category) => CATEGORY_LABELS[category])
       .join(", ") || "supporting evidence";
-    candidate.evidence = evidenceFromRetrievalHit(
+    const evidence = evidenceFromRetrievalHit(
       candidate.hit,
       `task ${params.intent}; ${categoryLabels}; hybrid ${profile} W${hybrid.wideningLevel}`
     );
+    candidate.evidence = candidate.driftClaimIds?.length ? {
+      ...evidence,
+      reason: `${evidence.reason}; stale: ${candidate.staleReason ?? "drift_suspected"}`,
+      stale: true,
+      staleReason: candidate.staleReason ?? "drift_suspected",
+      driftClaimIds: [...candidate.driftClaimIds],
+    } : evidence;
   }
   const retrieval: TaskContextRetrieval = {
     strategy: "hybrid_progressive_widening",
@@ -852,8 +918,11 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
     query: retrievalQuery,
     profile,
     wideningLevel: hybrid.wideningLevel,
-    coverageSufficient: hybrid.coverage.sufficient,
-    evidenceGaps: [...hybrid.coverage.evidenceGaps],
+    coverageSufficient: hybrid.coverage.displaySufficient,
+    evidenceGaps: [
+      ...hybrid.coverage.evidenceGaps,
+      ...hybrid.coverage.budgetLimitedGaps.map((gap) => `display_budget:${gap}`),
+    ],
     estimatedContextTokens: hybrid.estimatedContextTokens,
     hitCount: hybrid.hits.length,
     coverageCandidateCount: hybrid.coverageHits.length,
@@ -866,6 +935,7 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
       coverageCandidateCount: attempt.coverageCandidateCount,
       visitedNodes: attempt.visitedNodes,
       visitedEdges: attempt.visitedEdges,
+      maxDepthReached: attempt.maxDepthReached,
       maxVisitedNodes: attempt.budget.maxVisitedNodes,
       maxEvidence: attempt.budget.maxEvidence,
       tokenBudget: attempt.budget.tokenBudget,

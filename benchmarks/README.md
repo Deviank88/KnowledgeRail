@@ -54,7 +54,7 @@ npm run eval:widening:gate
 
 W0 uses the small local budget, W1 enlarges seeds and graph frontier, W2 adds entity-query candidates and the maximum bounded local traversal, and W3 is reserved for an explicitly configured source/code fallback. The normal golden set does not use W3. Coverage signals include query facets, named entities, source diversity, required artifact types, contradictions, passage evidence and truncated graph frontiers.
 
-The gate pins both fixtures and both budgets. It requires final recall at least equal to Milestone A, zero evidence lost after widening, a majority of easy cases at W0, automatic widening for the difficult cases, per-attempt token/evidence/visited-node budget compliance and no full-graph scan.
+The gate pins both fixtures and both budgets. It requires final recall at least equal to Milestone A, sufficient displayed evidence, zero evidence lost after widening, a majority of easy cases at W0, automatic widening for the difficult cases, an explicit W2/depth-3 multi-hop probe, per-attempt token/evidence/visited-node budget compliance and no full-graph scan.
 
 ## Document-quality diagnostic
 
@@ -98,6 +98,17 @@ npm run eval:recovery:gate
 The fixture records the same source fallback discovery twice and requires one deduplicated durable debt event with two occurrences. Recording debt must not write a wiki page, and premature resolution must fail. The accepted path then uses the existing Evidence IR linker/synthesis pipeline, verifies the exact claim provenance in the page, reconciles the source coverage ledger and closes the event.
 
 The gate pins the fixture digest, claim/event IDs and output page. It requires `KnowledgeRecoveryPending` to move from one to zero, canonical sources to remain unchanged, provenance and coverage updates to be present, and cumulative `LateRecoveryRate` to decrease from `0.6667` to at most `0.3333` after subsequent evidence is served from represented knowledge.
+
+## Code-evidence drift detection
+
+Run the deterministic drift scenarios and their CI gate:
+
+```bash
+npm run eval:drift
+npm run eval:drift:gate
+```
+
+The pinned fixture covers unchanged ranges, trailing-whitespace-only edits, substantive content changes, deleted files, out-of-bounds ranges, and parser upgrades with identical content. The gate requires perfect verdict/reason accuracy, zero false positives, and zero silent misses without lowering any existing threshold. It also records full and path-scoped evaluation timings over 1,000 synthetic anchors; only deterministic workload sizes are gated because absolute timing on shared CI runners is noisy.
 
 ## Task-aware context compiler
 
@@ -233,7 +244,7 @@ A change is not release-ready merely because it is faster. It must preserve or i
 
 `npm test` uses `scripts/run-tests.mjs`, which discovers test files explicitly rather than relying on shell glob expansion. Files run in isolated Node processes with bounded concurrency and a configurable per-file timeout. This makes execution consistent across Windows, Linux and macOS and prevents one leaked handle from indefinitely blocking the full suite.
 
-`npm run eval:coverage` reports GAP precision and silent-miss for the pinned 22-case coverage fixture. The same fixture is enforced by `eval:semantic:gate`, which requires lexical coverage to improve over the reproduced 2.0.5 exact-match path, semantic coverage to improve further, and both tiers to retain zero silent misses.
+`npm run eval:coverage` reports GAP precision and silent-miss for the pinned 25-case coverage fixture, including present and substring-only-missing single-word proper nouns. The same fixture is enforced by `eval:semantic:gate`, which requires lexical coverage to improve over the reproduced 2.0.5 exact-match path, semantic coverage to improve further, and both tiers to retain zero silent misses.
 
 Useful environment variables:
 

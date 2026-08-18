@@ -621,8 +621,10 @@ export function registerWikiTools(
                 "- visited edges: " + stats.visitedEdges,
                 "- truncated frontier: " + stats.truncatedFrontierCount,
                 "- widening level: W" + hybrid.wideningLevel,
-                "- coverage sufficient: " + hybrid.coverage.sufficient,
+                "- display coverage sufficient: " + hybrid.coverage.displaySufficient,
+                "- full-pool coverage sufficient: " + hybrid.coverage.sufficient,
                 "- evidence gaps: " + (hybrid.coverage.evidenceGaps.join(", ") || "none"),
+                "- display-budget gaps: " + (hybrid.coverage.budgetLimitedGaps.join(", ") || "none"),
               ].join("\n")
             );
             });

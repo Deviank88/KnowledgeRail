@@ -42,6 +42,21 @@ The state directory follows native conventions:
 
 `KNOWLEDGE_RAIL_STATE_DIR` is available for tests and intentional custom local deployments. State must not be committed with a project.
 
+## Pre-commit and CI drift checks
+
+`knowledge_admin action="drift"` is an MCP operation, not a shell subcommand. A hook or CI job should use the same authenticated/local MCP client runner already used by the team, call the operation, and fail or comment when `structuredContent.summary.driftSuspected` is greater than zero. KnowledgeRail deliberately does not bundle a second command-line transport for this check.
+
+A pre-commit integration should:
+
+1. Collect staged repository-relative paths with `git diff --cached --name-only --diff-filter=ACMR`.
+2. Call `knowledge_admin` with `{"action":"drift","scope":"paths","paths":[...]}` through the local MCP runner.
+3. Block the commit when the summary reports drift, showing `topDrifted` claim IDs, pages, ranges, and reasons.
+4. Re-verify those claims through the normal Evidence IR workflow; never rewrite a wiki page automatically from the hook.
+
+A CI integration uses the same payload with paths changed relative to the target branch. It can publish `topDrifted` as a review annotation and should fail the job on `driftSuspected > 0` or `anchorUnresolvable > 0`. For a periodic repository-wide audit, use `{"action":"drift"}`. The operation mutates only the disposable `wiki/.knowledge-rail/drift/ledger.json`; canonical pages, claims, and repository files remain byte-preserved.
+
+Do not share or hard-code the loopback gateway credential in CI. Prefer a job-local `stdio` server bound to the checked-out workspace, or provision the protected local gateway state using the same trust boundary described above.
+
 ## What is deliberately not available
 
 The shipped HTTP gateway is not a public endpoint, OAuth resource server, managed relay, AWS service, or multi-tenant SaaS. Claude remote custom connectors and `claude.ai` cannot reach a user's localhost endpoint because their requests originate in the provider cloud. Use the local Claude Desktop MCP adapter.

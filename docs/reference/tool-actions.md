@@ -18,13 +18,13 @@ Every successful domain operation returns `structuredContent.state` and `structu
 
 ## `knowledge_admin`
 
-Initialize, lint or migrate storage.
+Initialize, lint, check drift, or migrate.
 
-Actions/modes: `init`, `lint`, `migrate`.
+Actions/modes: `init`, `lint`, `drift`, `migrate`.
 
 | Parameter | Type / values | Required | Default | Description |
 |---|---|---:|---|---|
-| `action` | `init` &#124; `lint` &#124; `migrate` | yes | — | init=bootstrap; lint=validate broken links/orphans; migrate=upgrade storage format. |
+| `action` | `init` &#124; `lint` &#124; `drift` &#124; `migrate` | yes | — | init=bootstrap; lint=broken links/orphans; drift=stale code; migrate=upgrade stored knowledge. |
 | `force` | boolean | no | `false` | — |
 | `include_orphans` | boolean | no | `true` | — |
 | `include_missing` | boolean | no | `true` | — |
@@ -34,6 +34,8 @@ Actions/modes: `init`, `lint`, `migrate`.
 | `dry_run` | boolean | no | — | — |
 | `backup` | boolean | no | `false` | — |
 | `run_id` | string | no | — | — |
+| `scope` | string | no | — | — |
+| `paths` | array<string> | no | — | — |
 
 ## `knowledge_code`
 
@@ -61,7 +63,7 @@ Actions/modes: `rebuild`, `update`, `remove`, `search`, `symbol`, `references`, 
 
 Project evidence and gaps; page list/search; relation graph.
 
-Task responses report `retrieval.coverageMode` (`lexical` or `semantic`) and `coverageWarnings`. Coverage uses the full fused candidate set while returned evidence remains bounded; relevant evidence excluded from display is `budget_limited`, not `missing_evidence`. Configured embedding provider failures degrade to lexical mode without failing the tool call.
+Task responses report `retrieval.coverageMode` (`lexical` or `semantic`) and `coverageWarnings`. The full fused pool classifies evidence as missing or display-budget-limited, while `coverageSufficient` and the widening stop condition refer to evidence actually returned to the model. Configured embedding provider failures degrade to lexical mode without failing the tool call; the configuration notice is emitted once per active workspace.
 
 Actions/modes: `task`, `list`, `search`, `graph`.
 
@@ -163,13 +165,13 @@ Actions/modes: `start`, `next`, `apply_claims`, `record_segment`, `source_status
 | `segment_id` | string | no | — | ID from next. |
 | `claims` | array<object> | no | — | Claim: text, kind, origin, confidence; optional target/relations. |
 | `segment_status` | `irrelevant` &#124; `unresolved` &#124; `legacy_unverified` | no | — | record_segment class. |
-| `evidence_refs` | array<string> | no | — | Evidence refs. |
-| `page_refs` | array<string> | no | — | Page refs. |
+| `evidence_refs` | array<string> | no | — | — |
+| `page_refs` | array<string> | no | — | — |
 | `reason` | string | no | — | Classification reason. |
 | `report_filename` | string | no | — | docs/reports file. |
 | `claim_ids` | array<string> | no | — | Claim IDs filter. |
 | `include_resolved` | boolean | no | `false` | Include resolved. |
-| `total_evidence_used` | integer | no | — | Evidence total. |
+| `total_evidence_used` | integer | no | — | — |
 | `recovery_events` | array<object> | no | — | Recovery: evidence_ref, source_uri, discovered_by, reason; optional pages. |
 | `recovery_event_id` | string | no | — | Recovery event ID. |
 | `recovery_resolution` | `page_updated` &#124; `new_page` &#124; `ledger_updated` &#124; `intentionally_ignored` | no | — | Recovery disposition. |

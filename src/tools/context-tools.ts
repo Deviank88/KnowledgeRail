@@ -67,13 +67,15 @@ function evidenceLinks(manifest: TaskContext): ResourceLink[] {
   return manifest.evidence.map((evidence) => ({
     type: "resource_link",
     uri: evidence.uri,
-    name: evidence.heading ? `${evidence.title} — ${evidence.heading}` : evidence.title,
+    name: `${evidence.stale ? "[STALE] " : ""}${
+      evidence.heading ? `${evidence.title} — ${evidence.heading}` : evidence.title
+    }`,
     description: evidence.reason,
     mimeType: "text/markdown",
   }));
 }
 
-function compactStructuredContext(manifest: TaskContext) {
+export function compactStructuredContext(manifest: TaskContext) {
   return {
     version: manifest.version,
     task: manifest.task,
@@ -84,6 +86,9 @@ function compactStructuredContext(manifest: TaskContext) {
       type: evidence.type,
       heading: evidence.heading,
       reason: evidence.reason,
+      stale: evidence.stale,
+      staleReason: evidence.staleReason,
+      driftClaimIds: evidence.driftClaimIds,
     })),
     gaps: manifest.unknowns,
     retrieval: {

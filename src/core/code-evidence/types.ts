@@ -21,6 +21,15 @@ export interface CodeRange {
   endLine: number;
 }
 
+export interface CodeAnchor {
+  path: string;
+  startLine: number;
+  endLine: number;
+  rangeHash: string;
+  parserVersion: string;
+  capturedAt: string;
+}
+
 export interface CodeRoute {
   method: string;
   path: string;

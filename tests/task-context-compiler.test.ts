@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
 import { compileTaskContext } from "../src/context/task-context-compiler.js";
+import { driftLedgerFile } from "../src/core/drift-detection.js";
 import { invalidateWikiGraph } from "../src/core/graph-index.js";
 import { clearRuntimeWikiGraphs } from "../src/core/graph-runtime.js";
 import { clearRetrievalIndexes } from "../src/core/retrieval-index.js";
@@ -231,6 +232,8 @@ test("compiler distinguishes a cap-excluded required category from true absence"
     });
 
     assert.equal(context.retrieval.coverageCandidateCount > context.retrieval.hitCount, true);
+    assert.equal(context.retrieval.coverageSufficient, false);
+    assert.equal(context.retrieval.evidenceGaps.some((gap) => gap.startsWith("display_budget:")), true);
     assert.equal(context.requirements.length, 0);
     assert.equal(context.unknowns.some((gap) =>
       gap.kind === "budget_limited" && gap.description.includes("requirements")
@@ -238,6 +241,71 @@ test("compiler distinguishes a cap-excluded required category from true absence"
     assert.equal(context.unknowns.some((gap) =>
       gap.kind === "missing_evidence" && gap.description.includes("requirements")
     ), false);
+  });
+});
+
+test("compiler reports a required category covered only by non-displayed stale evidence", async () => {
+  await withFixture(async (wikiRoot) => {
+    const conceptPath = path.join(wikiRoot, "concepts", "StaleBudget.md");
+    const requirementPage = "requirements/StaleBudget.md";
+    const requirementPath = path.join(wikiRoot, requirementPage);
+    await fs.mkdir(path.dirname(conceptPath), { recursive: true });
+    await fs.mkdir(path.dirname(requirementPath), { recursive: true });
+    await fs.writeFile(conceptPath, [
+      "---", 'title: "StaleBudget exact anchor"', "type: concept", "tags: [stale-budget]", "---", "",
+      "# StaleBudget", "", "StaleBudget StaleBudget StaleBudget exact overview anchor.",
+    ].join("\n"), "utf8");
+    await fs.writeFile(requirementPath, [
+      "---", 'title: "StaleBudget requirement"', "type: requirement", "tags: [stale-budget]", "---", "",
+      "# Requirement", "", "StaleBudget requires the archived behavior.",
+    ].join("\n"), "utf8");
+    const claimId = `claim-${"a".repeat(32)}`;
+    const ledgerPath = driftLedgerFile(wikiRoot);
+    await fs.mkdir(path.dirname(ledgerPath), { recursive: true });
+    await fs.writeFile(ledgerPath, `${JSON.stringify({
+      version: 1,
+      checkedAt: "2026-08-18T09:00:00.000Z",
+      entries: [{
+        claimId,
+        pagePaths: [requirementPage],
+        anchor: {
+          path: "src/stale-budget.ts",
+          startLine: 1,
+          endLine: 1,
+          rangeHash: "b".repeat(64),
+          parserVersion: "typescript-javascript-deterministic-v1",
+          capturedAt: "2026-08-18T08:00:00.000Z",
+        },
+        checkedAt: "2026-08-18T09:00:00.000Z",
+        verdict: "drift_suspected",
+        reason: "content_changed",
+      }],
+    }, null, 2)}\n`, "utf8");
+    clearRetrievalIndexes();
+    clearRuntimeWikiGraphs();
+    invalidateWikiGraph(wikiRoot);
+
+    const context = await compileTaskContext({
+      wikiRoot,
+      intent: "understand",
+      objective: "Understand StaleBudget",
+      query: "StaleBudget",
+      maxEvidence: 1,
+      heuristicTokenBudget: 2_000,
+      evidencePolicy: {
+        replaceDefaults: true,
+        requiredCategories: ["requirements"],
+        priorityCategories: ["requirements"],
+        requiredPageTypes: ["requirement"],
+      },
+    });
+
+    assert.equal(context.evidence.some((evidence) => evidence.path === requirementPage), false);
+    assert.equal(context.requirements.length, 0);
+    assert.equal(context.unknowns.some((gap) =>
+      gap.kind === "stale_evidence" && gap.reason === "drift_suspected" &&
+      gap.paths?.includes(requirementPage) && gap.claimIds?.includes(claimId)
+    ), true);
   });
 });
 

@@ -1,3 +1,4 @@
+import * as nodePath from "node:path";
 import { readWikiPageRecord } from "./page-record.js";
 import {
   assessRetrievalCoverage,
@@ -29,6 +30,7 @@ import type {
   SemanticCoverageScore,
   SynchronizableSemanticIndex,
 } from "./semantic/types.js";
+import { registerWorkspaceState } from "./workspace-state.js";
 
 export type RetrievalWideningLevel = 0 | 1 | 2 | 3;
 
@@ -62,6 +64,7 @@ export interface HybridRetrievalAttempt {
   semanticCandidateCount: number;
   visitedNodes: number;
   visitedEdges: number;
+  maxDepthReached: number;
   fallbackUsed: boolean;
 }
 
@@ -153,7 +156,20 @@ interface ResolvedSemantic {
   index?: SemanticIndex;
 }
 
-let missingEmbeddingNoticeEmitted = false;
+const missingEmbeddingNoticeRoots = new Set<string>();
+
+function emitMissingEmbeddingNotice(wikiRoot: string): void {
+  const root = nodePath.resolve(wikiRoot);
+  if (missingEmbeddingNoticeRoots.has(root)) return;
+  missingEmbeddingNoticeRoots.add(root);
+  registerWorkspaceState(root, "hybrid-missing-embedding-notice", () => {
+    missingEmbeddingNoticeRoots.delete(root);
+  });
+  logger.info("semantic-coverage", "lexical_mode_active", {
+    localOption: "Ollama",
+    configuration: "KNOWLEDGE_RAIL_EMBEDDING_*",
+  });
+}
 
 function positiveInteger(value: number | undefined, fallback: number): number {
   return Number.isInteger(value) && (value ?? 0) > 0 ? value! : fallback;
@@ -216,13 +232,7 @@ async function resolveSemantic(
       persist: request.persistDerivedIndexes,
     });
     if (!index) {
-      if (!missingEmbeddingNoticeEmitted) {
-        missingEmbeddingNoticeEmitted = true;
-        logger.info("semantic-coverage", "lexical_mode_active", {
-          localOption: "Ollama",
-          configuration: "KNOWLEDGE_RAIL_EMBEDDING_*",
-        });
-      }
+      emitMissingEmbeddingNotice(request.wikiRoot);
       return { hits: [], diagnostics: unavailable };
     }
     const poolSize = Math.min(1_000, Math.max(
@@ -740,6 +750,7 @@ export async function retrieveWikiHybrid(
       semanticCandidateCount: result.semanticCandidateCount,
       visitedNodes: result.graphResult.stats.visitedNodes,
       visitedEdges: result.graphResult.stats.visitedEdges,
+      maxDepthReached: result.graphResult.stats.maxDepthReached,
       fallbackUsed: result.fallbackUsed,
     });
     previousCoverage = coverage;
@@ -747,10 +758,11 @@ export async function retrieveWikiHybrid(
     finalCoverage = coverage;
     finalBudget = budget;
     finalLevel = level;
-    // The explicit coverage profile spends the bounded retrieval budget to
-    // maximize recall even after the known facets are covered. This avoids
-    // making graph depth depend on accidental false gaps from entity parsing.
-    if (coverage.sufficient && (params.profile !== "coverage" || level >= maxLevel)) break;
+    // Stop only when the evidence visible to the caller is sufficient. The
+    // full pool remains the oracle for missing-vs-budget-limited diagnostics,
+    // but must not hide a display gap that a wider graph traversal can close.
+    // The explicit coverage profile still spends its complete bounded budget.
+    if (coverage.displaySufficient && (params.profile !== "coverage" || level >= maxLevel)) break;
   }
 
   if (!finalAttempt || !finalCoverage) {

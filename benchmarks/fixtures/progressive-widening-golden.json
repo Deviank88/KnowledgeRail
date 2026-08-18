@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "baseFixture": "hybrid-retrieval-golden.json",
   "initialBudget": {
     "maxSeedCandidates": 2,
@@ -38,7 +38,9 @@
     {
       "id": "three-hop-evidence",
       "difficulty": "difficult",
-      "query": "Saffron edge broker initiation",
+      "query": "Saffron chain starts initiation",
+      "minimumWideningLevel": 2,
+      "minimumFinalGraphDepth": 3,
       "coverageRequirements": {"requiredPageTypes": ["requirement"]}
     },
     {

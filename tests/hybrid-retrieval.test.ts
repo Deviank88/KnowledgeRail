@@ -163,3 +163,59 @@ test("long task descriptions retain the domain subject over generic section voca
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test("missing embedding configuration is reported once per workspace", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-hybrid-notice-"));
+  const wikiRoots = [path.join(root, "workspace-a", "wiki"), path.join(root, "workspace-b", "wiki")];
+  const envKeys = [
+    "KNOWLEDGE_RAIL_EMBEDDING_BASE_URL",
+    "KNOWLEDGE_RAIL_EMBEDDING_MODEL",
+    "KNOWLEDGE_RAIL_EMBEDDING_DIMENSIONS",
+    "KNOWLEDGE_RAIL_LOG_LEVEL",
+  ] as const;
+  const previousEnvironment = new Map(envKeys.map((key) => [key, process.env[key]] as const));
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  let stderr = "";
+
+  clearRetrievalIndexes();
+  clearRuntimeWikiGraphs();
+  try {
+    for (const key of envKeys) delete process.env[key];
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      stderr += chunk.toString();
+      return true;
+    }) as typeof process.stderr.write;
+    for (const [index, wikiRoot] of wikiRoots.entries()) {
+      await writePage(wikiRoot, "concepts/Notice.md", {
+        title: `Notice fixture ${index}`,
+        type: "concept",
+        body: "Lexical fallback evidence.",
+      });
+      invalidateWikiGraph(wikiRoot);
+    }
+
+    for (const wikiRoot of [wikiRoots[0]!, wikiRoots[0]!, wikiRoots[1]!]) {
+      await retrieveWikiHybrid({
+        wikiRoot,
+        query: "fallback evidence",
+        maxResults: 2,
+        progressiveWidening: false,
+        semanticEnabled: true,
+        persistDerivedIndexes: false,
+      });
+    }
+  } finally {
+    process.stderr.write = originalWrite as typeof process.stderr.write;
+    for (const [key, value] of previousEnvironment) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    clearRetrievalIndexes();
+    clearRuntimeWikiGraphs();
+    for (const wikiRoot of wikiRoots) invalidateWikiGraph(wikiRoot);
+    await fs.rm(root, { recursive: true, force: true });
+  }
+
+  const notices = stderr.split("\n").filter((line) => line.includes('"event":"lexical_mode_active"'));
+  assert.equal(notices.length, 2);
+});

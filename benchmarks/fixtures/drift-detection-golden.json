@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "unchanged",
+      "path": "src/unchanged.ts",
+      "capturedContent": "export function limit(): number {\n  return 3;\n}\n",
+      "currentContent": "export function limit(): number {\n  return 3;\n}\n",
+      "startLine": 1,
+      "endLine": 3,
+      "anchorParserVersion": "typescript-javascript-deterministic-v1",
+      "currentParserVersion": "typescript-javascript-deterministic-v1",
+      "expectedVerdict": "fresh"
+    },
+    {
+      "id": "trailing-whitespace",
+      "path": "src/formatting.ts",
+      "capturedContent": "export function limit(): number {\n  return 3;\n}\n",
+      "currentContent": "export function limit(): number {   \n  return 3;\t\n}\n",
+      "startLine": 1,
+      "endLine": 3,
+      "anchorParserVersion": "typescript-javascript-deterministic-v1",
+      "currentParserVersion": "typescript-javascript-deterministic-v1",
+      "expectedVerdict": "fresh"
+    },
+    {
+      "id": "content-change",
+      "path": "src/changed.ts",
+      "capturedContent": "export function limit(): number {\n  return 3;\n}\n",
+      "currentContent": "export function limit(): number {\n  return 4;\n}\n",
+      "startLine": 1,
+      "endLine": 3,
+      "anchorParserVersion": "typescript-javascript-deterministic-v1",
+      "currentParserVersion": "typescript-javascript-deterministic-v1",
+      "expectedVerdict": "drift_suspected",
+      "expectedReason": "content_changed"
+    },
+    {
+      "id": "file-missing",
+      "path": "src/deleted.ts",
+      "capturedContent": "export function removed(): void {}\n",
+      "currentContent": null,
+      "startLine": 1,
+      "endLine": 1,
+      "anchorParserVersion": "typescript-javascript-deterministic-v1",
+      "currentParserVersion": "typescript-javascript-deterministic-v1",
+      "expectedVerdict": "drift_suspected",
+      "expectedReason": "file_missing"
+    },
+    {
+      "id": "range-out-of-bounds",
+      "path": "src/shortened.ts",
+      "capturedContent": "export function shortened(): number {\n  const value = 1;\n  return value;\n}\n",
+      "currentContent": "export {};\n",
+      "startLine": 1,
+      "endLine": 4,
+      "anchorParserVersion": "typescript-javascript-deterministic-v1",
+      "currentParserVersion": "typescript-javascript-deterministic-v1",
+      "expectedVerdict": "drift_suspected",
+      "expectedReason": "range_out_of_bounds"
+    },
+    {
+      "id": "parser-version-only",
+      "path": "src/parser.ts",
+      "capturedContent": "export function stable(): boolean {\n  return true;\n}\n",
+      "currentContent": "export function stable(): boolean {\n  return true;\n}\n",
+      "startLine": 1,
+      "endLine": 3,
+      "anchorParserVersion": "typescript-javascript-deterministic-v1",
+      "currentParserVersion": "typescript-javascript-deterministic-v2",
+      "expectedVerdict": "fresh",
+      "expectedReason": "parser_version_changed"
+    }
+  ]
+}

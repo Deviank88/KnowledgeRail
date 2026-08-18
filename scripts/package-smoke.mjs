@@ -143,6 +143,20 @@ try {
   if (!help.stdout.includes("knowledge-rail desktop")) throw new Error("Installed --help is incomplete.");
   const version = await run(process.execPath, [installedBin, "--version"], { cwd: projectDirectory });
   if (!/^\d+\.\d+\.\d+\s*$/.test(version.stdout)) throw new Error("Installed --version is invalid.");
+  const installedShim = path.join(
+    installDirectory,
+    "node_modules",
+    ".bin",
+    process.platform === "win32" ? "knowledge-rail.cmd" : "knowledge-rail"
+  );
+  await fs.access(installedShim);
+  const shimVersion = await runNpm(
+    ["exec", "--offline", "--", "knowledge-rail", "--version"],
+    { cwd: installDirectory }
+  );
+  if (shimVersion.stdout.trim() !== installedPackage.version) {
+    throw new Error("Installed knowledge-rail command shim is missing or reports the wrong version.");
+  }
 
   const childEnvironment = { ...process.env, KNOWLEDGE_RAIL_STATE_DIR: stateDirectory };
   const stdioClient = new Client(
