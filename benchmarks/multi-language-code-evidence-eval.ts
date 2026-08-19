@@ -135,10 +135,15 @@ async function filesBelow(root: string): Promise<string[]> {
   return results.sort();
 }
 
+function canonicalFixtureText(content: string): string {
+  return content.replace(/\r\n?/gu, "\n");
+}
+
 export async function multiLanguageCorpusSha256(fixtureRoot: string): Promise<string> {
   const hash = createHash("sha256");
   for (const relative of await filesBelow(fixtureRoot)) {
-    hash.update(relative).update("\0").update(await fs.readFile(path.join(fixtureRoot, relative))).update("\0");
+    const content = canonicalFixtureText(await fs.readFile(path.join(fixtureRoot, relative), "utf8"));
+    hash.update(relative).update("\0").update(content).update("\0");
   }
   return hash.digest("hex");
 }
@@ -222,8 +227,8 @@ export async function evaluateMultiLanguageCodeEvidence(
       await fs.copyFile(path.join(resolvedRoot, relative), target);
     }
     const sourceFiles = (await filesBelow(resolvedRoot)).filter((value) => !value.endsWith("expected.json"));
-    const sourceContents = await Promise.all(sourceFiles.map((relative) =>
-      fs.readFile(path.join(resolvedRoot, relative), "utf8")
+    const sourceContents = await Promise.all(sourceFiles.map(async (relative) =>
+      canonicalFixtureText(await fs.readFile(path.join(resolvedRoot, relative), "utf8"))
     ));
     const sourceFileCount = sourceFiles.length;
     const sourceLineCount = sourceContents.reduce((total, content) =>

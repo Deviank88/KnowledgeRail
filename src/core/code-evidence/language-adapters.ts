@@ -795,7 +795,7 @@ function cFamilyCandidates(context: BraceExtractionContext, cpp: boolean): Brace
     }
   }
   const functionPatterns = [
-    /^(?![ \t]*(?:public|protected|private)\s*:)[ \t]*(?:template\s*<[^>{}]*>\s*)?(?:(?:static|inline|constexpr|consteval|virtual|extern|friend|explicit|signed|unsigned|long|short)\s+)*(?:[A-Za-z_][\w:<>,*&\[\] ]*\s+)+([A-Za-z_]\w*(?:::[A-Za-z_]\w*)*)\s*\([^;{}]*\)\s*(?:const\s*)?(?:noexcept\s*)?(?:->\s*[^\n{]+)?\{/gmu,
+    /^(?![ \t]*(?:public|protected|private)\s*:)[ \t]*(?:template\s*<[^>{}]*>\s*)?(?:(?:static|inline|constexpr|consteval|virtual|extern|friend|explicit|signed|unsigned|long|short)\s+)*(?:[A-Za-z_][\w:<>,*&\[\]]*\s+)+([A-Za-z_]\w*(?:::[A-Za-z_]\w*)*)\s*\([^;{}]*\)\s*(?:const\s*)?(?:noexcept\s*)?(?:->\s*[^\n{]+)?\{/gmu,
     /^[ \t]*(?:(?:static|inline|constexpr|consteval|virtual|extern|friend|signed|unsigned|long|short|const|volatile|struct|class)\s+)*(?:[A-Za-z_]\w*(?:::[A-Za-z_]\w*)*(?:\s*<[^>{};]+>)?[ \t]*)?[*&]+[ \t]*([A-Za-z_]\w*(?:::[A-Za-z_]\w*)*)\s*\([^;{}]*\)\s*(?:const\s*)?(?:noexcept\s*)?(?:->\s*[^\n{]+)?\{/gmu,
   ];
   const seenFunctionStarts = new Set<number>();

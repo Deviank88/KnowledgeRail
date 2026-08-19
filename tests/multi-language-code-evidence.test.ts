@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
+import { multiLanguageCorpusSha256 } from "../benchmarks/multi-language-code-evidence-eval.js";
 import {
   createDefaultKnowledgeAdapterRegistry,
   defaultParserVersionForPath,
@@ -179,6 +180,29 @@ test("C++ access labels do not shift inline method ranges", async () => {
   const method = fragments.find((fragment) => fragment.qualifiedName === "Inventory::available");
   assert.deepEqual(method?.range, { startLine: 3, endLine: 5 });
   assert.equal(method?.definition, "int available() const {");
+});
+
+test("the golden corpus digest and byte metrics are invariant to checkout newlines", async () => {
+  await withTemporaryRoot("knowledge-rail-newline-fixture-", async (root) => {
+    const fixture = path.join(root, "fixture.cpp");
+    await fs.writeFile(fixture, "int first() {\n  return 1;\n}\n", "utf8");
+    const lf = await multiLanguageCorpusSha256(root);
+    await fs.writeFile(fixture, "int first() {\r\n  return 1;\r\n}\r\n", "utf8");
+    assert.equal(await multiLanguageCorpusSha256(root), lf);
+  });
+});
+
+test("C/C++ signature matching remains bounded on repeated declaration-like tokens", { timeout: 1_000 }, async () => {
+  const content = `${"A ".repeat(20_000)};\nint visible(void) {\n  return 1;\n}\n`;
+  const fragments = await new CppKnowledgeAdapter().extract({
+    repositoryRoot: FIXTURE_ROOT,
+    path: "cpp/adversarial.cpp",
+    content,
+  });
+  assert.deepEqual(fragments.find((fragment) => fragment.symbol === "visible")?.range, {
+    startLine: 2,
+    endLine: 4,
+  });
 });
 
 test("C# interpolation expressions may contain nested quoted strings without desynchronizing masking", () => {
