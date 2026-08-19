@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://cdn.jsdelivr.net/npm/knowledge-rail@2.4.0/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
+  <img src="https://cdn.jsdelivr.net/npm/knowledge-rail@2.5.0/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
 </p>
 
 <h1 align="center">KnowledgeRail</h1>
@@ -8,7 +8,7 @@ KnowledgeRail is a local-first MCP server that turns project documentation and s
 
 It is designed for agents that need to understand, change, review, or document a codebase without loading the whole repository into the model context. Retrieval is bounded, provenance is preserved, missing evidence is reported explicitly, and difficult queries widen progressively instead of silently losing relevant information.
 
-> **Current status:** stable release `2.4.0`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
+> **Current status:** stable release `2.5.0`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
 
 ## What it provides
 
@@ -58,7 +58,7 @@ KnowledgeRail ships no browser or document renderer. Mermaid source remains ordi
 Run this from any directory inside the project you opened in VS Code, Cursor, a terminal, or another context-aware coding client:
 
 ```bash
-npx -y knowledge-rail@2.4.0
+npx -y knowledge-rail@2.5.0
 ```
 
 No project path is needed in the persistent MCP configuration. KnowledgeRail discovers the opened project independently for each process, so project X and project Y can be used at the same time by different agent sessions.
@@ -92,7 +92,7 @@ Use the standard `stdio` server shape once. Do not hard-code one repository:
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.4.0"]
+      "args": ["-y", "knowledge-rail@2.5.0"]
     }
   }
 }
@@ -124,7 +124,7 @@ A desktop chat does not open a filesystem folder, so it cannot safely infer a pr
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.4.0", "desktop"]
+      "args": ["-y", "knowledge-rail@2.5.0", "desktop"]
     }
   }
 }
@@ -137,10 +137,10 @@ In a new chat, ask KnowledgeRail to list workspaces, choose one entry, and confi
 Projects opened successfully by an IDE/terminal are added to the local catalog automatically without changing their clean eight-tool workflow. Operators can also manage catalog metadata locally:
 
 ```bash
-npx -y knowledge-rail@2.4.0 workspace list
-npx -y knowledge-rail@2.4.0 workspace register
-npx -y knowledge-rail@2.4.0 workspace register /absolute/project/path
-npx -y knowledge-rail@2.4.0 workspace unregister ws_example
+npx -y knowledge-rail@2.5.0 workspace list
+npx -y knowledge-rail@2.5.0 workspace register
+npx -y knowledge-rail@2.5.0 workspace register /absolute/project/path
+npx -y knowledge-rail@2.5.0 workspace unregister ws_example
 ```
 
 Registration never copies, uploads, scans the disk, or deletes project files. `workspace register` without a path discovers only upward from cwd.
@@ -150,7 +150,7 @@ Registration never copies, uploads, scans the disk, or deletes project files. `w
 Start one gateway for many concurrent local clients and workspaces:
 
 ```bash
-npx -y knowledge-rail@2.4.0 --transport http
+npx -y knowledge-rail@2.5.0 --transport http
 ```
 
 The default endpoint is `http://127.0.0.1:3333/mcp`; liveness only is available at `/healthz`. MCP requests require the random credential stored in the OS-protected per-user KnowledgeRail state directory. The desktop adapter reads it automatically, so it never belongs in project configuration or a repository.
@@ -271,7 +271,31 @@ knowledge_admin {
 }
 ```
 
+The same detector is available without an MCP server for agent hooks and CI. Hook mode reports non-fresh anchors but never blocks the calling tool; it is silent when everything checked is fresh:
+
+```bash
+npx -y knowledge-rail@2.5.0 drift --no-ledger
+npx -y knowledge-rail@2.5.0 drift --no-ledger --path src/payments.ts --path src/invoices
+```
+
+An absolute event path is accepted only when it is confined to the discovered project. For pre-commit or CI, `--check` exits `2` on any non-fresh anchor or timeout; operational failures exit `1`. JSON mode returns the complete shared-core result:
+
+```bash
+npx -y knowledge-rail@2.5.0 drift --check --no-ledger
+npx -y knowledge-rail@2.5.0 drift --format json --no-ledger
+```
+
+Text output is capped at 20 affected anchors. Its `stale` count is the aggregate of `drift_suspected` and `anchor_unresolvable`, not a fourth detector verdict. The default timeout is three seconds: ordinary hook mode reports a timeout on stderr and exits `0`, while `--check` exits `2`. Omit `--no-ledger` only when the disposable freshness ledger should be updated for later context compilation.
+
 The action reads current code and writes only disposable state to `wiki/.knowledge-rail/drift/ledger.json`; it never edits claim text, canonical pages, or source code. A changed range, missing file, or invalidated line range becomes `drift_suspected`. An unreadable path, a non-file target, or a symlink that escapes the repository becomes `anchor_unresolvable` without aborting checks for other anchors. Trailing-whitespace-only edits and a parser-version change with identical range content stay fresh. `knowledge_context` keeps affected evidence visible for provenance, marks it `stale` with the corresponding reason, excludes it from clean evidence buckets, and returns an explicit `stale_evidence` gap even when stale evidence was retrieved but omitted from the display. Re-verification and correction remain normal Evidence IR work—there is intentionally no automatic fix.
+
+## Claude Code hooks integration
+
+With Claude Code, the recommended division of labor is: **drift and wiki awareness run from harness hooks** (deterministic, read-only, guaranteed to execute — a session-start drift summary, a per-edit path-scoped check, a stop-time reminder), **retrieval stays with the model** (`CLAUDE.md` tells Claude when to call `knowledge_context`; no auto-retrieval on every prompt), and **wiki writes stay behind the permission prompt**, so writes during analysis-only sessions always require the user's OK. Requires `knowledge-rail` ≥ 2.5.0 for the `drift` CLI subcommand the hooks invoke.
+
+The full guide, including a ready-to-paste prompt that makes Claude Code configure the hooks, permissions, and `CLAUDE.md` rules automatically, is in [docs/guides/claude-code-hooks.md](docs/guides/claude-code-hooks.md).
+
+The CLI itself is harness-neutral: Codex, Cursor, editor tasks, Git hooks, and other agent tools can invoke the same shell commands whenever they expose a project cwd and an optional changed-file path. Only the event wiring in the linked guide is Claude Code-specific.
 
 ## Project data
 

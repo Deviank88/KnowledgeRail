@@ -2,12 +2,23 @@ import * as nodePath from "node:path";
 
 export type CliCommand =
   | { kind: "help" }
+  | { kind: "drift-help" }
   | { kind: "version" }
   | { kind: "desktop" }
+  | { kind: "drift"; options: DriftCliOptions }
   | { kind: "workspace-list" }
   | { kind: "workspace-register"; path?: string }
   | { kind: "workspace-unregister"; workspaceId: string }
   | { kind: "serve"; options: ServeCliOptions };
+
+export interface DriftCliOptions {
+  root?: string;
+  paths: string[];
+  format: "text" | "json";
+  check: boolean;
+  writeLedger: boolean;
+  timeoutMs: number;
+}
 
 export interface ServeCliOptions {
   transport: "stdio" | "http";
@@ -38,12 +49,34 @@ Usage:
   knowledge-rail workspace list
   knowledge-rail workspace register [<path>]
   knowledge-rail workspace unregister <workspace-id>
+  knowledge-rail drift [--root <absolute-path>] [--path <path>]...
+                       [--format text|json] [--check] [--no-ledger]
+                       [--timeout-ms <milliseconds>]
   knowledge-rail desktop
   knowledge-rail --help
   knowledge-rail --version
 
 The default transport is stdio. IDEs, Cursor and terminal agents infer the
 opened project automatically; only context-free desktop chats select a catalog workspace.`;
+
+export const DRIFT_CLI_HELP = `KnowledgeRail drift - read-only code-evidence drift check
+
+Usage:
+  knowledge-rail drift [--root <absolute-path>] [--path <path>]...
+                       [--format text|json] [--check] [--no-ledger]
+                       [--timeout-ms <milliseconds>]
+
+Options:
+  --root <absolute-path>  Project override; otherwise discover from cwd.
+  --path <path>           Repository-relative path or confined absolute path.
+                          Repeat to check multiple files or directory prefixes.
+  --format text|json      Text is silent when every checked anchor is fresh.
+  --check                 Exit 2 on non-fresh anchors or timeout.
+  --no-ledger             Do not write the disposable drift ledger.
+  --timeout-ms <n>        Runtime limit from 1 to 60000 ms (default: 3000).
+  --help                  Show this help.
+
+Without --check, completed checks and timeouts exit 0 so agent hooks never block.`;
 
 function requireValue(args: readonly string[], index: number, flag: string): string {
   const value = args[index + 1];
@@ -104,10 +137,70 @@ function parseWorkspaceCommand(args: readonly string[]): CliCommand {
   throw new CliUsageError("Invalid workspace command. Use workspace list, register [path], or unregister <workspace-id>.");
 }
 
+function parseDriftCommand(args: readonly string[]): CliCommand {
+  if (args.length === 2 && (args[1] === "--help" || args[1] === "-h")) return { kind: "drift-help" };
+  let root: string | undefined;
+  const paths: string[] = [];
+  let format: "text" | "json" = "text";
+  let check = false;
+  let writeLedger = true;
+  let timeoutMs = 3_000;
+  const seen = new Set<string>();
+
+  for (let index = 1; index < args.length; index++) {
+    const flag = args[index];
+    if (["--root", "--format", "--check", "--no-ledger", "--timeout-ms"].includes(flag ?? "")) {
+      if (seen.has(flag!)) throw new CliUsageError(`${flag} may be supplied only once.`);
+      seen.add(flag!);
+    }
+    if (flag === "--root") {
+      const value = requireValue(args, index, flag);
+      if (!nodePath.isAbsolute(value)) throw new CliUsageError("--root must be an absolute path.");
+      root = nodePath.resolve(value);
+      index++;
+    } else if (flag === "--path") {
+      paths.push(requireValue(args, index, flag));
+      index++;
+    } else if (flag === "--format") {
+      const value = requireValue(args, index, flag);
+      if (value !== "text" && value !== "json") throw new CliUsageError("--format must be text or json.");
+      format = value;
+      index++;
+    } else if (flag === "--check") {
+      check = true;
+    } else if (flag === "--no-ledger") {
+      writeLedger = false;
+    } else if (flag === "--timeout-ms") {
+      const value = requireValue(args, index, flag);
+      const parsed = Number(value);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 60_000) {
+        throw new CliUsageError("--timeout-ms must be an integer from 1 to 60000.");
+      }
+      timeoutMs = parsed;
+      index++;
+    } else {
+      throw new CliUsageError(`Unknown drift argument: ${flag ?? ""}`);
+    }
+  }
+
+  return {
+    kind: "drift",
+    options: {
+      ...(root ? { root } : {}),
+      paths,
+      format,
+      check,
+      writeLedger,
+      timeoutMs,
+    },
+  };
+}
+
 export function parseCli(args: readonly string[]): CliCommand {
   if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) return { kind: "help" };
   if (args.length === 1 && (args[0] === "--version" || args[0] === "-v")) return { kind: "version" };
   if (args[0] === "workspace") return parseWorkspaceCommand(args);
+  if (args[0] === "drift") return parseDriftCommand(args);
   if (args[0] === "desktop") {
     if (args.length !== 1) throw new CliUsageError("desktop does not accept serve options.");
     return { kind: "desktop" };

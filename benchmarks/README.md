@@ -119,7 +119,7 @@ npm run eval:drift
 npm run eval:drift:gate
 ```
 
-The pinned fixture covers unchanged ranges, trailing-whitespace-only edits, substantive content changes, deleted files, out-of-bounds ranges, and parser upgrades with identical content across every adapter, including decorated Python anchors. The gate requires perfect verdict/reason accuracy, zero false positives, and zero silent misses without lowering any existing threshold. It also records full and path-scoped evaluation timings over 1,000 synthetic anchors; only deterministic workload sizes are gated because absolute timing on shared CI runners is noisy. Line-count-changing reflows remain drift because the durable anchor cites fixed lines.
+The pinned fixture covers unchanged ranges, trailing-whitespace-only edits, substantive content changes, deleted files, out-of-bounds ranges, and parser upgrades with identical content across every adapter, including decorated Python anchors. The gate requires perfect verdict/reason accuracy, zero false positives, and zero silent misses without lowering any existing threshold. It also records full and path-scoped evaluation timings over 1,000 synthetic anchors; only deterministic workload sizes are gated because absolute timing on shared CI runners is noisy. The 2.5.0 reference run evaluated all 1,000 anchors in 1.672 ms and the 100-anchor slice in 0.122 ms; the end-to-end single-file CLI parity fixture separately enforces a generous 300 ms ceiling. Line-count-changing reflows remain drift because the durable anchor cites fixed lines.
 
 ## Task-aware context compiler
 

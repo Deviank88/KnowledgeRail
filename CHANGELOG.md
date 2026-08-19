@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-08-19
+
+### Added
+
+- Added the hook-ready `knowledge-rail drift` CLI with global and repeated path scopes, silent all-fresh text output, full JSON output, bounded diagnostics, CI-oriented `--check`, fail-open timeouts, and `--no-ledger` operation.
+- Added a project-scoped Claude Code hooks guide and generic shell-hook commands usable by agent harnesses, IDEs, pre-commit checks, and CI without an MCP server process.
+- Extended CLI, drift-parity, installed-package, timeout, confinement, and no-ledger coverage without adding runtime dependencies.
+
+### Changed
+
+- Drift CLI and `knowledge_admin action="drift"` now share the same cancellable detector path; cancellation is checked before any late ledger update, while the existing MCP verdict semantics remain unchanged.
+
 ## [2.4.0] - 2026-08-19
 
 ### Added
@@ -188,7 +200,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Initial local-first MCP server with persistent evidence-backed knowledge, bounded retrieval, document workflows, and eight public `knowledge_*` tools.
 - Multi-workspace loopback HTTP gateway, opaque per-chat bindings, desktop adapter, and portable npm/npx distribution.
 
-[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.5.0...HEAD
+[2.5.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.2.1...v2.3.0
 [2.2.1]: https://github.com/Deviank88/KnowledgeRail/compare/v2.2.0...v2.2.1

@@ -56,6 +56,41 @@ test("CLI accepts an explicit absolute stdio override", () => {
   if (command.kind === "serve") assert.equal(command.options.root, root);
 });
 
+test("CLI parses hook-safe drift defaults and repeated path scopes", () => {
+  assert.deepEqual(parseCli(["drift"]), {
+    kind: "drift",
+    options: {
+      paths: [],
+      format: "text",
+      check: false,
+      writeLedger: true,
+      timeoutMs: 3_000,
+    },
+  });
+  const root = path.resolve("fixture project");
+  assert.deepEqual(parseCli([
+    "drift",
+    "--root", root,
+    "--path", "src/service.ts",
+    "--path", path.join(root, "src", "worker.ts"),
+    "--format", "json",
+    "--check",
+    "--no-ledger",
+    "--timeout-ms", "4500",
+  ]), {
+    kind: "drift",
+    options: {
+      root,
+      paths: ["src/service.ts", path.join(root, "src", "worker.ts")],
+      format: "json",
+      check: true,
+      writeLedger: false,
+      timeoutMs: 4_500,
+    },
+  });
+  assert.deepEqual(parseCli(["drift", "--help"]), { kind: "drift-help" });
+});
+
 test("CLI rejects ambiguous and unsafe combinations before starting a runtime", () => {
   const invalid = [
     ["--port", "3334"],
@@ -67,6 +102,12 @@ test("CLI rejects ambiguous and unsafe combinations before starting a runtime", 
     ["--transport", "http", "--allowed-origin", "https://example.com/path"],
     ["--transport", "http", "--transport", "stdio"],
     ["workspace", "register", "--unknown"],
+    ["drift", "--root", "relative"],
+    ["drift", "--format", "xml"],
+    ["drift", "--timeout-ms", "0"],
+    ["drift", "--timeout-ms", "60001"],
+    ["drift", "--check", "--check"],
+    ["drift", "--unknown"],
     ["--unknown"],
   ];
   for (const args of invalid) {
