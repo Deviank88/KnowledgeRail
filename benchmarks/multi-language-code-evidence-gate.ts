@@ -22,10 +22,13 @@ interface Baseline {
   maximumInitialBuildMs: number;
   maximumUnchangedBuildMs: number;
   maximumPythonExtractionMs: number;
+  maximumKotlinExtractionMs: number;
+  maximumRubyExtractionMs: number;
+  maximumSfmetaExtractionMs: number;
 }
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_BASELINE = path.join(HERE, "fixtures", "multi-language-code-evidence-baseline-v3.json");
+const DEFAULT_BASELINE = path.join(HERE, "fixtures", "multi-language-code-evidence-baseline-v4.json");
 
 function check(failures: string[], label: string, passed: boolean, actual: unknown): void {
   process.stdout.write(`GATE ${label}=${String(actual)} ${passed ? "PASS" : "FAIL"}\n`);
@@ -37,7 +40,7 @@ async function main(): Promise<void> {
   const report = await evaluateMultiLanguageCodeEvidence(DEFAULT_MULTI_LANGUAGE_FIXTURE_ROOT);
   const failures: string[] = [];
   const languages = report.languageResults.map((result) => result.language);
-  check(failures, "baselineVersion", baseline.version === 3, baseline.version);
+  check(failures, "baselineVersion", baseline.version === 4, baseline.version);
   check(failures, "corpusSha256", report.corpusSha256 === baseline.corpusSha256, report.corpusSha256);
   check(failures, "languages", JSON.stringify(languages) === JSON.stringify(baseline.languages), languages.join(","));
   check(failures, "sourceFileCount", report.sourceFileCount === baseline.sourceFileCount, report.sourceFileCount);
@@ -71,13 +74,20 @@ async function main(): Promise<void> {
     check(failures, `${result.language}.precision`, result.precision >= baseline.minimumPrecision, result.precision);
     check(failures, `${result.language}.recall`, result.recall >= baseline.minimumRecall, result.recall);
   }
-  const python = report.languageResults.find((result) => result.language === "python");
-  check(
-    failures,
-    "python.extractionMs",
-    python !== undefined && python.extractionMs <= baseline.maximumPythonExtractionMs,
-    python?.extractionMs ?? "missing"
-  );
+  for (const [language, maximum] of [
+    ["python", baseline.maximumPythonExtractionMs],
+    ["kotlin", baseline.maximumKotlinExtractionMs],
+    ["ruby", baseline.maximumRubyExtractionMs],
+    ["sfmeta", baseline.maximumSfmetaExtractionMs],
+  ] as const) {
+    const result = report.languageResults.find((candidate) => candidate.language === language);
+    check(
+      failures,
+      `${language}.extractionMs`,
+      result !== undefined && result.extractionMs <= maximum,
+      result?.extractionMs ?? "missing"
+    );
+  }
   check(
     failures,
     "maskingIntegrity",
@@ -103,7 +113,7 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  process.stdout.write("\nMulti-language code-evidence gate passed (baseline v3).\n");
+  process.stdout.write("\nMulti-language code-evidence gate passed (baseline v4).\n");
 }
 
 main().catch((error: unknown) => {

@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "languageCases": [
     {
       "id": "typescript",
@@ -100,6 +100,36 @@
       "endLine": 5,
       "parserVersion": "python-deterministic-v1",
       "upgradedParserVersion": "python-deterministic-v2"
+    },
+    {
+      "id": "kotlin",
+      "path": "src/Service.kt",
+      "capturedContent": "fun limit(): Int {\n  return 3\n}\n",
+      "changedContent": "fun limit(): Int {\n  return 4\n}\n",
+      "startLine": 1,
+      "endLine": 3,
+      "parserVersion": "kotlin-deterministic-v1",
+      "upgradedParserVersion": "kotlin-deterministic-v2"
+    },
+    {
+      "id": "ruby",
+      "path": "lib/service.rb",
+      "capturedContent": "def limit\n  3\nend\n",
+      "changedContent": "def limit\n  4\nend\n",
+      "startLine": 1,
+      "endLine": 3,
+      "parserVersion": "ruby-deterministic-v1",
+      "upgradedParserVersion": "ruby-deterministic-v2"
+    },
+    {
+      "id": "sfmeta",
+      "path": "objects/Invoice__c.object-meta.xml",
+      "capturedContent": "<CustomObject>\n  <label>Invoice</label>\n  <description>Issued invoice</description>\n</CustomObject>\n",
+      "changedContent": "<CustomObject>\n  <label>Invoice</label>\n  <description>Approved invoice</description>\n</CustomObject>\n",
+      "startLine": 1,
+      "endLine": 4,
+      "parserVersion": "sfmeta-deterministic-v1",
+      "upgradedParserVersion": "sfmeta-deterministic-v2"
     }
   ],
   "scenarios": [

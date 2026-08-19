@@ -18,17 +18,17 @@ KnowledgeRail wiki. Work only in project scope (.claude/settings.json,
 CLAUDE.md); do not touch user-level settings and do not commit anything.
 Read the current Claude Code hooks documentation before writing any hook
 (event names, stdin JSON shape, context-injection semantics, matcher
-syntax) — do not work from memory. Verify `npx -y knowledge-rail@2.5.0 drift --help`
+syntax) — do not work from memory. Verify `npx -y knowledge-rail@2.6.0 drift --help`
 works before wiring it into any hook.
 
 1. HOOKS in .claude/settings.json (all fail-open; each under ~5s):
-   - SessionStart: run `npx -y knowledge-rail@2.5.0 drift --no-ledger` so its
+   - SessionStart: run `npx -y knowledge-rail@2.6.0 drift --no-ledger` so its
      summary lands in context (it prints nothing when all anchors are
      fresh), prefixed with one line stating the project has a KnowledgeRail
      wiki and that task work should start with knowledge_context mode=task.
    - PostToolUse with a matcher for Edit and Write: extract the edited
      file_path from the hook's stdin JSON and run
-     `npx -y knowledge-rail@2.5.0 drift --no-ledger --path <file>` so a broken
+     `npx -y knowledge-rail@2.6.0 drift --no-ledger --path <file>` so a broken
      anchor is reported in the same turn as the edit that broke it.
    - Stop: deterministic check only — if git status shows modified source
      files in this session AND no wiki content change accompanied them,

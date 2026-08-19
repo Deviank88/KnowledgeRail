@@ -1,0 +1,32 @@
+{
+  "language": "ruby",
+  "knownGaps": [
+    "Gemfile and bare-filename manifests are out of scope until the registry supports exact filename claims",
+    "metaprogrammed definitions, ActiveRecord class-to-table inference, and individual RSpec it blocks are intentionally not inferred",
+    "nested Rails member/collection route scopes, plain command-form heredocs, operator methods, and ambiguous command-form regex literals remain best-effort"
+  ],
+  "symbols": [
+    { "path": "ruby/app/models/order.rb", "kind": "class", "symbol": "Order", "qualifiedName": "Order", "startLine": 2, "endLine": 15, "isTest": false, "docComment": true, "databaseRefs": ["orders"] },
+    { "path": "ruby/app/models/order.rb", "kind": "method", "symbol": "ready?", "qualifiedName": "Order#ready?", "startLine": 9, "endLine": 11, "isTest": false, "docComment": true },
+    { "path": "ruby/app/models/order.rb", "kind": "method", "symbol": "label", "qualifiedName": "Order#label", "startLine": 14, "endLine": 14, "isTest": false, "docComment": true },
+    { "path": "ruby/app/services/order_service.rb", "kind": "class", "symbol": "OrderService", "qualifiedName": "Billing::Orders::OrderService", "startLine": 7, "endLine": 30, "isTest": false, "docComment": true, "imports": ["../models/order", "json"], "configKeys": ["ORDERS_REGION"] },
+    { "path": "ruby/app/services/order_service.rb", "kind": "method", "symbol": "initialize", "qualifiedName": "Billing::Orders::OrderService#initialize", "startLine": 10, "endLine": 12, "isTest": false, "docComment": false },
+    { "path": "ruby/app/services/order_service.rb", "kind": "method", "symbol": "place", "qualifiedName": "Billing::Orders::OrderService#place", "startLine": 15, "endLine": 23, "isTest": false, "docComment": true },
+    { "path": "ruby/app/services/order_service.rb", "kind": "method", "symbol": "from_environment", "qualifiedName": "Billing::Orders::OrderService.from_environment", "startLine": 26, "endLine": 29, "isTest": false, "docComment": true, "configKeys": ["ORDERS_REGION"] },
+    { "path": "ruby/app/sinatra_api.rb", "kind": "class", "symbol": "OrdersApi", "qualifiedName": "OrdersApi", "startLine": 3, "endLine": 14, "isTest": false, "docComment": false },
+    { "path": "ruby/app/sinatra_api.rb", "kind": "route", "symbol": "GET /health", "qualifiedName": "route:GET /health", "startLine": 5, "endLine": 8, "isTest": false, "docComment": true, "routes": [{ "method": "GET", "path": "/health" }] },
+    { "path": "ruby/app/sinatra_api.rb", "kind": "route", "symbol": "POST /orders", "qualifiedName": "route:POST /orders", "startLine": 10, "endLine": 13, "isTest": false, "docComment": false, "routes": [{ "method": "POST", "path": "/orders" }] },
+    { "path": "ruby/config/routes.rb", "kind": "route", "symbol": "GET /health", "qualifiedName": "route:GET /health:health#show", "startLine": 2, "endLine": 2, "isTest": false, "docComment": false, "routes": [{ "method": "GET", "path": "/health", "handler": "health#show" }] },
+    { "path": "ruby/config/routes.rb", "kind": "route", "symbol": "GET /orders/search", "qualifiedName": "route:GET /orders/search:orders#search", "startLine": 3, "endLine": 3, "isTest": false, "docComment": false, "routes": [{ "method": "GET", "path": "/orders/search", "handler": "orders#search" }] },
+    { "path": "ruby/config/routes.rb", "kind": "route", "symbol": "resources orders", "qualifiedName": "route:resources orders", "startLine": 4, "endLine": 4, "isTest": false, "docComment": false, "routes": [{ "method": "GET", "path": "/orders", "handler": "orders#index" }, { "method": "GET", "path": "/orders/new", "handler": "orders#new" }, { "method": "POST", "path": "/orders", "handler": "orders#create" }, { "method": "GET", "path": "/orders/:id", "handler": "orders#show" }, { "method": "GET", "path": "/orders/:id/edit", "handler": "orders#edit" }, { "method": "PATCH", "path": "/orders/:id", "handler": "orders#update" }, { "method": "DELETE", "path": "/orders/:id", "handler": "orders#destroy" }] },
+    { "path": "ruby/db/migrate/20260819090000_create_orders.rb", "kind": "class", "symbol": "CreateOrders", "qualifiedName": "CreateOrders", "startLine": 1, "endLine": 10, "isTest": false, "docComment": false, "databaseRefs": ["orders"] },
+    { "path": "ruby/db/migrate/20260819090000_create_orders.rb", "kind": "method", "symbol": "change", "qualifiedName": "CreateOrders#change", "startLine": 2, "endLine": 9, "isTest": false, "docComment": false, "databaseRefs": ["orders"] },
+    { "path": "ruby/lib/masking.rb", "kind": "method", "symbol": "normalized_ratio", "qualifiedName": "MaskingExamples#normalized_ratio", "startLine": 16, "endLine": 21, "isTest": false, "docComment": true },
+    { "path": "ruby/lib/masking.rb", "kind": "method", "symbol": "retryable?", "qualifiedName": "MaskingExamples#retryable?", "startLine": 23, "endLine": 25, "isTest": false, "docComment": false },
+    { "path": "ruby/lib/masking.rb", "kind": "class", "symbol": "VisibleAfterComment", "qualifiedName": "VisibleAfterComment", "startLine": 35, "endLine": 39, "isTest": false, "docComment": false },
+    { "path": "ruby/lib/masking.rb", "kind": "method", "symbol": "visible", "qualifiedName": "VisibleAfterComment#visible", "startLine": 36, "endLine": 38, "isTest": false, "docComment": false },
+    { "path": "ruby/spec/order_service_spec.rb", "kind": "test", "symbol": "Billing::Orders::OrderService", "qualifiedName": "test:Billing::Orders::OrderService", "startLine": 4, "endLine": 12, "isTest": true, "docComment": false, "imports": ["../app/services/order_service", "spec_helper"] },
+    { "path": "ruby/test/order_model_test.rb", "kind": "class", "symbol": "OrderModelTest", "qualifiedName": "OrderModelTest", "startLine": 4, "endLine": 10, "isTest": true, "docComment": false },
+    { "path": "ruby/test/order_model_test.rb", "kind": "test", "symbol": "test_ready_order", "qualifiedName": "OrderModelTest#test_ready_order", "startLine": 6, "endLine": 9, "isTest": true, "docComment": true }
+  ]
+}

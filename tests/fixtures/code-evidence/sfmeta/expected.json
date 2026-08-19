@@ -1,0 +1,15 @@
+{
+  "language": "sfmeta",
+  "knownGaps": [
+    "only the explicit SFDX metadata suffix roster is indexed; generic XML and generic -meta.xml files remain out of scope",
+    "malformed metadata degrades to the file module fragment and flat field layouts cannot infer an owning object"
+  ],
+  "symbols": [
+    { "path": "sfmeta/flows/ApproveInvoice.flow-meta.xml", "kind": "module", "symbol": "ApproveInvoice", "qualifiedName": "ApproveInvoice", "startLine": 2, "endLine": 21, "isTest": false, "docComment": true, "definition": "Flow ApproveInvoice status=Draft", "calls": ["LoadInvoice", "MarkApproved", "NotifyFinance"], "databaseRefs": ["Invoice__c"] },
+    { "path": "sfmeta/objects/Invoice__c/Invoice__c.object-meta.xml", "kind": "class", "symbol": "Invoice__c", "qualifiedName": "Invoice__c", "startLine": 2, "endLine": 12, "isTest": false, "docComment": true, "definition": "CustomObject Invoice__c", "databaseRefs": ["Invoice__c"] },
+    { "path": "sfmeta/objects/Invoice__c/fields/Amount__c.field-meta.xml", "kind": "method", "symbol": "Amount__c", "qualifiedName": "Invoice__c.Amount__c", "startLine": 2, "endLine": 9, "isTest": false, "docComment": true, "definition": "CustomField Invoice__c.Amount__c type=Currency", "databaseRefs": ["Invoice__c", "Invoice__c.Amount__c"] },
+    { "path": "sfmeta/objects/Invoice__c/fields/Outstanding__c.field-meta.xml", "kind": "method", "symbol": "Outstanding__c", "qualifiedName": "Invoice__c.Outstanding__c", "startLine": 2, "endLine": 10, "isTest": false, "docComment": true, "definition": "CustomField Invoice__c.Outstanding__c type=Currency", "references": ["Amount__c", "PaidAmount__c", "Status__c"], "databaseRefs": ["Invoice__c", "Invoice__c.Outstanding__c"] },
+    { "path": "sfmeta/objects/Invoice__c/validationRules/PositiveAmount.validationRule-meta.xml", "kind": "method", "symbol": "PositiveAmount", "qualifiedName": "Invoice__c.PositiveAmount", "startLine": 2, "endLine": 8, "isTest": false, "docComment": true, "definition": "ValidationRule Invoice__c.PositiveAmount", "references": ["Amount__c"], "databaseRefs": ["Invoice__c"] },
+    { "path": "sfmeta/permissionsets/Invoice_Manager.permissionset-meta.xml", "kind": "class", "symbol": "Invoice_Manager", "qualifiedName": "Invoice_Manager", "startLine": 2, "endLine": 18, "isTest": false, "docComment": true, "definition": "PermissionSet Invoice_Manager", "references": ["Invoice__c", "Invoice__c.Amount__c"], "databaseRefs": ["Invoice__c", "Invoice__c.Amount__c"] }
+  ]
+}

@@ -1,5 +1,7 @@
 import * as nodePath from "node:path";
 import { PythonKnowledgeAdapter } from "./python-adapter.js";
+import { RubyKnowledgeAdapter } from "./ruby-adapter.js";
+import { SalesforceMetadataKnowledgeAdapter } from "./sfmeta-adapter.js";
 import { TypeScriptKnowledgeAdapter } from "./typescript-adapter.js";
 import {
   ApexKnowledgeAdapter,
@@ -8,6 +10,7 @@ import {
   CSharpKnowledgeAdapter,
   GoKnowledgeAdapter,
   JavaKnowledgeAdapter,
+  KotlinKnowledgeAdapter,
   PhpKnowledgeAdapter,
   RustKnowledgeAdapter,
 } from "./language-adapters.js";
@@ -31,6 +34,9 @@ const KNOWN_EXTENSION_CLAIMS = [
   ".java", ".cls", ".trigger", ".cs", ".go", ".rs", ".php", ".c", ".cpp", ".cc", ".cxx",
   ".h", ".hpp", ".hh",
   ".py", ".pyi",
+  ".kt", ".kts",
+  ".object-meta.xml", ".field-meta.xml", ".validationrule-meta.xml", ".flow-meta.xml", ".permissionset-meta.xml",
+  ".rb", ".rake",
 ] as const;
 
 function normalizedClaim(value: string): string {
@@ -157,6 +163,7 @@ export function createDefaultKnowledgeAdapterRegistry(): KnowledgeAdapterRegistr
   return new KnowledgeAdapterRegistry([
     new TypeScriptKnowledgeAdapter(),
     new JavaKnowledgeAdapter(),
+    new KotlinKnowledgeAdapter(),
     new ApexKnowledgeAdapter(),
     new CSharpKnowledgeAdapter(),
     new GoKnowledgeAdapter(),
@@ -165,6 +172,8 @@ export function createDefaultKnowledgeAdapterRegistry(): KnowledgeAdapterRegistr
     new CKnowledgeAdapter(),
     new CppKnowledgeAdapter(),
     new PythonKnowledgeAdapter(),
+    new SalesforceMetadataKnowledgeAdapter(),
+    new RubyKnowledgeAdapter(),
   ]);
 }
 

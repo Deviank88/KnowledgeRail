@@ -8,6 +8,9 @@ import { canonicalFixtureText } from "./fixture-integrity.js";
 import { maskBraceLanguage, type BraceLanguage } from "../src/core/code-evidence/brace-language-engine.js";
 import { PersistentCodeEvidenceIndex } from "../src/core/code-evidence/index.js";
 import { maskPythonSource, PythonKnowledgeAdapter } from "../src/core/code-evidence/python-adapter.js";
+import { maskRubySource } from "../src/core/code-evidence/keyword-block-engine.js";
+import { RubyKnowledgeAdapter } from "../src/core/code-evidence/ruby-adapter.js";
+import { SalesforceMetadataKnowledgeAdapter } from "../src/core/code-evidence/sfmeta-adapter.js";
 import {
   ApexKnowledgeAdapter,
   CKnowledgeAdapter,
@@ -15,6 +18,7 @@ import {
   CSharpKnowledgeAdapter,
   GoKnowledgeAdapter,
   JavaKnowledgeAdapter,
+  KotlinKnowledgeAdapter,
   PhpKnowledgeAdapter,
   RustKnowledgeAdapter,
 } from "../src/core/code-evidence/language-adapters.js";
@@ -32,6 +36,7 @@ interface ExpectedSymbol {
   definition?: string;
   imports?: string[];
   calls?: string[];
+  references?: string[];
   routes?: CodeRoute[];
   configKeys?: string[];
   databaseRefs?: string[];
@@ -57,7 +62,7 @@ export interface LanguageExtractionResult {
 }
 
 export interface MaskingResult {
-  language: BraceLanguage | "python";
+  language: BraceLanguage | "python" | "ruby";
   lengthPreserved: boolean;
   byteLengthPreserved: boolean;
   newlinesPreserved: boolean;
@@ -95,13 +100,16 @@ const ADAPTERS: Record<string, KnowledgeAdapter> = {
   csharp: new CSharpKnowledgeAdapter(),
   go: new GoKnowledgeAdapter(),
   java: new JavaKnowledgeAdapter(),
+  kotlin: new KotlinKnowledgeAdapter(),
   php: new PhpKnowledgeAdapter(),
   rust: new RustKnowledgeAdapter(),
   python: new PythonKnowledgeAdapter(),
+  ruby: new RubyKnowledgeAdapter(),
+  sfmeta: new SalesforceMetadataKnowledgeAdapter(),
 };
 
 const MASKING_CASES: Array<{
-  language: BraceLanguage | "python";
+  language: BraceLanguage | "python" | "ruby";
   content: string;
   hidden: string;
   visible: string;
@@ -118,6 +126,18 @@ const MASKING_CASES: Array<{
     language: "python",
     content: "value = Fr\"caffè {lookup(\"fake_call\", {\"nested\": 1})}\"\ntext = \"\"\"\ndef fake_hidden():\n    pass\n\"\"\"\ndef visible():\n    pass\n",
     hidden: "fake_hidden",
+    visible: "visible",
+  },
+  {
+    language: "kotlin",
+    content: "val text = \"caffè ${lookup(\"fakeCall() { }\")}\"\nval raw = \"\"\"fakeRaw() { }\"\"\"\nfun visible() {}\n",
+    hidden: "fakeCall",
+    visible: "visible",
+  },
+  {
+    language: "ruby",
+    content: "text = <<~DOC\nfake_method do\nend\nDOC\npattern = %r{fake_regex/end}\ndef visible\nend\n",
+    hidden: "fake_method",
     visible: "visible",
   },
 ];
@@ -149,7 +169,7 @@ function sortedRoutes(routes: readonly CodeRoute[]): string {
 
 function metadataMatches(actual: ExpectedSymbol, expected: ExpectedSymbol): boolean {
   if (expected.definition !== undefined && actual.definition !== expected.definition) return false;
-  for (const field of ["imports", "calls", "configKeys", "databaseRefs"] as const) {
+  for (const field of ["imports", "calls", "references", "configKeys", "databaseRefs"] as const) {
     if (expected[field] !== undefined && JSON.stringify(actual[field] ?? []) !== JSON.stringify(expected[field])) {
       return false;
     }
@@ -187,14 +207,15 @@ async function evaluateLanguage(fixtureRoot: string, language: string): Promise<
     throw new Error(`Invalid ${language} code-evidence fixture.`);
   }
   const actual: ExpectedSymbol[] = [];
-  for (const name of (await fs.readdir(directory)).filter((value) => value !== "expected.json").sort()) {
+  for (const name of (await filesBelow(directory)).filter((value) => value !== "expected.json")) {
     const absolute = path.join(directory, name);
     if (!(await fs.stat(absolute)).isFile()) continue;
     const relative = `${language}/${name}`;
     const content = await fs.readFile(absolute, "utf8");
     const fragments = await ADAPTERS[language]!.extract({ repositoryRoot: fixtureRoot, path: relative, content });
     for (const fragment of fragments) {
-      if (fragment.kind === "module" || fragment.kind === "comment") continue;
+      if (fragment.kind === "comment" ||
+          (fragment.kind === "module" && (language !== "sfmeta" || fragment.qualifiedName === fragment.path))) continue;
       actual.push({
         path: fragment.path,
         kind: fragment.kind,
@@ -207,6 +228,7 @@ async function evaluateLanguage(fixtureRoot: string, language: string): Promise<
         definition: fragment.definition,
         imports: fragment.imports,
         calls: fragment.calls,
+        references: fragment.references,
         routes: fragment.routes,
         configKeys: fragment.configKeys,
         databaseRefs: fragment.databaseRefs,
@@ -243,7 +265,9 @@ function evaluateMasking(): MaskingResult[] {
   return MASKING_CASES.map((fixture) => {
     const masked = fixture.language === "python"
       ? maskPythonSource(fixture.content)
-      : maskBraceLanguage(fixture.content, fixture.language);
+      : fixture.language === "ruby"
+        ? maskRubySource(fixture.content)
+        : maskBraceLanguage(fixture.content, fixture.language);
     const lengthPreserved = masked.length === fixture.content.length;
     const byteLengthPreserved = Buffer.byteLength(masked) === Buffer.byteLength(fixture.content);
     const newlinesPreserved = [...masked].filter((value) => value === "\n").length ===

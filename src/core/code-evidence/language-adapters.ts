@@ -18,6 +18,7 @@ import {
   CSHARP_ADAPTER_VERSION,
   GO_ADAPTER_VERSION,
   JAVA_ADAPTER_VERSION,
+  KOTLIN_ADAPTER_VERSION,
   PHP_ADAPTER_VERSION,
   RUST_ADAPTER_VERSION,
   type CodeRoute,
@@ -42,6 +43,15 @@ const JAVA_KEYWORDS = new Set([
   "exports", "extends", "final", "float", "implements", "import", "instanceof", "int", "interface",
   "long", "module", "native", "non-sealed", "opens", "package", "permits", "record", "requires",
   "sealed", "short", "strictfp", "super", "throws", "transient", "volatile", "yield",
+]);
+
+const KOTLIN_KEYWORDS = new Set([
+  ...COMMON_KEYWORDS, "actual", "annotation", "by", "catch", "companion", "constructor", "crossinline",
+  "data", "delegate", "do", "dynamic", "expect", "external", "field", "file", "finally", "fun",
+  "get", "import", "infix", "init", "inline", "inner", "internal", "is", "it", "lateinit", "noinline",
+  "object", "open", "operator", "out", "override", "package", "param", "property", "receiver", "reified",
+  "sealed", "set", "setparam", "suspend", "tailrec", "typealias", "typeof", "val", "value", "var",
+  "vararg", "when", "where",
 ]);
 
 const APEX_KEYWORDS = new Set([
@@ -286,6 +296,257 @@ const JAVA_CONFIG: BraceLanguageConfig = {
   imports: (content) => importsByPattern(content, /^\s*import\s+(?:static\s+)?([\w.*]+)\s*;/gmu),
   configKeys: (content) => unique([...content.matchAll(/@Value\s*\(\s*["']\$\{([^}:]+)(?::[^}]*)?\}["']\s*\)/gmu)]
     .map((match) => match[1]!)),
+  databaseRefs: () => [],
+};
+
+function kotlinTypes(context: BraceExtractionContext, packageName: string): TypeOwner[] {
+  const owners: TypeOwner[] = [];
+  const pattern = /^[ \t]*(?:(?:public|protected|private|internal|abstract|final|open|data|sealed|value|inner|enum|annotation|expect|actual)\s+)*(?:(companion)\s+)?(class|interface|object)\b(?:\s+([A-Za-z_]\w*))?[^;{\r\n]*(?:\r?\n(?:[ \t]+[^;{}\r\n]*|[ \t]*\)[^;{}\r\n]*))*\s*\{/gmu;
+  for (const match of context.masked.matchAll(pattern)) {
+    const start = matchStart(match);
+    const companion = match[1] !== undefined;
+    const symbol = companion ? "Companion" : match[3];
+    if (!symbol) continue;
+    const open = context.masked.indexOf("{", start);
+    const parent = ownerForOffset(owners, start);
+    const prefix = parent?.qualifiedName ?? packageName;
+    owners.push({
+      ...braceCandidate({
+        context,
+        match,
+        kind: "class",
+        symbol,
+        qualifiedName: prefix ? `${prefix}.${symbol}` : symbol,
+      }),
+      open,
+    });
+  }
+  return owners;
+}
+
+function kotlinSpringRoute(annotations: string, prefix: string): CodeRoute | undefined {
+  const mapping = /@(Get|Post|Put|Patch|Delete)Mapping\b/iu.exec(annotations);
+  const generic = /@RequestMapping\b/iu.test(annotations);
+  if (!mapping && !generic) return undefined;
+  const method = mapping?.[1]?.toUpperCase() ??
+    /RequestMethod\.(GET|POST|PUT|PATCH|DELETE)/iu.exec(annotations)?.[1]?.toUpperCase() ?? "ANY";
+  const suffix = mapping
+    ? annotationString(annotations, `${mapping[1]}Mapping`) ?? ""
+    : annotationString(annotations, "RequestMapping") ?? "";
+  return { method, path: suffix ? joinRoute(prefix, suffix) : prefix || "/" };
+}
+
+function kotlinDslRanges(context: BraceExtractionContext): Array<{
+  start: number;
+  end: number;
+  routePrefix?: string;
+  routeScope: boolean;
+}> {
+  const ranges: Array<{ start: number; end: number; routePrefix?: string; routeScope: boolean }> = [];
+  for (const match of context.masked.matchAll(/\brouting\s*(?:\([^)]*\))?\s*\{/gmu)) {
+    const start = matchStart(match);
+    const open = context.masked.indexOf("{", start);
+    ranges.push({ start, end: matchingBrace(context.masked, open), routeScope: false });
+  }
+  for (const match of context.masked.matchAll(/\broute\s*\([^)]*\)\s*\{/gmu)) {
+    const start = matchStart(match);
+    const open = context.masked.indexOf("{", start);
+    const original = context.content.slice(start, open);
+    const routePrefix = /\broute\s*\(\s*"([^"$]+)"\s*\)/u.exec(original)?.[1];
+    ranges.push({
+      start,
+      end: matchingBrace(context.masked, open),
+      routeScope: true,
+      ...(routePrefix ? { routePrefix } : {}),
+    });
+  }
+  return ranges;
+}
+
+function kotlinDeclarationStarts(masked: string, index: number): boolean {
+  return /^(?:@|(?:(?:public|protected|private|internal|abstract|final|open|override|inline|noinline|crossinline|tailrec|operator|infix|external|suspend|expect|actual)\s+)*(?:fun|class|interface|object|val|var|typealias|package|import)\b)/u
+    .test(masked.slice(index, Math.min(masked.length, index + 256)));
+}
+
+function matchingParenthesis(masked: string, open: number): number | undefined {
+  let depth = 0;
+  for (let index = open; index < masked.length; index++) {
+    if (masked[index] === "(") depth++;
+    else if (masked[index] === ")" && --depth === 0) return index;
+    else if ((masked[index] === "\n" || masked[index] === "\r") && depth === 1) {
+      let next = index + 1;
+      if (masked[index] === "\r" && masked[next] === "\n") next++;
+      while (masked[next] === " " || masked[next] === "\t") next++;
+      if (kotlinDeclarationStarts(masked, next)) return undefined;
+    }
+  }
+  return undefined;
+}
+
+function kotlinFunctionBody(masked: string, afterParameters: number): { index: number; token: "{" | "=" } | undefined {
+  let angleDepth = 0;
+  let parenthesisDepth = 0;
+  let squareDepth = 0;
+  for (let index = afterParameters; index < masked.length; index++) {
+    const value = masked[index]!;
+    if (value === "\n" || value === "\r") {
+      let next = index + 1;
+      if (value === "\r" && masked[next] === "\n") next++;
+      while (masked[next] === " " || masked[next] === "\t") next++;
+      if (kotlinDeclarationStarts(masked, next)) return undefined;
+      continue;
+    }
+    if (value === "<") angleDepth++;
+    else if (value === ">" && angleDepth > 0) angleDepth--;
+    else if (value === "(") parenthesisDepth++;
+    else if (value === ")" && parenthesisDepth > 0) parenthesisDepth--;
+    else if (value === "[") squareDepth++;
+    else if (value === "]" && squareDepth > 0) squareDepth--;
+    else if (angleDepth === 0 && parenthesisDepth === 0 && squareDepth === 0) {
+      if (value === "{" || value === "=") return { index, token: value };
+      if (value === ";" || value === "}") return undefined;
+    }
+  }
+  return undefined;
+}
+
+function kotlinCandidates(context: BraceExtractionContext): BraceCandidate[] {
+  const packageName = /^\s*package\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\b/mu.exec(context.masked)?.[1] ?? "";
+  const owners = kotlinTypes(context, packageName);
+  const ownerPrefixes = new Map(owners.map((owner) => [
+    owner.qualifiedName,
+    annotationString(annotationTextBefore(context.content, owner.start), "RequestMapping") ?? "",
+  ]));
+  const candidates: BraceCandidate[] = owners.map((owner) => ({
+    ...owner,
+    isTest: /(?:Test|Tests|Spec)$/u.test(owner.symbol) ||
+      /:\s*(?:StringSpec|FunSpec|DescribeSpec|BehaviorSpec|ShouldSpec)\s*\(/u.test(
+        context.content.slice(owner.start, Math.min(owner.end, lineEnd(context.content, owner.start) + 300))
+      ),
+  }));
+  const ownedStarts = new Set(owners.map((owner) => owner.start));
+  const bodylessType = /^[ \t]*(?:(?:public|protected|private|internal|abstract|final|open|data|sealed|value|inner|enum|annotation|expect|actual)\s+)*(?:class|interface|object)\s+([A-Za-z_]\w*)\b[^{}\r\n]*$/gmu;
+  for (const match of context.masked.matchAll(bodylessType)) {
+    const start = matchStart(match);
+    if (ownedStarts.has(start)) continue;
+    const symbol = match[1]!;
+    const parent = ownerForOffset(owners, start);
+    const prefix = parent?.qualifiedName ?? packageName;
+    candidates.push({
+      kind: "class",
+      symbol,
+      qualifiedName: prefix ? `${prefix}.${symbol}` : symbol,
+      start,
+      end: lineEnd(context.content, start),
+      definition: definitionLine(context.content, start),
+      isTest: /(?:Test|Tests|Spec)$/u.test(symbol),
+    });
+  }
+  const functions: BraceCandidate[] = [];
+  const pattern = /^[ \t]*(?:(?:public|protected|private|internal|abstract|final|open|override|inline|noinline|crossinline|tailrec|operator|infix|external|suspend|expect|actual)[ \t]+)*fun[ \t]+(?:<[^>{}\r\n]+>[ \t]*)?(?:([A-Za-z_][\w.<>,?]*)[ \t]*\.)?([A-Za-z_]\w*)[ \t]*\(/gmu;
+  for (const match of context.masked.matchAll(pattern)) {
+    const start = matchStart(match);
+    const owner = ownerForOffset(owners, start);
+    if (owner && braceDepthAt(context.masked, owner.open, start) !== 1) continue;
+    const parametersOpen = start + match[0].lastIndexOf("(");
+    const parametersClose = matchingParenthesis(context.masked, parametersOpen);
+    if (parametersClose === undefined) continue;
+    const body = kotlinFunctionBody(context.masked, parametersClose + 1);
+    if (!body) continue;
+    const receiver = match[1]?.replace(/\s+/gu, "");
+    const symbol = match[2]!;
+    const qualifiedName = receiver
+      ? `${receiver}.${symbol}`
+      : owner
+        ? `${owner.qualifiedName}.${symbol}`
+        : packageName
+          ? `${packageName}.${symbol}`
+          : symbol;
+    const annotations = annotationTextBefore(context.content, start);
+    const candidate: BraceCandidate = {
+      kind: "function",
+      symbol,
+      qualifiedName,
+      start,
+      end: body.token === "{"
+        ? matchingBrace(context.masked, body.index)
+        : lineEnd(context.content, body.index),
+      definition: definitionLine(context.content, start),
+      references: receiver ? [receiver] : [],
+      isTest: /@(?:Test|ParameterizedTest|RepeatedTest)\b/u.test(annotations),
+    };
+    candidate.kind = candidate.isTest ? "test" : owner && !receiver ? "method" : "function";
+    candidates.push(candidate);
+    functions.push(candidate);
+    const route = kotlinSpringRoute(annotations, owner ? ownerPrefixes.get(owner.qualifiedName) ?? "" : "");
+    if (route) {
+      const routeSymbol = `${route.method} ${route.path}`;
+      candidates.push({
+        ...candidate,
+        kind: "route",
+        symbol: routeSymbol,
+        qualifiedName: `route:${routeSymbol}:${qualifiedName}`,
+        routes: [{ ...route, handler: qualifiedName }],
+        calls: [qualifiedName, symbol],
+      });
+    }
+  }
+  const propertyPattern = /^[ \t]*(?:(?:public|protected|private|internal|override|open|final|lateinit|const)\s+)*(?:val|var)\s+([A-Za-z_]\w*)[^\r\n]*(?:\r?\n[ \t]+)?(?:get|set)\s*\([^)]*\)\s*(=|\{)/gmu;
+  for (const match of context.masked.matchAll(propertyPattern)) {
+    const start = matchStart(match);
+    const owner = ownerForOffset(owners, start);
+    if (!owner || braceDepthAt(context.masked, owner.open, start) !== 1) continue;
+    const symbol = match[1]!;
+    const open = match[2] === "{" ? context.masked.indexOf("{", start) : -1;
+    candidates.push({
+      kind: "method",
+      symbol,
+      qualifiedName: `${owner.qualifiedName}.${symbol}`,
+      start,
+      end: open >= 0
+        ? matchingBrace(context.masked, open)
+        : lineEnd(context.content, start + match[0].length),
+      definition: definitionLine(context.content, start),
+    });
+  }
+  const dslRanges = kotlinDslRanges(context);
+  for (const match of context.content.matchAll(/\b(get|post|put|patch|delete|options|head)\s*\(\s*"([^"$]+)"\s*\)\s*\{/giu)) {
+    const start = matchStart(match);
+    if (context.masked.slice(start, start + match[1]!.length).toLowerCase() !== match[1]!.toLowerCase()) continue;
+    const owner = functions.find((candidate) => start > candidate.start && start < candidate.end);
+    const enclosingDsl = dslRanges.filter((range) => start > range.start && start < range.end)
+      .sort((left, right) => left.start - right.start);
+    if (enclosingDsl.length === 0 && !owner?.references?.some((value) => /(?:^|\.)Route$/u.test(value))) continue;
+    const routeScopes = enclosingDsl.filter((range) => range.routeScope);
+    if (routeScopes.some((range) => !range.routePrefix)) continue;
+    const method = match[1]!.toUpperCase();
+    const routePrefix = routeScopes.reduce((value, range) => joinRoute(value, range.routePrefix!), "");
+    const routePath = joinRoute(routePrefix, match[2]!);
+    const open = context.masked.indexOf("{", start);
+    const handler = owner?.qualifiedName;
+    candidates.push({
+      kind: "route",
+      symbol: `${method} ${routePath}`,
+      qualifiedName: `route:${method} ${routePath}${handler ? `:${handler}` : ""}`,
+      start,
+      end: matchingBrace(context.masked, open),
+      routes: [{ method, path: routePath, ...(handler ? { handler } : {}) }],
+      calls: handler ? [handler, owner!.symbol] : [],
+    });
+  }
+  return candidates;
+}
+
+const KOTLIN_CONFIG: BraceLanguageConfig = {
+  language: "kotlin",
+  keywords: KOTLIN_KEYWORDS,
+  testPath: (path) => commonTestPath(path) || /(?:^|\/)src\/test\//u.test(path),
+  candidates: kotlinCandidates,
+  imports: (content) => importsByPattern(content, /^\s*import\s+([A-Za-z_]\w*(?:\.[A-Za-z_*]\w*)*(?:\s+as\s+[A-Za-z_]\w*)?)/gmu),
+  configKeys: (content) => unique([
+    ...[...content.matchAll(/@Value\s*\(\s*["']\$\{([^}:]+)(?::[^}]*)?\}["']\s*\)/gmu)].map((match) => match[1]!),
+    ...[...content.matchAll(/\bSystem\.getenv\s*\(\s*["']([^"']+)["']/gmu)].map((match) => match[1]!),
+  ]),
   databaseRefs: () => [],
 };
 
@@ -895,6 +1156,12 @@ export class JavaKnowledgeAdapter extends BraceKnowledgeAdapter {
   readonly parserVersion = JAVA_ADAPTER_VERSION;
   readonly extensionClaims = [".java"] as const;
   readonly config = JAVA_CONFIG;
+}
+
+export class KotlinKnowledgeAdapter extends BraceKnowledgeAdapter {
+  readonly parserVersion = KOTLIN_ADAPTER_VERSION;
+  readonly extensionClaims = [".kt", ".kts"] as const;
+  readonly config = KOTLIN_CONFIG;
 }
 
 export class ApexKnowledgeAdapter extends BraceKnowledgeAdapter {

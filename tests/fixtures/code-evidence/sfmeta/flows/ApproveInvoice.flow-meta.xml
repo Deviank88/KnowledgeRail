@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Flow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>Approve an invoice and persist its accounting status.</description>
+    <actionCalls>
+        <name>NotifyFinance</name>
+        <label>Notify Finance</label>
+        <actionName>InvoiceNotification</actionName>
+        <actionType>apex</actionType>
+    </actionCalls>
+    <recordLookups>
+        <name>LoadInvoice</name>
+        <label>Load Invoice</label>
+        <object>Invoice__c</object>
+    </recordLookups>
+    <recordUpdates>
+        <name>MarkApproved</name>
+        <label>Mark Approved</label>
+        <object>Invoice__c</object>
+    </recordUpdates>
+    <status>Draft</status>
+</Flow>
