@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - Kotlin function extraction now balances parameter parentheses before locating the body, preventing one expression-body function from consuming the next declaration when defaults or consecutive `fun … =` forms are present.
+- Kotlin type extraction now uses a bounded linear header scan instead of an ambiguous multiline regular expression, preventing adversarial indentation from causing excessive backtracking or swallowing the following declaration.
 
 ## [2.5.0] - 2026-08-19
 

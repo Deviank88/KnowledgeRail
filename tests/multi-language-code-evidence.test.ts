@@ -369,6 +369,26 @@ test("malformed Kotlin parameter lists stop at the next declaration in linear ti
   assert.equal(fragments.some((fragment) => fragment.symbol.startsWith("broken")), false);
 });
 
+test("malformed Kotlin type headers stay bounded on repeated indentation", { timeout: 1_000 }, async () => {
+  const hostileIndentation = Array.from({ length: 10_000 }, () => "\t\t");
+  const content = ["class Broken", ...hostileIndentation, "class Visible { }", ""].join("\n");
+  const started = performance.now();
+  const fragments = await new KotlinKnowledgeAdapter().extract({
+    repositoryRoot: FIXTURE_ROOT,
+    path: "kotlin/malformed-types.kt",
+    content,
+  });
+  assert.equal(performance.now() - started < 900, true);
+  assert.deepEqual(fragments.find((fragment) => fragment.qualifiedName === "Broken")?.range, {
+    startLine: 1,
+    endLine: 1,
+  });
+  assert.deepEqual(fragments.find((fragment) => fragment.qualifiedName === "Visible")?.range, {
+    startLine: 10_002,
+    endLine: 10_002,
+  });
+});
+
 test("Ruby masking distinguishes regex literals from division and keeps modifier forms out of the block stack", async () => {
   const content = [
     "module Arithmetic",

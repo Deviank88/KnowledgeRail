@@ -301,13 +301,14 @@ const JAVA_CONFIG: BraceLanguageConfig = {
 
 function kotlinTypes(context: BraceExtractionContext, packageName: string): TypeOwner[] {
   const owners: TypeOwner[] = [];
-  const pattern = /^[ \t]*(?:(?:public|protected|private|internal|abstract|final|open|data|sealed|value|inner|enum|annotation|expect|actual)\s+)*(?:(companion)\s+)?(class|interface|object)\b(?:\s+([A-Za-z_]\w*))?[^;{\r\n]*(?:\r?\n(?:[ \t]+[^;{}\r\n]*|[ \t]*\)[^;{}\r\n]*))*\s*\{/gmu;
+  const pattern = /^[ \t]*(?:(?:public|protected|private|internal|abstract|final|open|data|sealed|value|inner|enum|annotation|expect|actual)[ \t]+)*(?:(companion)[ \t]+)?(class|interface|object)\b(?:[ \t]+([A-Za-z_]\w*))?/gmu;
   for (const match of context.masked.matchAll(pattern)) {
     const start = matchStart(match);
     const companion = match[1] !== undefined;
     const symbol = companion ? "Companion" : match[3];
     if (!symbol) continue;
-    const open = context.masked.indexOf("{", start);
+    const open = kotlinTypeBody(context.masked, start + match[0].length);
+    if (open === undefined) continue;
     const parent = ownerForOffset(owners, start);
     const prefix = parent?.qualifiedName ?? packageName;
     owners.push({
@@ -364,8 +365,40 @@ function kotlinDslRanges(context: BraceExtractionContext): Array<{
 }
 
 function kotlinDeclarationStarts(masked: string, index: number): boolean {
-  return /^(?:@|(?:(?:public|protected|private|internal|abstract|final|open|override|inline|noinline|crossinline|tailrec|operator|infix|external|suspend|expect|actual)\s+)*(?:fun|class|interface|object|val|var|typealias|package|import)\b)/u
+  return /^(?:@|(?:(?:public|protected|private|internal|abstract|final|open|data|sealed|value|inner|enum|annotation|companion|override|inline|noinline|crossinline|tailrec|operator|infix|external|suspend|expect|actual)\s+)*(?:fun|class|interface|object|val|var|typealias|package|import)\b)/u
     .test(masked.slice(index, Math.min(masked.length, index + 256)));
+}
+
+function kotlinTypeBody(masked: string, afterHeader: number): number | undefined {
+  let angleDepth = 0;
+  let parenthesisDepth = 0;
+  let squareDepth = 0;
+  let supertypeSection = false;
+  const limit = Math.min(masked.length, afterHeader + 64 * 1024);
+  for (let index = afterHeader; index < limit; index++) {
+    const value = masked[index]!;
+    if (value === "\n" || value === "\r") {
+      let next = index + 1;
+      if (value === "\r" && masked[next] === "\n") next++;
+      while (masked[next] === " " || masked[next] === "\t") next++;
+      if (angleDepth === 0 && parenthesisDepth === 0 && squareDepth === 0 &&
+          kotlinDeclarationStarts(masked, next)) return undefined;
+      continue;
+    }
+    if (value === "<") angleDepth++;
+    else if (value === ">" && angleDepth > 0) angleDepth--;
+    else if (value === "(") parenthesisDepth++;
+    else if (value === ")" && parenthesisDepth > 0) parenthesisDepth--;
+    else if (value === "[") squareDepth++;
+    else if (value === "]" && squareDepth > 0) squareDepth--;
+    else if (value === "{" && supertypeSection) return index;
+    else if (angleDepth === 0 && parenthesisDepth === 0 && squareDepth === 0) {
+      if (value === "{") return index;
+      if (value === ":") supertypeSection = true;
+      if (value === ";" || value === "=" || value === "}") return undefined;
+    }
+  }
+  return undefined;
 }
 
 function matchingParenthesis(masked: string, open: number): number | undefined {
