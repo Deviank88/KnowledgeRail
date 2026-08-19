@@ -98,13 +98,20 @@ try {
     "package.json",
     "server.json",
     "assets/knowledge-rail-logo.png",
+    "docs/guides/claude-code-hooks.md",
   ]) {
     if (!packedPaths.has(required)) throw new Error(`Packed artifact is missing ${required}.`);
   }
-  for (const forbidden of ["milestones/", "tests/", ".env", "wiki/", "docs/"]) {
+  for (const forbidden of ["milestones/", "tests/", ".env", "wiki/"]) {
     if ([...packedPaths].some((entry) => entry === forbidden || entry.startsWith(forbidden))) {
       throw new Error(`Packed artifact unexpectedly contains ${forbidden}.`);
     }
+  }
+  const unexpectedDocs = [...packedPaths].filter((entry) =>
+    entry.startsWith("docs/") && entry !== "docs/guides/claude-code-hooks.md"
+  );
+  if (unexpectedDocs.length > 0) {
+    throw new Error(`Packed artifact unexpectedly contains private docs: ${unexpectedDocs.join(", ")}.`);
   }
 
   await fs.writeFile(path.join(installDirectory, "package.json"), JSON.stringify({ private: true }, null, 2));
@@ -141,6 +148,10 @@ try {
   if (firstLine !== "#!/usr/bin/env node") throw new Error("Installed CLI lost its portable Node shebang.");
   const help = await run(process.execPath, [installedBin, "--help"], { cwd: projectDirectory });
   if (!help.stdout.includes("knowledge-rail desktop")) throw new Error("Installed --help is incomplete.");
+  const driftHelp = await run(process.execPath, [installedBin, "drift", "--help"], { cwd: projectDirectory });
+  if (!driftHelp.stdout.includes("knowledge-rail drift") || !driftHelp.stdout.includes("--no-ledger")) {
+    throw new Error("Installed drift subcommand help is incomplete.");
+  }
   const version = await run(process.execPath, [installedBin, "--version"], { cwd: projectDirectory });
   if (!/^\d+\.\d+\.\d+\s*$/.test(version.stdout)) throw new Error("Installed --version is invalid.");
   const installedShim = path.join(
@@ -242,6 +253,23 @@ try {
   if (initialized.isError) throw new Error("Installed desktop proxy rejected its text-carried workspace binding.");
   await fs.access(path.join(projectDirectory, "wiki", "SCHEMA.md"));
   await desktopClient.close();
+
+  const drift = await run(
+    process.execPath,
+    [installedBin, "drift", "--no-ledger"],
+    { cwd: projectDirectory, env: childEnvironment }
+  );
+  if (drift.stdout !== "" || drift.stderr !== "") {
+    throw new Error("Installed drift command was not silent for an all-fresh project.");
+  }
+  const scopedDrift = await run(
+    process.execPath,
+    [installedBin, "drift", "--no-ledger", "--path", path.join(projectDirectory, "package.json")],
+    { cwd: projectDirectory, env: childEnvironment }
+  );
+  if (scopedDrift.stdout !== "" || scopedDrift.stderr !== "") {
+    throw new Error("Installed path-scoped drift command was not hook-safe.");
+  }
 
   gatewayProcess.kill("SIGTERM");
   await new Promise((resolve) => gatewayProcess.once("exit", resolve));

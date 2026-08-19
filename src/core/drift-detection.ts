@@ -208,9 +208,11 @@ export async function readDriftLedger(wikiRoot: string): Promise<DriftLedger> {
   }
 }
 
-async function writeDriftLedger(wikiRoot: string, ledger: DriftLedger): Promise<void> {
+async function writeDriftLedger(wikiRoot: string, ledger: DriftLedger, signal?: AbortSignal): Promise<void> {
   validateLedger(ledger);
+  signal?.throwIfAborted();
   await assertDriftPathSafe(wikiRoot, true);
+  signal?.throwIfAborted();
   await atomicWriteText(driftLedgerFile(wikiRoot), `${JSON.stringify(ledger, null, 2)}\n`);
 }
 
@@ -259,16 +261,21 @@ export async function detectCodeDrift(params: {
   paths?: readonly string[];
   checkedAt?: string;
   topLimit?: number;
+  writeLedger?: boolean;
+  signal?: AbortSignal;
 }): Promise<{ summary: DriftSummary; entries: DriftLedgerEntry[] }> {
+  params.signal?.throwIfAborted();
   const checkedAt = params.checkedAt ?? new Date().toISOString();
   if (!validIsoTimestamp(checkedAt)) throw new Error("Drift checkedAt must be ISO-8601 compatible.");
   const prefixes = [...new Set((params.paths ?? []).map(normalizeRepositoryPath))].sort();
   const scope = prefixes.length > 0 ? "paths" as const : "all" as const;
   const repositoryRootReal = await fs.realpath(params.repositoryRoot);
+  params.signal?.throwIfAborted();
   if (!(await fs.stat(repositoryRootReal)).isDirectory()) {
     throw new Error("Drift repository root is not a directory.");
   }
   const store = await readEvidenceIrStore(params.wikiRoot);
+  params.signal?.throwIfAborted();
   const allAnchored = store.claims.filter((claim) => claim.codeAnchor !== undefined);
   const selected = allAnchored.filter((claim) =>
     scope === "all" || pathMatches(claim.codeAnchor!.path, prefixes)
@@ -277,6 +284,7 @@ export async function detectCodeDrift(params: {
   const fileCache = new Map<string, Promise<CurrentCodeRead>>();
   const entries: DriftLedgerEntry[] = [];
   for (const claim of selected) {
+    params.signal?.throwIfAborted();
     const anchor = claim.codeAnchor!;
     let content = fileCache.get(anchor.path);
     if (!content) {
@@ -284,6 +292,7 @@ export async function detectCodeDrift(params: {
       fileCache.set(anchor.path, content);
     }
     const current = await content;
+    params.signal?.throwIfAborted();
     const evaluation: DriftEvaluation = current.status === "unresolvable"
       ? { verdict: "anchor_unresolvable" }
       : evaluateCodeAnchor({
@@ -303,18 +312,28 @@ export async function detectCodeDrift(params: {
   }
   entries.sort((left, right) => left.claimId.localeCompare(right.claimId));
 
-  const file = driftLedgerFile(params.wikiRoot);
-  await withWikiFileLock(params.wikiRoot, file, async () => {
-    const previous = await readDriftLedger(params.wikiRoot);
-    const nextEntries = scope === "all"
-      ? entries
-      : [
-          ...previous.entries.filter((entry) => !pathMatches(entry.anchor.path, prefixes)),
-          ...entries,
-        ]
-          .sort((left, right) => left.claimId.localeCompare(right.claimId));
-    await writeDriftLedger(params.wikiRoot, { version: DRIFT_LEDGER_VERSION, checkedAt, entries: nextEntries });
-  });
+  params.signal?.throwIfAborted();
+  if (params.writeLedger !== false) {
+    const file = driftLedgerFile(params.wikiRoot);
+    await withWikiFileLock(params.wikiRoot, file, async () => {
+      params.signal?.throwIfAborted();
+      const previous = await readDriftLedger(params.wikiRoot);
+      params.signal?.throwIfAborted();
+      const nextEntries = scope === "all"
+        ? entries
+        : [
+            ...previous.entries.filter((entry) => !pathMatches(entry.anchor.path, prefixes)),
+            ...entries,
+          ]
+            .sort((left, right) => left.claimId.localeCompare(right.claimId));
+      await writeDriftLedger(
+        params.wikiRoot,
+        { version: DRIFT_LEDGER_VERSION, checkedAt, entries: nextEntries },
+        params.signal
+      );
+    });
+  }
+  params.signal?.throwIfAborted();
 
   const inboundRelations = new Map<string, number>();
   for (const claim of store.claims) {

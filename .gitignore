@@ -32,6 +32,8 @@ wiki/
 /docs/*
 !/docs/reference/
 !/docs/reference/tool-actions.md
+!/docs/guides/
+!/docs/guides/claude-code-hooks.md
 .docx-analysis/
 benchmarks/results/
 .puppeteer-cache/

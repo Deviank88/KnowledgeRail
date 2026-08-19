@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { performance } from "node:perf_hooks";
 import { test } from "node:test";
+import type { McpServer } from "@modelcontextprotocol/server";
 import { canonicalFixtureSha256 } from "../benchmarks/fixture-integrity.js";
 import { compactStructuredContext } from "../src/tools/context-tools.js";
 import { compileTaskContext } from "../src/context/task-context-compiler.js";
@@ -11,10 +13,12 @@ import { clearRuntimeWikiGraphs } from "../src/core/graph-runtime.js";
 import { invalidateWikiGraph } from "../src/core/graph-index.js";
 import {
   detectCodeDrift,
+  driftLedgerFile,
   evaluateCodeAnchor,
   normalizeRepositoryPath,
   readDriftLedger,
 } from "../src/core/drift-detection.js";
+import { getWikiRoot, setWikiRoot } from "../src/core/paths.js";
 import { resolveEvidenceClaims } from "../src/core/ingestion/evidence-linker.js";
 import {
   backfillEvidenceCodeAnchors,
@@ -28,6 +32,8 @@ import {
 import { applyEvidenceSynthesis } from "../src/core/ingestion/evidence-synthesis.js";
 import { sourceCompilePlan } from "../src/core/ingestion/source-compiler.js";
 import { clearRetrievalIndexes } from "../src/core/retrieval-index.js";
+import { runDriftCli } from "../src/runtime/drift-cli.js";
+import { registerAgentTools } from "../src/tools/agent-tools.js";
 
 test("drift fixture integrity is invariant to checkout newlines", () => {
   assert.equal(
@@ -175,6 +181,28 @@ async function cleanupFixture(fixture: DriftFixture): Promise<void> {
   clearRuntimeWikiGraphs();
   invalidateWikiGraph(fixture.wikiRoot);
   await fs.rm(fixture.root, { recursive: true, force: true });
+}
+
+type AgentResult = {
+  structuredContent?: Record<string, unknown>;
+};
+
+type AgentHandler = (
+  args: Record<string, unknown>,
+  context: Record<string, never>
+) => Promise<AgentResult>;
+
+function captureAdminHandler(): AgentHandler {
+  let admin: AgentHandler | undefined;
+  const server = {
+    registerTool(name: string, _config: unknown, handler: AgentHandler) {
+      if (name === "knowledge_admin") admin = handler;
+      return {};
+    },
+  } as unknown as McpServer;
+  registerAgentTools(server, "modern");
+  assert.ok(admin);
+  return admin;
 }
 
 test("code anchors detect substantive drift without formatting false positives", async () => {
@@ -347,6 +375,76 @@ test("path-scoped drift checks replace only their slice of the derived ledger", 
     });
     assert.equal((await readDriftLedger(fixture.wikiRoot)).entries.length, 2);
   } finally {
+    await cleanupFixture(fixture);
+  }
+});
+
+test("CLI no-ledger JSON and MCP drift produce identical per-claim verdicts", async () => {
+  const fixture = await createFixture();
+  const previousRoot = getWikiRoot();
+  try {
+    await fs.writeFile(fixture.servicePath, fixture.serviceContent.replace("return 3", "return 8"), "utf8");
+    let stdout = "";
+    let stderr = "";
+    const cliStarted = performance.now();
+    const cliExit = await runDriftCli({
+      root: fixture.root,
+      paths: [fixture.servicePath],
+      format: "json",
+      check: false,
+      writeLedger: false,
+      timeoutMs: 3_000,
+    }, {
+      stdout: { write(value) { stdout += value; } },
+      stderr: { write(value) { stderr += value; } },
+    });
+    const cliElapsedMs = performance.now() - cliStarted;
+    assert.equal(cliExit, 0);
+    assert.ok(cliElapsedMs < 300, `Path-scoped drift CLI took ${cliElapsedMs.toFixed(3)}ms.`);
+    assert.equal(stderr, "");
+    await assert.rejects(fs.access(driftLedgerFile(fixture.wikiRoot)));
+    const aborted = new AbortController();
+    aborted.abort();
+    await assert.rejects(detectCodeDrift({
+      repositoryRoot: fixture.root,
+      wikiRoot: fixture.wikiRoot,
+      signal: aborted.signal,
+    }), { name: "AbortError" });
+    await assert.rejects(fs.access(driftLedgerFile(fixture.wikiRoot)));
+
+    const cli = JSON.parse(stdout) as Awaited<ReturnType<typeof detectCodeDrift>>;
+    setWikiRoot(fixture.root);
+    const mcp = await captureAdminHandler()({
+      action: "drift",
+      scope: "paths",
+      paths: ["src/service.ts"],
+    }, {});
+    const mcpSummary = mcp.structuredContent?.summary as typeof cli.summary;
+    const ledger = await readDriftLedger(fixture.wikiRoot);
+    const projection = (entries: typeof cli.entries) => entries.map((item) => ({
+      claimId: item.claimId,
+      verdict: item.verdict,
+      reason: item.reason,
+      observedRangeHash: item.observedRangeHash,
+    }));
+    assert.deepEqual(projection(cli.entries), projection(ledger.entries));
+    assert.deepEqual({
+      scope: cli.summary.scope,
+      paths: cli.summary.paths,
+      checkedAnchors: cli.summary.checkedAnchors,
+      fresh: cli.summary.fresh,
+      driftSuspected: cli.summary.driftSuspected,
+      anchorUnresolvable: cli.summary.anchorUnresolvable,
+    }, {
+      scope: mcpSummary.scope,
+      paths: mcpSummary.paths,
+      checkedAnchors: mcpSummary.checkedAnchors,
+      fresh: mcpSummary.fresh,
+      driftSuspected: mcpSummary.driftSuspected,
+      anchorUnresolvable: mcpSummary.anchorUnresolvable,
+    });
+  } finally {
+    setWikiRoot(previousRoot);
     await cleanupFixture(fixture);
   }
 });
