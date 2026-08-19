@@ -6,8 +6,9 @@ import { withWikiFileLock } from "./lock-service.js";
 import { wikiMetaDir } from "./manifest-service.js";
 import { readFileSafe } from "./utils.js";
 import { codeAnchorHash } from "./code-evidence/code-anchor.js";
+import { defaultParserVersionForPath } from "./code-evidence/adapter-registry.js";
 import { readConfinedRepositoryFile } from "./code-evidence/confined-reader.js";
-import { TYPESCRIPT_ADAPTER_VERSION, type CodeAnchor } from "./code-evidence/types.js";
+import type { CodeAnchor } from "./code-evidence/types.js";
 
 export const DRIFT_LEDGER_VERSION = 1 as const;
 
@@ -143,7 +144,9 @@ export function evaluateCodeAnchor(params: {
   if (observedRangeHash !== params.anchor.rangeHash) {
     return { verdict: "drift_suspected", reason: "content_changed", observedRangeHash };
   }
-  const parserChanged = (params.parserVersion ?? TYPESCRIPT_ADAPTER_VERSION) !== params.anchor.parserVersion;
+  const parserChanged = (
+    params.parserVersion ?? defaultParserVersionForPath(params.anchor.path) ?? params.anchor.parserVersion
+  ) !== params.anchor.parserVersion;
   return {
     verdict: "fresh",
     ...(parserChanged ? { reason: "parser_version_changed" as const } : {}),
@@ -283,7 +286,11 @@ export async function detectCodeDrift(params: {
     const current = await content;
     const evaluation: DriftEvaluation = current.status === "unresolvable"
       ? { verdict: "anchor_unresolvable" }
-      : evaluateCodeAnchor({ anchor, content: current.status === "missing" ? null : current.content });
+      : evaluateCodeAnchor({
+          anchor,
+          content: current.status === "missing" ? null : current.content,
+          parserVersion: defaultParserVersionForPath(anchor.path) ?? anchor.parserVersion,
+        });
     entries.push({
       claimId: claim.id,
       pagePaths: pages.get(claim.id) ?? [],

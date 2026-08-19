@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://cdn.jsdelivr.net/npm/knowledge-rail@2.2.1/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
+  <img src="https://cdn.jsdelivr.net/npm/knowledge-rail@2.3.0/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
 </p>
 
 <h1 align="center">KnowledgeRail</h1>
@@ -8,7 +8,7 @@ KnowledgeRail is a local-first MCP server that turns project documentation and s
 
 It is designed for agents that need to understand, change, review, or document a codebase without loading the whole repository into the model context. Retrieval is bounded, provenance is preserved, missing evidence is reported explicitly, and difficult queries widen progressively instead of silently losing relevant information.
 
-> **Current status:** stable release `2.2.1`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
+> **Current status:** stable release `2.3.0`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
 
 ## What it provides
 
@@ -16,7 +16,7 @@ It is designed for agents that need to understand, change, review, or document a
 - Task-aware hybrid retrieval with lexical, graph, passage, and optional semantic evidence.
 - Progressive widening with explicit coverage signals and `GAP`/unknown reporting.
 - Complete source ingestion through bounded segments, a coverage ledger, and durable Evidence IR.
-- A deterministic TypeScript/JavaScript code index with symbol and reference lookup.
+- A deterministic multi-language code index with symbol, reference, route, test, configuration, and database lookup.
 - Incremental graph, retrieval, and semantic indexes stored beside the project wiki.
 - Contract-driven Markdown deliverables with terminal review, content hashes, and optional caller-authored diagrams.
 - Conservative migration of existing v1/v2/v3 wikis and pre-rebrand `.llm-wiki` metadata.
@@ -25,6 +25,24 @@ It is designed for agents that need to understand, change, review, or document a
 - A desktop-chat workspace catalog with opaque, expiring per-chat bindings.
 
 KnowledgeRail does not call an LLM itself. The connected MCP client chooses and calls the tools. OCR and embeddings are optional external providers configured by the user.
+
+### Deterministic code-evidence languages
+
+Code evidence is extracted locally without tree-sitter, native binaries, downloaded grammars, or runtime parser dependencies. Each file is owned by exactly one versioned adapter, so upgrading one language reparses only that language's files. Unsupported or deliberately skipped constructs remain visible through recorded raw-fallback demand rather than being assigned an unreliable anchor.
+
+| Adapter | Files | Indexed constructs |
+| --- | --- | --- |
+| TypeScript / JavaScript / LWC | `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.js-meta.xml` | Classes, functions, methods, tests, routes, imports, calls, LWC decorators and component targets. |
+| Java | `.java` | Classes, interfaces, enums, records, methods, Javadoc, JUnit markers, Spring routes, imports. |
+| Apex | `.cls`, `.trigger` | Classes, methods, tests, REST resources, trigger events, and static SOQL/SOSL object references. |
+| C# | `.cs` | Namespaces, types, methods, properties, XML docs, test attributes, ASP.NET controller and minimal-API routes; nested quoted strings inside interpolations are masked without losing following code. |
+| Go | `.go` | Functions, receiver methods, structs/interfaces, Go doc comments, tests, imports, and common router calls. |
+| Rust | `.rs` | Functions, types, traits, modules, `impl` methods, tests, imports, and `macro_rules!` names. |
+| PHP | `.php` | Namespaces, types, functions/methods, PHPUnit markers, Laravel/Symfony routes, configuration and database references; HTML outside PHP tags is inert. |
+| C | `.c` | Function definitions including pointer-return forms, doc comments, and includes. |
+| C++ | `.cpp`, `.cc`, `.cxx`, `.h`, `.hpp`, `.hh` | Functions, constructors, classes/structs, namespaces, qualified methods, doc comments, and includes. |
+
+The extractors are intentionally conservative. LWC HTML templates, Java anonymous classes, dynamic Apex query object names, Rust macro expansion, PHP `eval()`/string callables and Blade/Twig templates, K&R C definitions, macro-generated C/C++ declarations, and complex C++ operator/template metaprogramming are not guessed. Headers use the C++ superset adapter. Qualified `knowledge_code action="symbol"` lookups treat `.`, `#`, `::`, PHP namespace backslashes, and `->` as equivalent separators, while returned names retain the language-native form. The pinned golden corpus contains 25 source files, 849 source lines, and 102 hand-labeled symbols across eight brace-language adapters; the mixed-repository benchmark adds two LWC files for 27 files and 866 lines overall. Its perfect in-corpus score is a deterministic regression guarantee, not a claim of universal parser accuracy. `knowledge_admin action="status"` reports the extension histogram supplied with recorded grep fallbacks, allowing later language priorities to follow real repository demand.
 
 ## Requirements
 
@@ -39,7 +57,7 @@ KnowledgeRail ships no browser or document renderer. Mermaid source remains ordi
 Run this from any directory inside the project you opened in VS Code, Cursor, a terminal, or another context-aware coding client:
 
 ```bash
-npx -y knowledge-rail@2.2.1
+npx -y knowledge-rail@2.3.0
 ```
 
 No project path is needed in the persistent MCP configuration. KnowledgeRail discovers the opened project independently for each process, so project X and project Y can be used at the same time by different agent sessions.
@@ -73,7 +91,7 @@ Use the standard `stdio` server shape once. Do not hard-code one repository:
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.2.1"]
+      "args": ["-y", "knowledge-rail@2.3.0"]
     }
   }
 }
@@ -105,7 +123,7 @@ A desktop chat does not open a filesystem folder, so it cannot safely infer a pr
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.2.1", "desktop"]
+      "args": ["-y", "knowledge-rail@2.3.0", "desktop"]
     }
   }
 }
@@ -118,10 +136,10 @@ In a new chat, ask KnowledgeRail to list workspaces, choose one entry, and confi
 Projects opened successfully by an IDE/terminal are added to the local catalog automatically without changing their clean eight-tool workflow. Operators can also manage catalog metadata locally:
 
 ```bash
-npx -y knowledge-rail@2.2.1 workspace list
-npx -y knowledge-rail@2.2.1 workspace register
-npx -y knowledge-rail@2.2.1 workspace register /absolute/project/path
-npx -y knowledge-rail@2.2.1 workspace unregister ws_example
+npx -y knowledge-rail@2.3.0 workspace list
+npx -y knowledge-rail@2.3.0 workspace register
+npx -y knowledge-rail@2.3.0 workspace register /absolute/project/path
+npx -y knowledge-rail@2.3.0 workspace unregister ws_example
 ```
 
 Registration never copies, uploads, scans the disk, or deletes project files. `workspace register` without a path discovers only upward from cwd.
@@ -131,7 +149,7 @@ Registration never copies, uploads, scans the disk, or deletes project files. `w
 Start one gateway for many concurrent local clients and workspaces:
 
 ```bash
-npx -y knowledge-rail@2.2.1 --transport http
+npx -y knowledge-rail@2.3.0 --transport http
 ```
 
 The default endpoint is `http://127.0.0.1:3333/mcp`; liveness only is available at `/healthz`. MCP requests require the random credential stored in the OS-protected per-user KnowledgeRail state directory. The desktop adapter reads it automatically, so it never belongs in project configuration or a repository.
@@ -168,7 +186,7 @@ KnowledgeRail exposes eight stable tools. Agents choose a domain directly and us
 | `knowledge_code` | Maintain and query deterministic code evidence. |
 | `knowledge_document_context` | Plan any document profile and compile section-specific evidence. |
 | `knowledge_document` | Write and review Markdown deliverables. |
-| `knowledge_admin` | Initialize, lint, detect code-evidence drift, and migrate KnowledgeRail data. |
+| `knowledge_admin` | Initialize, report status and fallback demand, lint, detect code-evidence drift, and migrate KnowledgeRail data. |
 
 Every successful operation returns a machine-readable `state` and either one `nextAction` or `null`. `nextAction` identifies the next tool, action, required arguments, and safe suggested arguments. Optional `guidance` and `resultText` complete the shared output envelope. Clients that only render text also receive concise `Next:` and `Guidance:` lines when applicable.
 

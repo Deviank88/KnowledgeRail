@@ -18,13 +18,13 @@ Every successful domain operation returns `structuredContent.state` and `structu
 
 ## `knowledge_admin`
 
-Initialize, lint, check drift, or migrate.
+Initialize, status, lint, drift, or migrate.
 
-Actions/modes: `init`, `lint`, `drift`, `migrate`.
+Actions/modes: `init`, `status`, `lint`, `drift`, `migrate`.
 
 | Parameter | Type / values | Required | Default | Description |
 |---|---|---:|---|---|
-| `action` | `init` &#124; `lint` &#124; `drift` &#124; `migrate` | yes | — | init=bootstrap; lint=broken links/orphans; drift=stale code; migrate=upgrade stored knowledge. |
+| `action` | `init` &#124; `status` &#124; `lint` &#124; `drift` &#124; `migrate` | yes | — | init=bootstrap; status=code demand; lint=broken links/orphans; drift=code anchors; migrate=data. |
 | `force` | boolean | no | `false` | — |
 | `include_orphans` | boolean | no | `true` | — |
 | `include_missing` | boolean | no | `true` | — |
@@ -39,13 +39,13 @@ Actions/modes: `init`, `lint`, `drift`, `migrate`.
 
 ## `knowledge_code`
 
-Code index, symbols, callers and raw fallback.
+Code index, symbols, callers, and fallback.
 
 Actions/modes: `rebuild`, `update`, `remove`, `search`, `symbol`, `references`, `read`, `status`, `record_fallback`.
 
 | Parameter | Type / values | Required | Default | Description |
 |---|---|---:|---|---|
-| `action` | `rebuild` &#124; `update` &#124; `remove` &#124; `search` &#124; `symbol` &#124; `references` &#124; `read` &#124; `status` &#124; `record_fallback` | yes | — | status=index; rebuild=recreate; update=refresh; remove=drop; search=find; symbol=definition; references=callers of symbol; read=open URI; record_fallback=raw lookup. |
+| `action` | `rebuild` &#124; `update` &#124; `remove` &#124; `search` &#124; `symbol` &#124; `references` &#124; `read` &#124; `status` &#124; `record_fallback` | yes | — | status=index/demand; rebuild=recreate; update=refresh path; remove=drop path; search=find; symbol=definition; references=callers of symbol; read=URI; record_fallback=raw lookup telemetry. |
 | `path` | string | no | — | — |
 | `query` | string | no | — | — |
 | `symbol` | string | no | — | — |
@@ -57,11 +57,12 @@ Actions/modes: `rebuild`, `update`, `remove`, `search`, `symbol`, `references`, 
 | `max_chars` | integer | no | `6000` | — |
 | `fallback_reason` | string | no | — | — |
 | `fallback_result_count` | integer | no | — | — |
+| `fallback_result_paths` | array<string> | no | — | Hit paths; only extension counts persist. |
 | `recovered_evidence` | array<object> | no | — | — |
 
 ## `knowledge_context`
 
-Project evidence and gaps; page list/search; relation graph.
+Evidence/gaps, pages, search, and graph.
 
 Task responses report `retrieval.coverageMode` (`lexical` or `semantic`) and `coverageWarnings`. Coverage uses the full fused candidate set while returned evidence remains bounded; relevant evidence excluded from display is `budget_limited`, not `missing_evidence`. Configured embedding provider failures degrade to lexical mode without failing the tool call.
 
@@ -69,7 +70,7 @@ Actions/modes: `task`, `list`, `search`, `graph`.
 
 | Parameter | Type / values | Required | Default | Description |
 |---|---|---:|---|---|
-| `mode` | `task` &#124; `list` &#124; `search` &#124; `graph` | no | `"task"` | task=context/gaps; list=pages; search=passages; graph=relations/dependencies. |
+| `mode` | `task` &#124; `list` &#124; `search` &#124; `graph` | no | `"task"` | task=evidence/gaps; list=pages; search=passages; graph=relations/dependencies. |
 | `intent` | `understand` &#124; `implement` &#124; `modify` &#124; `debug` &#124; `review` &#124; `document` | no | `"understand"` | — |
 | `objective` | string | no | — | — |
 | `query` | string | no | — | — |
@@ -86,13 +87,13 @@ Actions/modes: `task`, `list`, `search`, `graph`.
 
 ## `knowledge_document`
 
-Write or review an evidence-backed Markdown deliverable.
+Write or review an evidence-backed document.
 
 Actions/modes: `write`, `review`.
 
 | Parameter | Type / values | Required | Default | Description |
 |---|---|---:|---|---|
-| `action` | `write` &#124; `review` | yes | — | write=save Markdown; review=terminal delivery-readiness check. |
+| `action` | `write` &#124; `review` | yes | — | write=save Markdown; review=delivery check. |
 | `filename` | string | yes | — | — |
 | `document_type` | string | yes | — | — |
 | `required_sections` | array<string> | no | — | — |
@@ -107,7 +108,7 @@ Actions/modes: `write`, `review`.
 
 ## `knowledge_document_context`
 
-Plan any document profile or gather section evidence.
+Plan documents or gather section evidence.
 
 Actions/modes: `plan`, `section`.
 
@@ -137,13 +138,13 @@ Actions/modes: `plan`, `section`.
 
 ## `knowledge_files`
 
-Controlled source files: list, read or normalize to Markdown.
+Source files: list, read, or normalize.
 
 Actions/modes: `list`, `read`, `normalize`.
 
 | Parameter | Type / values | Required | Default | Description |
 |---|---|---:|---|---|
-| `action` | `list` &#124; `read` &#124; `normalize` | no | `"list"` | list=sources; read=open; normalize=convert to Markdown. |
+| `action` | `list` &#124; `read` &#124; `normalize` | no | `"list"` | list=sources; read=open; normalize=Markdown. |
 | `category` | `client` &#124; `transcripts` &#124; `reports` &#124; `changelogs` &#124; `normalized` &#124; `deliverables` &#124; `assets` | no | — | — |
 | `pattern` | string | no | `"**/*"` | — |
 | `path` | string | no | — | — |
@@ -152,31 +153,31 @@ Actions/modes: `list`, `read`, `normalize`.
 
 ## `knowledge_ingest`
 
-Source ingestion: claims, coverage, recovery and report drafts.
+Ingest sources, claims, coverage, and recovery.
 
 Actions/modes: `start`, `next`, `apply_claims`, `record_segment`, `source_status`, `evidence_status`, `finalize`, `report`, `record_recovery`, `resolve_recovery`.
 
 | Parameter | Type / values | Required | Default | Description |
 |---|---|---:|---|---|
-| `action` | `start` &#124; `next` &#124; `apply_claims` &#124; `record_segment` &#124; `source_status` &#124; `evidence_status` &#124; `finalize` &#124; `report` &#124; `record_recovery` &#124; `resolve_recovery` | yes | — | start=begin; next=segment; apply_claims=integrate; record_segment=classify; source_status=coverage; evidence_status=debt; finalize=close; report=drafts; record_recovery=track; resolve_recovery=resolve. |
-| `normalized_filename` | string | no | — | docs/normalized file. |
-| `max_chars` | integer | no | `12000` | Response limit. |
-| `segment_max_chars` | integer | no | — | Start segment size. |
-| `segment_id` | string | no | — | ID from next. |
-| `claims` | array<object> | no | — | Claim fields; optional target/relations. |
-| `segment_status` | `irrelevant` &#124; `unresolved` &#124; `legacy_unverified` | no | — | record_segment class. |
+| `action` | `start` &#124; `next` &#124; `apply_claims` &#124; `record_segment` &#124; `source_status` &#124; `evidence_status` &#124; `finalize` &#124; `report` &#124; `record_recovery` &#124; `resolve_recovery` | yes | — | start=begin; next=segment; apply_claims=integrate claims; record_segment=classify; source_status=coverage; evidence_status=debt; finalize=close; report=drafts; record_recovery=track; resolve_recovery=resolve. |
+| `normalized_filename` | string | no | — | Normalized path. |
+| `max_chars` | integer | no | `12000` | Output limit. |
+| `segment_max_chars` | integer | no | — | Segment size. |
+| `segment_id` | string | no | — | Next ID. |
+| `claims` | array<object> | no | — | Claims; target/relations optional. |
+| `segment_status` | `irrelevant` &#124; `unresolved` &#124; `legacy_unverified` | no | — | Segment class. |
 | `evidence_refs` | array<string> | no | — | — |
 | `page_refs` | array<string> | no | — | — |
-| `reason` | string | no | — | Classification reason. |
-| `report_filename` | string | no | — | docs/reports file. |
-| `claim_ids` | array<string> | no | — | Claim IDs filter. |
-| `include_resolved` | boolean | no | `false` | Include resolved. |
+| `reason` | string | no | — | Reason. |
+| `report_filename` | string | no | — | Report path. |
+| `claim_ids` | array<string> | no | — | Claim filter. |
+| `include_resolved` | boolean | no | `false` | With resolved. |
 | `total_evidence_used` | integer | no | — | — |
-| `recovery_events` | array<object> | no | — | Recovery fields; optional pages. |
-| `recovery_event_id` | string | no | — | Recovery event ID. |
-| `recovery_resolution` | `page_updated` &#124; `new_page` &#124; `ledger_updated` &#124; `intentionally_ignored` | no | — | Recovery disposition. |
-| `recovery_page_refs` | array<string> | no | — | Representing pages. |
-| `recovery_reason` | string | no | — | Resolution reason. |
+| `recovery_events` | array<object> | no | — | Recovery events; pages optional. |
+| `recovery_event_id` | string | no | — | Recovery ID. |
+| `recovery_resolution` | `page_updated` &#124; `new_page` &#124; `ledger_updated` &#124; `intentionally_ignored` | no | — | Resolution. |
+| `recovery_page_refs` | array<string> | no | — | Page refs. |
+| `recovery_reason` | string | no | — | Reason. |
 
 ## `knowledge_page`
 

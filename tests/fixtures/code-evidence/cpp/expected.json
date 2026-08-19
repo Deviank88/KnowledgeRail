@@ -1,0 +1,16 @@
+{
+  "language": "cpp",
+  "knownGaps": ["macro-generated declarations and complex operator overloads are intentionally skipped"],
+  "symbols": [
+    { "path": "cpp/calculator.cpp", "kind": "method", "symbol": "add", "qualifiedName": "math::Calculator::add", "startLine": 5, "endLine": 8, "isTest": false, "docComment": true },
+    { "path": "cpp/calculator.h", "kind": "class", "symbol": "Calculator", "qualifiedName": "math::Calculator", "startLine": 5, "endLine": 11, "isTest": false, "docComment": true },
+    { "path": "cpp/order_service.hpp", "kind": "class", "symbol": "Reservation", "qualifiedName": "commerce::Reservation", "startLine": 10, "endLine": 13, "isTest": false, "docComment": false },
+    { "path": "cpp/order_service.hpp", "kind": "class", "symbol": "OrderService", "qualifiedName": "commerce::OrderService", "startLine": 16, "endLine": 42, "isTest": false, "docComment": true },
+    { "path": "cpp/order_service.hpp", "kind": "method", "symbol": "available", "qualifiedName": "commerce::OrderService::available", "startLine": 21, "endLine": 27, "isTest": false, "docComment": true },
+    { "path": "cpp/order_service.hpp", "kind": "method", "symbol": "valid_quantity", "qualifiedName": "commerce::OrderService::valid_quantity", "startLine": 37, "endLine": 39, "isTest": false, "docComment": false },
+    { "path": "cpp/order_service.cpp", "kind": "method", "symbol": "OrderService", "qualifiedName": "commerce::OrderService::OrderService", "startLine": 8, "endLine": 10, "isTest": false, "docComment": false },
+    { "path": "cpp/order_service.cpp", "kind": "method", "symbol": "reserve", "qualifiedName": "commerce::OrderService::reserve", "startLine": 13, "endLine": 28, "isTest": false, "docComment": true },
+    { "path": "cpp/order_service.cpp", "kind": "method", "symbol": "release", "qualifiedName": "commerce::OrderService::release", "startLine": 30, "endLine": 35, "isTest": false, "docComment": false },
+    { "path": "cpp/order_service.cpp", "kind": "function", "symbol": "normalize_quantity", "qualifiedName": "commerce::normalize_quantity", "startLine": 37, "endLine": 40, "isTest": false, "docComment": false }
+  ]
+}

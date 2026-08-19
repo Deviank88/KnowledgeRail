@@ -1,0 +1,24 @@
+{
+  "language": "rust",
+  "knownGaps": ["macro expansion is intentionally out of scope"],
+  "symbols": [
+    { "path": "rust/service.rs", "kind": "class", "symbol": "Service", "qualifiedName": "Service", "startLine": 7, "endLine": 8, "isTest": false, "docComment": true },
+    { "path": "rust/service.rs", "kind": "method", "symbol": "handle", "qualifiedName": "Service::handle", "startLine": 12, "endLine": 14, "isTest": false, "docComment": true },
+    { "path": "rust/service.rs", "kind": "test", "symbol": "handles_order", "qualifiedName": "handles_order", "startLine": 18, "endLine": 20, "isTest": true, "docComment": false },
+    { "path": "rust/service.rs", "kind": "function", "symbol": "audited", "qualifiedName": "audited", "startLine": 22, "endLine": 26, "isTest": false, "docComment": false },
+    { "path": "rust/repository.rs", "kind": "class", "symbol": "StoredOrder", "qualifiedName": "StoredOrder", "startLine": 5, "endLine": 9, "isTest": false, "docComment": true },
+    { "path": "rust/repository.rs", "kind": "class", "symbol": "OrderStatus", "qualifiedName": "OrderStatus", "startLine": 12, "endLine": 16, "isTest": false, "docComment": false },
+    { "path": "rust/repository.rs", "kind": "class", "symbol": "OrderStore", "qualifiedName": "OrderStore", "startLine": 18, "endLine": 21, "isTest": false, "docComment": false },
+    { "path": "rust/repository.rs", "kind": "class", "symbol": "StoreError", "qualifiedName": "StoreError", "startLine": 24, "endLine": 27, "isTest": false, "docComment": false },
+    { "path": "rust/repository.rs", "kind": "class", "symbol": "InMemoryOrderStore", "qualifiedName": "InMemoryOrderStore", "startLine": 30, "endLine": 32, "isTest": false, "docComment": true },
+    { "path": "rust/repository.rs", "kind": "method", "symbol": "new", "qualifiedName": "InMemoryOrderStore::new", "startLine": 35, "endLine": 39, "isTest": false, "docComment": false },
+    { "path": "rust/repository.rs", "kind": "method", "symbol": "count", "qualifiedName": "InMemoryOrderStore::count", "startLine": 41, "endLine": 44, "isTest": false, "docComment": false },
+    { "path": "rust/repository.rs", "kind": "method", "symbol": "validate", "qualifiedName": "InMemoryOrderStore::validate", "startLine": 46, "endLine": 51, "isTest": false, "docComment": false },
+    { "path": "rust/repository.rs", "kind": "method", "symbol": "find", "qualifiedName": "InMemoryOrderStore::find", "startLine": 55, "endLine": 58, "isTest": false, "docComment": false },
+    { "path": "rust/repository.rs", "kind": "method", "symbol": "save", "qualifiedName": "InMemoryOrderStore::save", "startLine": 60, "endLine": 68, "isTest": false, "docComment": false },
+    { "path": "rust/repository.rs", "kind": "function", "symbol": "rebuild_projection", "qualifiedName": "rebuild_projection", "startLine": 71, "endLine": 79, "isTest": false, "docComment": false },
+    { "path": "rust/repository.rs", "kind": "function", "symbol": "repository_metric", "qualifiedName": "repository_metric", "startLine": 81, "endLine": 85, "isTest": false, "docComment": false },
+    { "path": "rust/repository.rs", "kind": "test", "symbol": "tests", "qualifiedName": "test:tests", "startLine": 88, "endLine": 96, "isTest": true, "docComment": false },
+    { "path": "rust/repository.rs", "kind": "test", "symbol": "saves_one_order", "qualifiedName": "saves_one_order", "startLine": 92, "endLine": 95, "isTest": true, "docComment": false }
+  ]
+}

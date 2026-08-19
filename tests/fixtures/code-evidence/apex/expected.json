@@ -1,0 +1,18 @@
+{
+  "language": "apex",
+  "knownGaps": ["dynamic SOQL object names are intentionally skipped"],
+  "symbols": [
+    { "path": "apex/AccountAudit.trigger", "kind": "route", "symbol": "trigger AccountAudit on Account", "qualifiedName": "trigger:AccountAudit:Account", "startLine": 1, "endLine": 3, "isTest": false, "docComment": false },
+    { "path": "apex/AccountService.cls", "kind": "class", "symbol": "AccountService", "qualifiedName": "AccountService", "startLine": 2, "endLine": 9, "isTest": false, "docComment": false },
+    { "path": "apex/AccountService.cls", "kind": "method", "symbol": "loadAccount", "qualifiedName": "AccountService.loadAccount", "startLine": 5, "endLine": 8, "isTest": false, "docComment": true },
+    { "path": "apex/AccountService.cls", "kind": "route", "symbol": "GET /accounts/*", "qualifiedName": "route:GET /accounts/*:AccountService.loadAccount", "startLine": 5, "endLine": 8, "isTest": false, "docComment": true },
+    { "path": "apex/AccountServiceTest.cls", "kind": "class", "symbol": "AccountServiceTest", "qualifiedName": "AccountServiceTest", "startLine": 2, "endLine": 7, "isTest": true, "docComment": false },
+    { "path": "apex/AccountServiceTest.cls", "kind": "method", "symbol": "loadsAccount", "qualifiedName": "AccountServiceTest.loadsAccount", "startLine": 4, "endLine": 6, "isTest": true, "docComment": false },
+    { "path": "apex/OrderFulfillmentService.cls", "kind": "class", "symbol": "OrderFulfillmentService", "qualifiedName": "OrderFulfillmentService", "startLine": 1, "endLine": 66, "isTest": false, "docComment": false },
+    { "path": "apex/OrderFulfillmentService.cls", "kind": "class", "symbol": "FulfillmentException", "qualifiedName": "OrderFulfillmentService.FulfillmentException", "startLine": 2, "endLine": 3, "isTest": false, "docComment": false },
+    { "path": "apex/OrderFulfillmentService.cls", "kind": "method", "symbol": "pendingFor", "qualifiedName": "OrderFulfillmentService.pendingFor", "startLine": 6, "endLine": 19, "isTest": false, "docComment": true },
+    { "path": "apex/OrderFulfillmentService.cls", "kind": "method", "symbol": "fulfill", "qualifiedName": "OrderFulfillmentService.fulfill", "startLine": 22, "endLine": 45, "isTest": false, "docComment": true },
+    { "path": "apex/OrderFulfillmentService.cls", "kind": "method", "symbol": "accountsFor", "qualifiedName": "OrderFulfillmentService.accountsFor", "startLine": 47, "endLine": 57, "isTest": false, "docComment": false },
+    { "path": "apex/OrderFulfillmentService.cls", "kind": "method", "symbol": "countArchived", "qualifiedName": "OrderFulfillmentService.countArchived", "startLine": 59, "endLine": 65, "isTest": false, "docComment": false }
+  ]
+}

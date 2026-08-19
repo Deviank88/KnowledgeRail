@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-08-19
+
+### Added
+
+- Added deterministic, dependency-free code-evidence adapters for Java, Apex, C#, Go, Rust, PHP, C, and C++, plus LWC decorator and metadata-target awareness in the JavaScript adapter.
+- Added a versioned adapter registry with mutually exclusive extension claims, snapshot v2 per-adapter rosters, and selective re-indexing when only one language parser changes.
+- Added per-extension grep-fallback demand telemetry surfaced by `knowledge_code action="status"` and `knowledge_admin action="status"` without persisting fallback result paths.
+- Added a real-world-shaped, hand-labeled corpus of 25 files, 849 source lines, and 102 symbols, plus a 27-file mixed LWC benchmark, a pinned extraction gate requiring at least 0.95 precision and 0.90 recall, adversarial masking checks, and explicit corpus-size guards.
+
+### Changed
+
+- Drift detection now resolves the expected parser version from each anchor path; its pinned gate covers unchanged, formatting-only, substantive-change, and parser-upgrade cases for every supported adapter.
+- PHP extraction masks HTML outside `<?php`/`<?=` regions plus heredoc/nowdoc bodies, and recognizes namespaces, types, functions, PHPUnit tests, common Laravel/Symfony routes, configuration keys, and database references.
+- C/C++ extraction is deliberately conservative: `.h` files use the C++ superset adapter, while ambiguous macro-generated, K&R, complex template, and operator constructs remain unindexed instead of receiving unreliable ranges.
+- C/C++ function extraction now keeps access labels out of method ranges, recognizes pointer-return functions and constructors, and qualifies namespace-level C++ functions without invalidating other language adapters.
+
+### Fixed
+
+- Normalized `.`, `#`, `::`, PHP namespace backslashes, and `->` only while matching qualified `symbol` queries, so agents can use a familiar separator across languages without changing persisted language-native names.
+- Made C/C++ signature matching non-ambiguous under adversarial repeated tokens and canonicalized golden-corpus and drift-fixture integrity metrics across Git checkouts without altering indexed source bytes.
+- Code-evidence snapshot v1 is treated as disposable derived state and rebuilt once into snapshot v2; unchanged files remain reusable on later adapter-specific upgrades.
+
 ## [2.2.1] - 2026-08-19
 
 ### Fixed
@@ -152,7 +174,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Initial local-first MCP server with persistent evidence-backed knowledge, bounded retrieval, document workflows, and eight public `knowledge_*` tools.
 - Multi-workspace loopback HTTP gateway, opaque per-chat bindings, desktop adapter, and portable npm/npx distribution.
 
-[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.2.1...HEAD
+[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.2.1...v2.3.0
 [2.2.1]: https://github.com/Deviank88/KnowledgeRail/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.0.5...v2.1.0

@@ -102,6 +102,23 @@ test("tool results provide one machine-readable next action without a menu round
       requiredArguments: ["mode", "objective"],
       suggestedArguments: { mode: "task" },
     });
+    const fallback = await tools.get("knowledge_code")!.handler({
+      action: "record_fallback",
+      query: "legacy PHP handler",
+      fallback_reason: "unsupported construct required raw lookup",
+      fallback_result_count: 2,
+      fallback_result_paths: ["legacy/handler.php", "templates/page.twig"],
+    }, emptyContext);
+    assert.equal(fallback.isError, undefined);
+    const status = await tools.get("knowledge_admin")!.handler({ action: "status" }, emptyContext);
+    assert.equal(status.structuredContent?.state, "code_status_complete");
+    assert.deepEqual((status.structuredContent?.status as { fallbackDemand?: unknown })?.fallbackDemand, {
+      totalEvents: 1,
+      totalResults: 2,
+      categorizedResults: 2,
+      uncategorizedResults: 0,
+      byExtension: { ".php": 1, ".twig": 1 },
+    });
     const drift = await tools.get("knowledge_admin")!.handler({ action: "drift" }, emptyContext);
     assert.equal(drift.structuredContent?.state, "drift_complete");
     assert.equal(drift.structuredContent?.nextAction, null);

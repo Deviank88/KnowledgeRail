@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
+import { canonicalFixtureSha256 } from "../benchmarks/fixture-integrity.js";
 import { compactStructuredContext } from "../src/tools/context-tools.js";
 import { compileTaskContext } from "../src/context/task-context-compiler.js";
 import { codeResourceUri, PersistentCodeEvidenceIndex } from "../src/core/code-evidence/index.js";
@@ -27,6 +28,13 @@ import {
 import { applyEvidenceSynthesis } from "../src/core/ingestion/evidence-synthesis.js";
 import { sourceCompilePlan } from "../src/core/ingestion/source-compiler.js";
 import { clearRetrievalIndexes } from "../src/core/retrieval-index.js";
+
+test("drift fixture integrity is invariant to checkout newlines", () => {
+  assert.equal(
+    canonicalFixtureSha256("{\n  \"version\": 2\n}\n"),
+    canonicalFixtureSha256("{\r\n  \"version\": 2\r\n}\r\n")
+  );
+});
 
 interface DriftFixture {
   root: string;
@@ -299,7 +307,7 @@ test("code anchors detect substantive drift without formatting false positives",
     const parserOnly = evaluateCodeAnchor({
       anchor: fixture.anchor,
       content: fixture.serviceContent,
-      parserVersion: "typescript-javascript-deterministic-v2",
+      parserVersion: "typescript-javascript-deterministic-v3",
     });
     assert.deepEqual(parserOnly, {
       verdict: "fresh",

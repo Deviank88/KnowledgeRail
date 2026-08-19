@@ -2,9 +2,10 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { safeResolveWithin } from "../paths.js";
+import { defaultParserVersionForPath } from "./adapter-registry.js";
 import { readCodeEvidenceSnapshot } from "./index.js";
 import { parseCodeResourceUri } from "./resource-uri.js";
-import { TYPESCRIPT_ADAPTER_VERSION, type CodeResourceRead } from "./types.js";
+import type { CodeResourceRead } from "./types.js";
 
 const DEFAULT_MAX_CHARACTERS = 6_000;
 const MAX_CHARACTERS = 50_000;
@@ -45,15 +46,16 @@ export async function readCodeResource(params: {
   if (relativeReal === "" || relativeReal.startsWith("..") || nodePath.isAbsolute(relativeReal)) {
     throw new Error(`Code resource resolves outside the repository root: ${ref.path}`);
   }
-  const snapshot = await readCodeEvidenceSnapshot(params.wikiRoot, TYPESCRIPT_ADAPTER_VERSION);
-  if (snapshot.parserVersion !== TYPESCRIPT_ADAPTER_VERSION) {
-    throw new Error("Code evidence parser version changed; rebuild the index before reading resources.");
-  }
+  const snapshot = await readCodeEvidenceSnapshot(params.wikiRoot);
   const file = snapshot.files.find((record) => record.path === ref.path);
   const fragment = snapshot.fragments.find((candidate) =>
     candidate.id === ref.fragmentId && candidate.path === ref.path
   );
   if (!file || !fragment) throw new Error(`Code evidence symbol no longer exists: ${params.resourceUri}`);
+  const currentParserVersion = defaultParserVersionForPath(ref.path);
+  if (currentParserVersion && file.parserVersion !== currentParserVersion) {
+    throw new Error(`Code evidence parser changed for ${ref.path}; rebuild the index before reading.`);
+  }
   const stat = await fs.stat(targetReal);
   if (!stat.isFile()) throw new Error(`Code resource is not a regular file: ${ref.path}`);
   const content = await fs.readFile(targetReal, "utf8");

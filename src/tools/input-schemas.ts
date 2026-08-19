@@ -77,7 +77,7 @@ export const RecoveredCodeEvidenceInputSchema = z.object({
 
 export const CodeEvidenceInputSchema = z.object({
   action: CodeActionSchema.describe(
-    "status=index; rebuild=recreate; update=refresh; remove=drop; search=find; symbol=definition; references=callers of symbol; read=open URI; record_fallback=raw lookup."
+    "status=index/demand; rebuild=recreate; update=refresh path; remove=drop path; search=find; symbol=definition; references=callers of symbol; read=URI; record_fallback=raw lookup telemetry."
   ),
   path: z.string().min(1).optional(),
   query: z.string().min(1).max(4_096).optional(),
@@ -91,6 +91,8 @@ export const CodeEvidenceInputSchema = z.object({
   max_chars: z.number().int().min(1).max(50_000).default(6_000),
   fallback_reason: z.string().min(1).max(1_024).optional(),
   fallback_result_count: z.number().int().nonnegative().optional(),
+  fallback_result_paths: z.array(z.string().min(1).max(4_096)).max(1_000).optional()
+    .describe("Hit paths; only extension counts persist."),
   recovered_evidence: z.array(RecoveredCodeEvidenceInputSchema).max(100).optional(),
 }).superRefine((value, context) => {
   const requiredByAction = {

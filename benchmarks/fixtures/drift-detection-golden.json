@@ -1,40 +1,98 @@
 {
-  "version": 1,
+  "version": 2,
+  "languageCases": [
+    {
+      "id": "typescript",
+      "path": "src/service.ts",
+      "capturedContent": "export function limit(): number {\n  return 3;\n}\n",
+      "changedContent": "export function limit(): number {\n  return 4;\n}\n",
+      "startLine": 1,
+      "endLine": 3,
+      "parserVersion": "typescript-javascript-deterministic-v2",
+      "upgradedParserVersion": "typescript-javascript-deterministic-v3"
+    },
+    {
+      "id": "java",
+      "path": "src/Service.java",
+      "capturedContent": "class Service {\n  int limit() { return 3; }\n}\n",
+      "changedContent": "class Service {\n  int limit() { return 4; }\n}\n",
+      "startLine": 1,
+      "endLine": 3,
+      "parserVersion": "java-deterministic-v1",
+      "upgradedParserVersion": "java-deterministic-v2"
+    },
+    {
+      "id": "apex",
+      "path": "force/Service.cls",
+      "capturedContent": "public class Service {\n  public Integer limit() { return 3; }\n}\n",
+      "changedContent": "public class Service {\n  public Integer limit() { return 4; }\n}\n",
+      "startLine": 1,
+      "endLine": 3,
+      "parserVersion": "apex-deterministic-v1",
+      "upgradedParserVersion": "apex-deterministic-v2"
+    },
+    {
+      "id": "csharp",
+      "path": "src/Service.cs",
+      "capturedContent": "class Service {\n  int Limit() { return 3; }\n}\n",
+      "changedContent": "class Service {\n  int Limit() { return 4; }\n}\n",
+      "startLine": 1,
+      "endLine": 3,
+      "parserVersion": "csharp-deterministic-v1",
+      "upgradedParserVersion": "csharp-deterministic-v2"
+    },
+    {
+      "id": "go",
+      "path": "src/service.go",
+      "capturedContent": "func limit() int {\n  return 3\n}\n",
+      "changedContent": "func limit() int {\n  return 4\n}\n",
+      "startLine": 1,
+      "endLine": 3,
+      "parserVersion": "go-deterministic-v1",
+      "upgradedParserVersion": "go-deterministic-v2"
+    },
+    {
+      "id": "rust",
+      "path": "src/service.rs",
+      "capturedContent": "fn limit() -> i32 {\n  3\n}\n",
+      "changedContent": "fn limit() -> i32 {\n  4\n}\n",
+      "startLine": 1,
+      "endLine": 3,
+      "parserVersion": "rust-deterministic-v1",
+      "upgradedParserVersion": "rust-deterministic-v2"
+    },
+    {
+      "id": "php",
+      "path": "src/Service.php",
+      "capturedContent": "<?php\nfunction limit(): int {\n  return 3;\n}\n",
+      "changedContent": "<?php\nfunction limit(): int {\n  return 4;\n}\n",
+      "startLine": 2,
+      "endLine": 4,
+      "parserVersion": "php-deterministic-v1",
+      "upgradedParserVersion": "php-deterministic-v2"
+    },
+    {
+      "id": "c",
+      "path": "src/service.c",
+      "capturedContent": "int limit(void) {\n  return 3;\n}\n",
+      "changedContent": "int limit(void) {\n  return 4;\n}\n",
+      "startLine": 1,
+      "endLine": 3,
+      "parserVersion": "c-deterministic-v2",
+      "upgradedParserVersion": "c-deterministic-v3"
+    },
+    {
+      "id": "cpp",
+      "path": "src/service.cpp",
+      "capturedContent": "int Service::limit() {\n  return 3;\n}\n",
+      "changedContent": "int Service::limit() {\n  return 4;\n}\n",
+      "startLine": 1,
+      "endLine": 3,
+      "parserVersion": "cpp-deterministic-v2",
+      "upgradedParserVersion": "cpp-deterministic-v3"
+    }
+  ],
   "scenarios": [
-    {
-      "id": "unchanged",
-      "path": "src/unchanged.ts",
-      "capturedContent": "export function limit(): number {\n  return 3;\n}\n",
-      "currentContent": "export function limit(): number {\n  return 3;\n}\n",
-      "startLine": 1,
-      "endLine": 3,
-      "anchorParserVersion": "typescript-javascript-deterministic-v1",
-      "currentParserVersion": "typescript-javascript-deterministic-v1",
-      "expectedVerdict": "fresh"
-    },
-    {
-      "id": "trailing-whitespace",
-      "path": "src/formatting.ts",
-      "capturedContent": "export function limit(): number {\n  return 3;\n}\n",
-      "currentContent": "export function limit(): number {   \n  return 3;\t\n}\n",
-      "startLine": 1,
-      "endLine": 3,
-      "anchorParserVersion": "typescript-javascript-deterministic-v1",
-      "currentParserVersion": "typescript-javascript-deterministic-v1",
-      "expectedVerdict": "fresh"
-    },
-    {
-      "id": "content-change",
-      "path": "src/changed.ts",
-      "capturedContent": "export function limit(): number {\n  return 3;\n}\n",
-      "currentContent": "export function limit(): number {\n  return 4;\n}\n",
-      "startLine": 1,
-      "endLine": 3,
-      "anchorParserVersion": "typescript-javascript-deterministic-v1",
-      "currentParserVersion": "typescript-javascript-deterministic-v1",
-      "expectedVerdict": "drift_suspected",
-      "expectedReason": "content_changed"
-    },
     {
       "id": "file-missing",
       "path": "src/deleted.ts",
@@ -42,8 +100,8 @@
       "currentContent": null,
       "startLine": 1,
       "endLine": 1,
-      "anchorParserVersion": "typescript-javascript-deterministic-v1",
-      "currentParserVersion": "typescript-javascript-deterministic-v1",
+      "anchorParserVersion": "typescript-javascript-deterministic-v2",
+      "currentParserVersion": "typescript-javascript-deterministic-v2",
       "expectedVerdict": "drift_suspected",
       "expectedReason": "file_missing"
     },
@@ -54,22 +112,10 @@
       "currentContent": "export {};\n",
       "startLine": 1,
       "endLine": 4,
-      "anchorParserVersion": "typescript-javascript-deterministic-v1",
-      "currentParserVersion": "typescript-javascript-deterministic-v1",
+      "anchorParserVersion": "typescript-javascript-deterministic-v2",
+      "currentParserVersion": "typescript-javascript-deterministic-v2",
       "expectedVerdict": "drift_suspected",
       "expectedReason": "range_out_of_bounds"
-    },
-    {
-      "id": "parser-version-only",
-      "path": "src/parser.ts",
-      "capturedContent": "export function stable(): boolean {\n  return true;\n}\n",
-      "currentContent": "export function stable(): boolean {\n  return true;\n}\n",
-      "startLine": 1,
-      "endLine": 3,
-      "anchorParserVersion": "typescript-javascript-deterministic-v1",
-      "currentParserVersion": "typescript-javascript-deterministic-v2",
-      "expectedVerdict": "fresh",
-      "expectedReason": "parser_version_changed"
     }
   ]
 }

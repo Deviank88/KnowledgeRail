@@ -10,6 +10,7 @@ import {
 } from "../src/core/code-evidence/index.js";
 import { readCodeResource } from "../src/core/code-evidence/resource-reader.js";
 import {
+  codeGrepFallbackTelemetryFile,
   readCodeGrepFallbackEvents,
   recordCodeGrepFallback,
 } from "../src/core/code-evidence/telemetry.js";
@@ -120,6 +121,17 @@ test("TypeScript adapter indexes minimum code evidence and structural relations"
     assert.equal(read.startLine, 5);
     assert.equal(read.endLine, 9);
 
+    const staleParserSnapshot = await index.snapshot();
+    staleParserSnapshot.files.find((file) => file.path === "src/service.ts")!.parserVersion =
+      "typescript-javascript-deterministic-v1";
+    await fs.writeFile(codeEvidenceIndexFile(wikiRoot), `${JSON.stringify(staleParserSnapshot, null, 2)}\n`, "utf8");
+    await assert.rejects(readCodeResource({
+      repositoryRoot: root,
+      wikiRoot,
+      resourceUri: codeResourceUri(definitions[0]!.fragment),
+    }), /parser changed/);
+    await index.rebuild();
+
     await fs.appendFile(path.join(root, "src/service.ts"), "// stale\n", "utf8");
     await assert.rejects(
       readCodeResource({
@@ -169,14 +181,32 @@ test("code evidence updates renamed symbols, removes files, and records grep fal
       resultCount: 2,
       timestamp: "2026-08-14T10:00:00.000Z",
     });
-    const events = await readCodeGrepFallbackEvents(wikiRoot);
-    assert.deepEqual(events, [{
+    await fs.appendFile(codeGrepFallbackTelemetryFile(wikiRoot), `${JSON.stringify({
       version: 1,
-      timestamp: "2026-08-14T10:00:00.000Z",
-      query: "legacy symbol",
-      reason: "coverage controller found no indexed evidence",
-      resultCount: 2,
-    }]);
+      timestamp: "2026-08-14T11:00:00.000Z",
+      query: "older fallback",
+      reason: "legacy event without extension data",
+      resultCount: 1,
+    })}\n`, "utf8");
+    const events = await readCodeGrepFallbackEvents(wikiRoot);
+    assert.deepEqual(events, [
+      {
+        version: 2,
+        timestamp: "2026-08-14T10:00:00.000Z",
+        query: "legacy symbol",
+        reason: "coverage controller found no indexed evidence",
+        resultCount: 2,
+        extensionHistogram: {},
+      },
+      {
+        version: 2,
+        timestamp: "2026-08-14T11:00:00.000Z",
+        query: "older fallback",
+        reason: "legacy event without extension data",
+        resultCount: 1,
+        extensionHistogram: {},
+      },
+    ]);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
     await fs.rm(outside, { recursive: true, force: true });

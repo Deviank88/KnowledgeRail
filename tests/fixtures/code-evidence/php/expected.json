@@ -1,0 +1,21 @@
+{
+  "language": "php",
+  "knownGaps": ["eval/string callables and Blade/Twig templates are intentionally skipped"],
+  "symbols": [
+    { "path": "php/OrderController.php", "kind": "class", "symbol": "OrderController", "qualifiedName": "App\\Orders\\OrderController", "startLine": 16, "endLine": 28, "isTest": false, "docComment": true },
+    { "path": "php/OrderController.php", "kind": "method", "symbol": "show", "qualifiedName": "App\\Orders\\OrderController::show", "startLine": 22, "endLine": 27, "isTest": false, "docComment": true },
+    { "path": "php/OrderController.php", "kind": "route", "symbol": "GET /api/orders/{id}", "qualifiedName": "route:GET /api/orders/{id}:App\\Orders\\OrderController::show", "startLine": 22, "endLine": 27, "isTest": false, "docComment": true },
+    { "path": "php/OrderController.php", "kind": "route", "symbol": "POST /orders", "qualifiedName": "route:POST /orders", "startLine": 30, "endLine": 30, "isTest": false, "docComment": false },
+    { "path": "php/OrderController.php", "kind": "function", "symbol": "embedded_helper", "qualifiedName": "App\\Orders\\embedded_helper", "startLine": 34, "endLine": 40, "isTest": false, "docComment": false },
+    { "path": "php/OrderControllerTest.php", "kind": "class", "symbol": "OrderControllerTest", "qualifiedName": "App\\Orders\\Tests\\OrderControllerTest", "startLine": 7, "endLine": 25, "isTest": true, "docComment": false },
+    { "path": "php/OrderControllerTest.php", "kind": "method", "symbol": "loads_order", "qualifiedName": "App\\Orders\\Tests\\OrderControllerTest::loads_order", "startLine": 10, "endLine": 13, "isTest": true, "docComment": false },
+    { "path": "php/OrderControllerTest.php", "kind": "method", "symbol": "creates_order", "qualifiedName": "App\\Orders\\Tests\\OrderControllerTest::creates_order", "startLine": 16, "endLine": 19, "isTest": true, "docComment": true },
+    { "path": "php/OrderControllerTest.php", "kind": "method", "symbol": "testDeletesOrder", "qualifiedName": "App\\Orders\\Tests\\OrderControllerTest::testDeletesOrder", "startLine": 21, "endLine": 24, "isTest": true, "docComment": false },
+    { "path": "php/OrderApplicationService.php", "kind": "class", "symbol": "OrderApplicationService", "qualifiedName": "App\\Orders\\Application\\OrderApplicationService", "startLine": 20, "endLine": 69, "isTest": false, "docComment": true },
+    { "path": "php/OrderApplicationService.php", "kind": "method", "symbol": "__construct", "qualifiedName": "App\\Orders\\Application\\OrderApplicationService::__construct", "startLine": 22, "endLine": 26, "isTest": false, "docComment": false },
+    { "path": "php/OrderApplicationService.php", "kind": "method", "symbol": "place", "qualifiedName": "App\\Orders\\Application\\OrderApplicationService::place", "startLine": 29, "endLine": 49, "isTest": false, "docComment": true },
+    { "path": "php/OrderApplicationService.php", "kind": "method", "symbol": "describe", "qualifiedName": "App\\Orders\\Application\\OrderApplicationService::describe", "startLine": 51, "endLine": 59, "isTest": false, "docComment": false },
+    { "path": "php/OrderApplicationService.php", "kind": "method", "symbol": "requireQueue", "qualifiedName": "App\\Orders\\Application\\OrderApplicationService::requireQueue", "startLine": 61, "endLine": 68, "isTest": false, "docComment": false },
+    { "path": "php/OrderApplicationService.php", "kind": "function", "symbol": "normalize_order_reference", "qualifiedName": "App\\Orders\\Application\\normalize_order_reference", "startLine": 71, "endLine": 74, "isTest": false, "docComment": false }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "language": "csharp",
+  "knownGaps": ["source-generator expansion is out of scope; materialized .cs output is indexed normally"],
+  "symbols": [
+    { "path": "csharp/OrdersController.cs", "kind": "class", "symbol": "OrdersController", "qualifiedName": "Acme.Orders.OrdersController", "startLine": 7, "endLine": 15, "isTest": false, "docComment": true },
+    { "path": "csharp/OrdersController.cs", "kind": "method", "symbol": "Get", "qualifiedName": "Acme.Orders.OrdersController.Get", "startLine": 10, "endLine": 12, "isTest": false, "docComment": true },
+    { "path": "csharp/OrdersController.cs", "kind": "route", "symbol": "GET /api/orders/{id}", "qualifiedName": "route:GET /api/orders/{id}:Acme.Orders.OrdersController.Get", "startLine": 10, "endLine": 12, "isTest": false, "docComment": true },
+    { "path": "csharp/OrdersController.cs", "kind": "method", "symbol": "Region", "qualifiedName": "Acme.Orders.OrdersController.Region", "startLine": 14, "endLine": 14, "isTest": false, "docComment": false },
+    { "path": "csharp/OrdersControllerTests.cs", "kind": "class", "symbol": "OrdersControllerTests", "qualifiedName": "Acme.Orders.Tests.OrdersControllerTests", "startLine": 3, "endLine": 8, "isTest": true, "docComment": false },
+    { "path": "csharp/OrdersControllerTests.cs", "kind": "method", "symbol": "GetsOrder", "qualifiedName": "Acme.Orders.Tests.OrdersControllerTests.GetsOrder", "startLine": 5, "endLine": 7, "isTest": true, "docComment": false },
+    { "path": "csharp/Program.cs", "kind": "route", "symbol": "POST /orders", "qualifiedName": "route:POST /orders", "startLine": 2, "endLine": 2, "isTest": false, "docComment": false },
+    { "path": "csharp/OrderWorkflow.cs", "kind": "class", "symbol": "OrderWorkflow", "qualifiedName": "Acme.Orders.Application.OrderWorkflow", "startLine": 9, "endLine": 65, "isTest": false, "docComment": true },
+    { "path": "csharp/OrderWorkflow.cs", "kind": "method", "symbol": "OrderWorkflow", "qualifiedName": "Acme.Orders.Application.OrderWorkflow.OrderWorkflow", "startLine": 13, "endLine": 16, "isTest": false, "docComment": false },
+    { "path": "csharp/OrderWorkflow.cs", "kind": "method", "symbol": "Region", "qualifiedName": "Acme.Orders.Application.OrderWorkflow.Region", "startLine": 18, "endLine": 18, "isTest": false, "docComment": false },
+    { "path": "csharp/OrderWorkflow.cs", "kind": "method", "symbol": "ExecuteAsync", "qualifiedName": "Acme.Orders.Application.OrderWorkflow.ExecuteAsync", "startLine": 21, "endLine": 41, "isTest": false, "docComment": true },
+    { "path": "csharp/OrderWorkflow.cs", "kind": "method", "symbol": "EnsureCommand", "qualifiedName": "Acme.Orders.Application.OrderWorkflow.EnsureCommand", "startLine": 43, "endLine": 48, "isTest": false, "docComment": false },
+    { "path": "csharp/OrderWorkflow.cs", "kind": "method", "symbol": "Lookup", "qualifiedName": "Acme.Orders.Application.OrderWorkflow.Lookup", "startLine": 50, "endLine": 56, "isTest": false, "docComment": false },
+    { "path": "csharp/OrderWorkflow.cs", "kind": "method", "symbol": "Describe", "qualifiedName": "Acme.Orders.Application.OrderWorkflow.Describe", "startLine": 58, "endLine": 64, "isTest": false, "docComment": false }
+  ]
+}

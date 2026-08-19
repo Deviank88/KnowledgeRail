@@ -2,6 +2,7 @@ import type { McpServer, ResourceLink } from "@modelcontextprotocol/server";
 import { PersistentCodeEvidenceIndex } from "../core/code-evidence/index.js";
 import { readCodeResource } from "../core/code-evidence/resource-reader.js";
 import {
+  codeGrepFallbackDemand,
   readCodeGrepFallbackEvents,
   recordCodeGrepFallback,
 } from "../core/code-evidence/telemetry.js";
@@ -72,6 +73,7 @@ export function registerCodeEvidenceTools(
       max_chars,
       fallback_reason,
       fallback_result_count,
+      fallback_result_paths,
       recovered_evidence,
     }) => {
       try {
@@ -172,6 +174,7 @@ export function registerCodeEvidenceTools(
             query,
             reason: fallback_reason,
             resultCount: fallback_result_count,
+            resultPaths: fallback_result_paths,
           });
           const recovery = recovered_evidence?.length
             ? await recordKnowledgeRecoveryUsage({
@@ -196,22 +199,26 @@ export function registerCodeEvidenceTools(
           };
         }
 
-        const [snapshot, fallbackEvents] = await Promise.all([
+        const [snapshot, fallbackEvents, fallbackDemand] = await Promise.all([
           index.snapshot(),
           readCodeGrepFallbackEvents(wikiRoot),
+          codeGrepFallbackDemand(wikiRoot),
         ]);
         const status = {
           version: snapshot.version,
-          parserVersion: snapshot.parserVersion,
+          adapters: snapshot.adapters,
           generatedAt: snapshot.generatedAt,
           indexedFiles: snapshot.files.length,
           indexedFragments: snapshot.fragments.length,
           recordedGrepFallbacks: fallbackEvents.length,
+          fallbackDemand,
         };
         return {
           content: [{ type: "text" as const, text:
             `Code evidence status: ${status.indexedFiles} files, ${status.indexedFragments} fragments, ` +
-            `${status.recordedGrepFallbacks} recorded grep fallback(s).` }],
+            `${status.recordedGrepFallbacks} recorded grep fallback(s); ` +
+            `extension demand=${Object.entries(status.fallbackDemand.byExtension)
+              .map(([extension, count]) => `${extension}:${count}`).join(", ") || "none"}.` }],
           structuredContent: { action, status },
         };
       } catch (error: unknown) {
