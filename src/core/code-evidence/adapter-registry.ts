@@ -1,4 +1,5 @@
 import * as nodePath from "node:path";
+import { PythonKnowledgeAdapter } from "./python-adapter.js";
 import { TypeScriptKnowledgeAdapter } from "./typescript-adapter.js";
 import {
   ApexKnowledgeAdapter,
@@ -29,6 +30,7 @@ const KNOWN_EXTENSION_CLAIMS = [
   ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".js-meta.xml",
   ".java", ".cls", ".trigger", ".cs", ".go", ".rs", ".php", ".c", ".cpp", ".cc", ".cxx",
   ".h", ".hpp", ".hh",
+  ".py", ".pyi",
 ] as const;
 
 function normalizedClaim(value: string): string {
@@ -162,6 +164,7 @@ export function createDefaultKnowledgeAdapterRegistry(): KnowledgeAdapterRegistr
     new PhpKnowledgeAdapter(),
     new CKnowledgeAdapter(),
     new CppKnowledgeAdapter(),
+    new PythonKnowledgeAdapter(),
   ]);
 }
 

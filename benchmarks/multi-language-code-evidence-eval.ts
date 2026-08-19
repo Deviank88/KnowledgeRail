@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { canonicalFixtureText } from "./fixture-integrity.js";
 import { maskBraceLanguage, type BraceLanguage } from "../src/core/code-evidence/brace-language-engine.js";
 import { PersistentCodeEvidenceIndex } from "../src/core/code-evidence/index.js";
+import { maskPythonSource, PythonKnowledgeAdapter } from "../src/core/code-evidence/python-adapter.js";
 import {
   ApexKnowledgeAdapter,
   CKnowledgeAdapter,
@@ -17,7 +18,7 @@ import {
   PhpKnowledgeAdapter,
   RustKnowledgeAdapter,
 } from "../src/core/code-evidence/language-adapters.js";
-import type { CodeFragmentKind, KnowledgeAdapter } from "../src/core/code-evidence/types.js";
+import type { CodeFragmentKind, CodeRoute, KnowledgeAdapter } from "../src/core/code-evidence/types.js";
 
 interface ExpectedSymbol {
   path: string;
@@ -28,6 +29,12 @@ interface ExpectedSymbol {
   endLine: number;
   isTest: boolean;
   docComment: boolean;
+  definition?: string;
+  imports?: string[];
+  calls?: string[];
+  routes?: CodeRoute[];
+  configKeys?: string[];
+  databaseRefs?: string[];
 }
 
 interface LanguageFixture {
@@ -38,6 +45,7 @@ interface LanguageFixture {
 
 export interface LanguageExtractionResult {
   language: string;
+  extractionMs: number;
   expectedSymbols: number;
   extractedSymbols: number;
   truePositives: number;
@@ -49,8 +57,9 @@ export interface LanguageExtractionResult {
 }
 
 export interface MaskingResult {
-  language: BraceLanguage;
+  language: BraceLanguage | "python";
   lengthPreserved: boolean;
+  byteLengthPreserved: boolean;
   newlinesPreserved: boolean;
   hiddenTokenMasked: boolean;
   visibleTokenPreserved: boolean;
@@ -88,10 +97,11 @@ const ADAPTERS: Record<string, KnowledgeAdapter> = {
   java: new JavaKnowledgeAdapter(),
   php: new PhpKnowledgeAdapter(),
   rust: new RustKnowledgeAdapter(),
+  python: new PythonKnowledgeAdapter(),
 };
 
 const MASKING_CASES: Array<{
-  language: BraceLanguage;
+  language: BraceLanguage | "python";
   content: string;
   hidden: string;
   visible: string;
@@ -104,6 +114,12 @@ const MASKING_CASES: Array<{
   { language: "php", content: "<script>function fakeHtml() {}</script>\n<?php\n$x = <<<'NOW'\nfakeHeredoc() {}\nNOW;\n$y = <<<TXT\nfakeHeredoc() {}\nTXT;\nfunction visible() {}\n?>\n", hidden: "fakeHeredoc", visible: "visible" },
   { language: "c", content: "#define FAKE(name) \\\n  int fake_hidden(void) { return 0; }\nint visible(void) {}\n", hidden: "fake_hidden", visible: "visible" },
   { language: "cpp", content: "auto x = R\"tag(fake_method() { })tag\";\nint visible() {}\n", hidden: "fake_method", visible: "visible" },
+  {
+    language: "python",
+    content: "value = Fr\"caffè {lookup(\"fake_call\", {\"nested\": 1})}\"\ntext = \"\"\"\ndef fake_hidden():\n    pass\n\"\"\"\ndef visible():\n    pass\n",
+    hidden: "fake_hidden",
+    visible: "visible",
+  },
 ];
 
 function ratio(numerator: number, denominator: number): number {
@@ -121,6 +137,24 @@ function symbolKey(symbol: ExpectedSymbol): string {
     symbol.isTest,
     symbol.docComment,
   ].join("\0");
+}
+
+function sortedRoutes(routes: readonly CodeRoute[]): string {
+  return JSON.stringify([...routes].sort((left, right) =>
+    left.method.localeCompare(right.method) ||
+    left.path.localeCompare(right.path) ||
+    (left.handler ?? "").localeCompare(right.handler ?? "")
+  ));
+}
+
+function metadataMatches(actual: ExpectedSymbol, expected: ExpectedSymbol): boolean {
+  if (expected.definition !== undefined && actual.definition !== expected.definition) return false;
+  for (const field of ["imports", "calls", "configKeys", "databaseRefs"] as const) {
+    if (expected[field] !== undefined && JSON.stringify(actual[field] ?? []) !== JSON.stringify(expected[field])) {
+      return false;
+    }
+  }
+  return expected.routes === undefined || sortedRoutes(actual.routes ?? []) === sortedRoutes(expected.routes);
 }
 
 async function filesBelow(root: string): Promise<string[]> {
@@ -146,6 +180,7 @@ export async function multiLanguageCorpusSha256(fixtureRoot: string): Promise<st
 }
 
 async function evaluateLanguage(fixtureRoot: string, language: string): Promise<LanguageExtractionResult> {
+  const started = performance.now();
   const directory = path.join(fixtureRoot, language);
   const fixture = JSON.parse(await fs.readFile(path.join(directory, "expected.json"), "utf8")) as LanguageFixture;
   if (fixture.language !== language || !Array.isArray(fixture.knownGaps) || !Array.isArray(fixture.symbols)) {
@@ -169,29 +204,48 @@ async function evaluateLanguage(fixtureRoot: string, language: string): Promise<
         endLine: fragment.range.endLine,
         isTest: fragment.isTest,
         docComment: fragment.docComment !== undefined,
+        definition: fragment.definition,
+        imports: fragment.imports,
+        calls: fragment.calls,
+        routes: fragment.routes,
+        configKeys: fragment.configKeys,
+        databaseRefs: fragment.databaseRefs,
       });
     }
   }
-  const expectedKeys = new Set(fixture.symbols.map(symbolKey));
-  const actualKeys = new Set(actual.map(symbolKey));
-  const truePositives = [...actualKeys].filter((key) => expectedKeys.has(key)).length;
+  const expectedByKey = new Map(fixture.symbols.map((symbol) => [symbolKey(symbol), symbol]));
+  const actualByKey = new Map(actual.map((symbol) => [symbolKey(symbol), symbol]));
+  const truePositives = [...actualByKey].filter(([key, symbol]) => {
+    const expected = expectedByKey.get(key);
+    return expected !== undefined && metadataMatches(symbol, expected);
+  }).length;
   return {
     language,
-    expectedSymbols: expectedKeys.size,
-    extractedSymbols: actualKeys.size,
+    extractionMs: Number((performance.now() - started).toFixed(3)),
+    expectedSymbols: expectedByKey.size,
+    extractedSymbols: actualByKey.size,
     truePositives,
-    precision: ratio(truePositives, actualKeys.size),
-    recall: ratio(truePositives, expectedKeys.size),
-    falsePositiveKeys: [...actualKeys].filter((key) => !expectedKeys.has(key)).sort(),
-    missingKeys: [...expectedKeys].filter((key) => !actualKeys.has(key)).sort(),
+    precision: ratio(truePositives, actualByKey.size),
+    recall: ratio(truePositives, expectedByKey.size),
+    falsePositiveKeys: [...actualByKey].filter(([key, symbol]) => {
+      const expected = expectedByKey.get(key);
+      return expected === undefined || !metadataMatches(symbol, expected);
+    }).map(([key]) => key).sort(),
+    missingKeys: [...expectedByKey].filter(([key, expected]) => {
+      const symbol = actualByKey.get(key);
+      return symbol === undefined || !metadataMatches(symbol, expected);
+    }).map(([key]) => key).sort(),
     knownGaps: fixture.knownGaps,
   };
 }
 
 function evaluateMasking(): MaskingResult[] {
   return MASKING_CASES.map((fixture) => {
-    const masked = maskBraceLanguage(fixture.content, fixture.language);
+    const masked = fixture.language === "python"
+      ? maskPythonSource(fixture.content)
+      : maskBraceLanguage(fixture.content, fixture.language);
     const lengthPreserved = masked.length === fixture.content.length;
+    const byteLengthPreserved = Buffer.byteLength(masked) === Buffer.byteLength(fixture.content);
     const newlinesPreserved = [...masked].filter((value) => value === "\n").length ===
       [...fixture.content].filter((value) => value === "\n").length;
     const hiddenTokenMasked = !masked.includes(fixture.hidden);
@@ -199,10 +253,11 @@ function evaluateMasking(): MaskingResult[] {
     return {
       language: fixture.language,
       lengthPreserved,
+      byteLengthPreserved,
       newlinesPreserved,
       hiddenTokenMasked,
       visibleTokenPreserved,
-      passed: lengthPreserved && newlinesPreserved && hiddenTokenMasked && visibleTokenPreserved,
+      passed: lengthPreserved && byteLengthPreserved && newlinesPreserved && hiddenTokenMasked && visibleTokenPreserved,
     };
   });
 }

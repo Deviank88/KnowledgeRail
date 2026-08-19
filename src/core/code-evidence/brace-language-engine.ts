@@ -494,7 +494,12 @@ export function maskBraceLanguage(content: string, language: BraceLanguage): str
   return maskDetailed(content, { language }).masked;
 }
 
-function fragmentId(path: string, kind: CodeFragmentKind, qualifiedName: string, startLine: number): string {
+export function codeFragmentId(
+  path: string,
+  kind: CodeFragmentKind,
+  qualifiedName: string,
+  startLine: number
+): string {
   const digest = createHash("sha256")
     .update(`${path}\0${kind}\0${qualifiedName}\0${startLine}`)
     .digest("hex")
@@ -615,7 +620,7 @@ export function extractBraceLanguage(source: CodeSource, config: BraceLanguageCo
       ? value.toLowerCase() !== candidate.symbol.toLowerCase()
       : value !== candidate.symbol);
     fragments.push({
-      id: fragmentId(source.path, candidate.kind, candidate.qualifiedName, startLine),
+      id: codeFragmentId(source.path, candidate.kind, candidate.qualifiedName, startLine),
       path: source.path,
       symbol: candidate.symbol,
       qualifiedName: candidate.qualifiedName,

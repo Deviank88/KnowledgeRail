@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "languageCases": [
     {
       "id": "typescript",
@@ -90,6 +90,16 @@
       "endLine": 3,
       "parserVersion": "cpp-deterministic-v2",
       "upgradedParserVersion": "cpp-deterministic-v3"
+    },
+    {
+      "id": "python",
+      "path": "src/service.py",
+      "capturedContent": "@router.get(\n    \"/orders\",\n)\nasync def limit() -> int:\n    return 3\n",
+      "changedContent": "@router.get(\n    \"/orders\",\n)\nasync def limit() -> int:\n    return 4\n",
+      "startLine": 1,
+      "endLine": 5,
+      "parserVersion": "python-deterministic-v1",
+      "upgradedParserVersion": "python-deterministic-v2"
     }
   ],
   "scenarios": [
