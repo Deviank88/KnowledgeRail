@@ -389,6 +389,7 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
       );
       const paths = (await fg(this.registry.globPatterns(), {
         cwd: this.repositoryRoot,
+        caseSensitiveMatch: false,
         dot: false,
         onlyFiles: true,
         followSymbolicLinks: false,
@@ -558,13 +559,14 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
       normalized(target.symbol),
       normalized(target.qualifiedName),
       normalized(target.qualifiedName.split(".").at(-1)!),
+      ...target.databaseRefs.map(normalized),
     ]);
     const moduleStem = target.path.split("/").at(-1)!.replace(/\.[^.]+$/, "").toLowerCase();
     const references: CodeReference[] = [];
     for (const source of snapshot.fragments) {
       if (source.id === target.id || !pathAllowed(source.path, options.paths)) continue;
       const calls = source.calls.map(normalized);
-      const refs = source.references.map(normalized);
+      const refs = [...source.references, ...source.databaseRefs].map(normalized);
       let relation: CodeReference["relation"] | null = calls.some((value) =>
         targetNames.has(value) || targetNames.has(value.split(".").at(-1)!)
       ) ? "call" : null;

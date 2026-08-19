@@ -6,7 +6,7 @@ import type {
   KnowledgeFragment,
 } from "./types.js";
 
-export type BraceLanguage = "java" | "apex" | "csharp" | "go" | "rust" | "php" | "c" | "cpp";
+export type BraceLanguage = "java" | "apex" | "csharp" | "go" | "rust" | "php" | "c" | "cpp" | "kotlin";
 
 export interface BraceCandidate {
   kind: CodeFragmentKind;
@@ -127,11 +127,25 @@ function cleanComment(raw: string): string {
     .trim();
 }
 
-function maskRange(chars: string[], start: number, end: number): void {
+export function maskRangePreservingWidth(chars: string[], start: number, end: number): void {
   for (let index = start; index < Math.min(end, chars.length); index++) {
-    if (chars[index] !== "\n" && chars[index] !== "\r") chars[index] = " ";
+    const value = chars[index]!;
+    if (value === "\n" || value === "\r") continue;
+    const unit = value.charCodeAt(0);
+    if (unit >= 0xd800 && unit <= 0xdbff && index + 1 < end) {
+      const low = chars[index + 1]!.charCodeAt(0);
+      if (low >= 0xdc00 && low <= 0xdfff) {
+        chars[index] = "\ud800";
+        chars[index + 1] = "\udc00";
+        index++;
+        continue;
+      }
+    }
+    chars[index] = unit <= 0x7f ? " " : unit <= 0x7ff ? "\u00a0" : "\u3000";
   }
 }
+
+const maskRange = maskRangePreservingWidth;
 
 function escapedAt(content: string, offset: number): boolean {
   let backslashes = 0;
@@ -173,6 +187,51 @@ function tripleQuotedEnd(content: string, start: number, escapedDelimiter = fals
     close = content.indexOf("\"\"\"", close + 3);
   }
   return close < 0 ? content.length : close + 3;
+}
+
+function kotlinQuotedEnd(content: string, start: number, raw: boolean, nesting = 0): number {
+  const delimiter = raw ? "\"\"\"" : "\"";
+  let index = start + delimiter.length;
+  let braceDepth = 0;
+  while (index < content.length) {
+    if (braceDepth > 0) {
+      if (nesting < 32 && content.startsWith("\"\"\"", index)) {
+        index = kotlinQuotedEnd(content, index, true, nesting + 1);
+        continue;
+      }
+      if (nesting < 32 && content[index] === "\"") {
+        index = kotlinQuotedEnd(content, index, false, nesting + 1);
+        continue;
+      }
+      if (content[index] === "'") {
+        index = normalQuotedEnd(content, index, "'");
+        continue;
+      }
+      if (content[index] === "/" && content[index + 1] === "*") {
+        index = blockCommentEnd(content, index, true);
+        continue;
+      }
+      if (content[index] === "/" && content[index + 1] === "/") {
+        index = lineEnd(content, index);
+        continue;
+      }
+      if (content[index] === "{") braceDepth++;
+      else if (content[index] === "}") braceDepth--;
+      index++;
+      continue;
+    }
+    if (content.startsWith(delimiter, index) && (raw || !escapedAt(content, index))) {
+      return index + delimiter.length;
+    }
+    if (content[index] === "$" && content[index + 1] === "{") {
+      braceDepth = 1;
+      index += 2;
+      continue;
+    }
+    if (!raw && (content[index] === "\n" || content[index] === "\r")) return index;
+    index++;
+  }
+  return content.length;
 }
 
 function csharpVerbatimEnd(content: string, quote: number): number {
@@ -385,7 +444,7 @@ function maskDetailed(content: string, config: Pick<BraceLanguageConfig, "langua
       continue;
     }
     if (content[index] === "/" && content[index + 1] === "*") {
-      const end = blockCommentEnd(content, index, config.language === "rust");
+      const end = blockCommentEnd(content, index, config.language === "rust" || config.language === "kotlin");
       const raw = content.slice(index, end);
       comments.push({
         start: index,
@@ -429,6 +488,12 @@ function maskDetailed(content: string, config: Pick<BraceLanguageConfig, "langua
         continue;
       }
     }
+    if (config.language === "kotlin" && content.startsWith("\"\"\"", index)) {
+      const end = kotlinQuotedEnd(content, index, true);
+      maskRange(chars, index, end);
+      index = end;
+      continue;
+    }
     if ((config.language === "java" || config.language === "csharp") && content.startsWith("\"\"\"", index)) {
       const end = tripleQuotedEnd(content, index, config.language === "java");
       maskRange(chars, index, end);
@@ -469,7 +534,9 @@ function maskDetailed(content: string, config: Pick<BraceLanguageConfig, "langua
       continue;
     }
     if (content[index] === "\"") {
-      const end = normalQuotedEnd(content, index, "\"");
+      const end = config.language === "kotlin"
+        ? kotlinQuotedEnd(content, index, false)
+        : normalQuotedEnd(content, index, "\"");
       maskRange(chars, index, end);
       index = end;
       continue;

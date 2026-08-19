@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://cdn.jsdelivr.net/npm/knowledge-rail@2.5.0/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
+  <img src="https://cdn.jsdelivr.net/npm/knowledge-rail@2.6.0/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
 </p>
 
 <h1 align="center">KnowledgeRail</h1>
@@ -8,7 +8,7 @@ KnowledgeRail is a local-first MCP server that turns project documentation and s
 
 It is designed for agents that need to understand, change, review, or document a codebase without loading the whole repository into the model context. Retrieval is bounded, provenance is preserved, missing evidence is reported explicitly, and difficult queries widen progressively instead of silently losing relevant information.
 
-> **Current status:** stable release `2.5.0`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
+> **Current status:** stable release `2.6.0`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
 
 ## What it provides
 
@@ -34,7 +34,9 @@ Code evidence is extracted locally without tree-sitter, native binaries, downloa
 | --- | --- | --- |
 | TypeScript / JavaScript / LWC | `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.js-meta.xml` | Classes, functions, methods, tests, routes, imports, calls, LWC decorators and component targets. |
 | Java | `.java` | Classes, interfaces, enums, records, methods, Javadoc, JUnit markers, Spring routes, imports. |
+| Kotlin | `.kt`, `.kts` | Classes, objects and companions, top-level/member/extension functions, properties, KDoc, JUnit/Kotest markers, Spring and literal Ktor routes. |
 | Apex | `.cls`, `.trigger` | Classes, methods, tests, REST resources, trigger events, and static SOQL/SOSL object references. |
+| Salesforce metadata | `.object-meta.xml`, `.field-meta.xml`, `.validationRule-meta.xml`, `.flow-meta.xml`, `.permissionset-meta.xml` | SFDX objects, fields, validation rules, flows, permission sets, formulas, calls, and Apex-compatible database references. |
 | C# | `.cs` | Namespaces, types, methods, properties, XML docs, test attributes, ASP.NET controller and minimal-API routes; nested quoted strings inside interpolations are masked without losing following code. |
 | Go | `.go` | Functions, receiver methods, structs/interfaces, Go doc comments, tests, imports, and common router calls. |
 | Rust | `.rs` | Functions, types, traits, modules, `impl` methods, tests, imports, and `macro_rules!` names. |
@@ -42,8 +44,9 @@ Code evidence is extracted locally without tree-sitter, native binaries, downloa
 | C | `.c` | Function definitions including pointer-return forms, doc comments, and includes. |
 | C++ | `.cpp`, `.cc`, `.cxx`, `.h`, `.hpp`, `.hh` | Functions, constructors, classes/structs, namespaces, qualified methods, doc comments, and includes. |
 | Python | `.py`, `.pyi` | Indentation-aware modules, classes, nested functions/methods, docstrings, decorators, tests, FastAPI/Flask/Django routes, imports, calls, configuration and database references. |
+| Ruby | `.rb`, `.rake` | Keyword-delimited classes/modules/methods, RDoc comments, RSpec/Minitest markers, Rails/Sinatra routes, imports, configuration and explicit database references. |
 
-The extractors are intentionally conservative. LWC HTML templates, Java anonymous classes, dynamic Apex query object names, Rust macro expansion, PHP `eval()`/string callables and Blade/Twig templates, K&R C definitions, macro-generated C/C++ declarations, complex C++ operator/template metaprogramming, Python lambdas/dynamic definitions/metaclass-generated members, indirect or qualified decorator-generated routes, calls inside f-string interpolations, and notebooks are not guessed. Headers use the C++ superset adapter. Python uses a separate indentation engine with CPython-compatible tab stops; `.pyi` files are declarations and never routes or tests. Direct FastAPI/Flask verb decorators and Flask `route` decorators on simple receivers, including Blueprint instances, are recognized. Qualified `knowledge_code action="symbol"` lookups treat `.`, `#`, `::`, PHP namespace backslashes, and `->` as equivalent separators, while returned names retain the language-native form. The pinned golden corpus contains 32 source files, 1,082 source lines, and 144 hand-labeled symbols across nine language adapters; the mixed-repository benchmark adds two LWC files for 34 files and 1,099 lines overall. Its perfect in-corpus score is a deterministic regression guarantee, not a claim of universal parser accuracy. Code anchors are line-based: trailing-whitespace edits remain fresh, while formatting that inserts or removes lines is deliberately reported as drift because it shifts the cited range. `knowledge_admin action="status"` reports the extension histogram supplied with recorded grep fallbacks, allowing later language priorities to follow real repository demand.
+The extractors are intentionally conservative. LWC HTML templates, Java anonymous classes, dynamic Apex query object names, Rust macro expansion, PHP `eval()`/string callables and Blade/Twig templates, K&R C definitions, macro-generated C/C++ declarations, complex C++ operator/template metaprogramming, Python lambdas/dynamic definitions/metaclass-generated members, indirect or qualified decorator-generated routes, calls inside f-string interpolations, and notebooks are not guessed. Kotlin computed Ktor paths and string-named Kotest cases are not emitted independently. Salesforce metadata is limited to the explicit SFDX suffix roster; malformed XML falls back to a file module. Ruby metaprogramming, inferred ActiveRecord tables, individual RSpec `it` blocks, operator methods, and ambiguous plain command-form heredocs or regex literals remain best-effort or out of scope. Headers use the C++ superset adapter. Python uses a separate indentation engine with CPython-compatible tab stops; Ruby uses its own keyword-block engine. Qualified `knowledge_code action="symbol"` lookups treat `.`, `#`, `::`, PHP namespace backslashes, and `->` as equivalent separators, while returned names retain the language-native form. The pinned golden corpus contains 52 source files, 1,429 source lines, and 199 hand-labeled symbols across twelve language adapters; the mixed-repository benchmark adds two LWC files for 54 files and 1,446 lines overall. Its perfect in-corpus score is a deterministic regression guarantee, not a claim of universal parser accuracy. Code anchors are line-based: trailing-whitespace edits remain fresh, while formatting that inserts or removes lines is deliberately reported as drift because it shifts the cited range. `knowledge_admin action="status"` reports the extension histogram supplied with recorded grep fallbacks, allowing later language priorities to follow real repository demand.
 
 ## Requirements
 
@@ -58,7 +61,7 @@ KnowledgeRail ships no browser or document renderer. Mermaid source remains ordi
 Run this from any directory inside the project you opened in VS Code, Cursor, a terminal, or another context-aware coding client:
 
 ```bash
-npx -y knowledge-rail@2.5.0
+npx -y knowledge-rail@2.6.0
 ```
 
 No project path is needed in the persistent MCP configuration. KnowledgeRail discovers the opened project independently for each process, so project X and project Y can be used at the same time by different agent sessions.
@@ -92,7 +95,7 @@ Use the standard `stdio` server shape once. Do not hard-code one repository:
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.5.0"]
+      "args": ["-y", "knowledge-rail@2.6.0"]
     }
   }
 }
@@ -124,7 +127,7 @@ A desktop chat does not open a filesystem folder, so it cannot safely infer a pr
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.5.0", "desktop"]
+      "args": ["-y", "knowledge-rail@2.6.0", "desktop"]
     }
   }
 }
@@ -137,10 +140,10 @@ In a new chat, ask KnowledgeRail to list workspaces, choose one entry, and confi
 Projects opened successfully by an IDE/terminal are added to the local catalog automatically without changing their clean eight-tool workflow. Operators can also manage catalog metadata locally:
 
 ```bash
-npx -y knowledge-rail@2.5.0 workspace list
-npx -y knowledge-rail@2.5.0 workspace register
-npx -y knowledge-rail@2.5.0 workspace register /absolute/project/path
-npx -y knowledge-rail@2.5.0 workspace unregister ws_example
+npx -y knowledge-rail@2.6.0 workspace list
+npx -y knowledge-rail@2.6.0 workspace register
+npx -y knowledge-rail@2.6.0 workspace register /absolute/project/path
+npx -y knowledge-rail@2.6.0 workspace unregister ws_example
 ```
 
 Registration never copies, uploads, scans the disk, or deletes project files. `workspace register` without a path discovers only upward from cwd.
@@ -150,7 +153,7 @@ Registration never copies, uploads, scans the disk, or deletes project files. `w
 Start one gateway for many concurrent local clients and workspaces:
 
 ```bash
-npx -y knowledge-rail@2.5.0 --transport http
+npx -y knowledge-rail@2.6.0 --transport http
 ```
 
 The default endpoint is `http://127.0.0.1:3333/mcp`; liveness only is available at `/healthz`. MCP requests require the random credential stored in the OS-protected per-user KnowledgeRail state directory. The desktop adapter reads it automatically, so it never belongs in project configuration or a repository.
@@ -274,15 +277,15 @@ knowledge_admin {
 The same detector is available without an MCP server for agent hooks and CI. Hook mode reports non-fresh anchors but never blocks the calling tool; it is silent when everything checked is fresh:
 
 ```bash
-npx -y knowledge-rail@2.5.0 drift --no-ledger
-npx -y knowledge-rail@2.5.0 drift --no-ledger --path src/payments.ts --path src/invoices
+npx -y knowledge-rail@2.6.0 drift --no-ledger
+npx -y knowledge-rail@2.6.0 drift --no-ledger --path src/payments.ts --path src/invoices
 ```
 
 An absolute event path is accepted only when it is confined to the discovered project. For pre-commit or CI, `--check` exits `2` on any non-fresh anchor or timeout; operational failures exit `1`. JSON mode returns the complete shared-core result:
 
 ```bash
-npx -y knowledge-rail@2.5.0 drift --check --no-ledger
-npx -y knowledge-rail@2.5.0 drift --format json --no-ledger
+npx -y knowledge-rail@2.6.0 drift --check --no-ledger
+npx -y knowledge-rail@2.6.0 drift --format json --no-ledger
 ```
 
 Text output is capped at 20 affected anchors. Its `stale` count is the aggregate of `drift_suspected` and `anchor_unresolvable`, not a fourth detector verdict. The default timeout is three seconds: ordinary hook mode reports a timeout on stderr and exits `0`, while `--check` exits `2`. Omit `--no-ledger` only when the disposable freshness ledger should be updated for later context compilation.

@@ -9,6 +9,9 @@ export const PHP_ADAPTER_VERSION = "php-deterministic-v1";
 export const C_ADAPTER_VERSION = "c-deterministic-v2";
 export const CPP_ADAPTER_VERSION = "cpp-deterministic-v2";
 export const PYTHON_ADAPTER_VERSION = "python-deterministic-v1";
+export const KOTLIN_ADAPTER_VERSION = "kotlin-deterministic-v1";
+export const SFMETA_ADAPTER_VERSION = "sfmeta-deterministic-v1";
+export const RUBY_ADAPTER_VERSION = "ruby-deterministic-v1";
 
 export type CodeFragmentKind =
   | "module"

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>PositiveAmount</fullName>
+    <active>true</active>
+    <description>Prevent negative invoice totals.</description>
+    <errorConditionFormula>Amount__c &lt; 0</errorConditionFormula>
+    <errorMessage>Amount must be positive.</errorMessage>
+</ValidationRule>

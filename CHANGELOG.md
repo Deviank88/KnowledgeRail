@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-08-20
+
+### Added
+
+- Added the deterministic `kotlin-deterministic-v1` adapter for `.kt` and `.kts`, including nested types and companions, top-level/member/extension functions, properties, KDoc, test markers, Spring routes, literal Ktor routes, imports, and configuration evidence.
+- Added the explicit-suffix `sfmeta-deterministic-v1` adapter for SFDX objects, fields, validation rules, flows, and permission sets, with formula/call extraction and Apex-compatible database-reference links; generic XML remains unclaimed.
+- Added a dedicated dependency-free Ruby keyword-block engine and `ruby-deterministic-v1` adapter for `.rb` and `.rake`, covering native qualified names, endless methods, RDoc, RSpec/Minitest, Rails/Sinatra routes, heredocs, percent literals, interpolation, and conservative regex-versus-division masking.
+- Expanded the pinned corpus to 52 labeled files, 1,429 lines, and 199 symbols across twelve adapters; baseline v4 retains the existing precision and recall thresholds and adds bounded Kotlin, Ruby, and Salesforce-metadata extraction checks.
+- Extended drift evaluation from 42 to 54 scenarios with unchanged, formatting-only, substantive-change, and parser-upgrade cases for Kotlin, Salesforce metadata, and Ruby.
+
+### Changed
+
+- The default code-evidence registry now has 13 mutually exclusive adapters and selectively reparses only the files owned by an upgraded Kotlin, Salesforce-metadata, or Ruby adapter.
+- Code-evidence discovery now applies the registry's case-insensitive suffix semantics during globbing, so canonical mixed-case Salesforce metadata names are indexed consistently on Linux, macOS, and Windows.
+
+### Fixed
+
+- Kotlin function extraction now balances parameter parentheses before locating the body, preventing one expression-body function from consuming the next declaration when defaults or consecutive `fun … =` forms are present.
+- Kotlin type extraction now uses a bounded linear header scan instead of an ambiguous multiline regular expression, preventing adversarial indentation from causing excessive backtracking or swallowing the following declaration.
+
 ## [2.5.0] - 2026-08-19
 
 ### Added
@@ -200,7 +220,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Initial local-first MCP server with persistent evidence-backed knowledge, bounded retrieval, document workflows, and eight public `knowledge_*` tools.
 - Multi-workspace loopback HTTP gateway, opaque per-chat bindings, desktop adapter, and portable npm/npx distribution.
 
-[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.5.0...HEAD
+[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.6.0...HEAD
+[2.6.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.5.0...v2.6.0
 [2.5.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.2.1...v2.3.0

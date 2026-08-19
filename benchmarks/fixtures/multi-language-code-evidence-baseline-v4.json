@@ -1,0 +1,20 @@
+{
+  "version": 4,
+  "corpusSha256": "d8bd9046db567b0fb0144eede7542282bc6f873f175b2405be279c2d4f328a8e",
+  "languages": ["apex", "c", "cpp", "csharp", "go", "java", "kotlin", "php", "python", "ruby", "rust", "sfmeta"],
+  "minimumPrecision": 0.95,
+  "minimumRecall": 0.9,
+  "sourceFileCount": 54,
+  "sourceLineCount": 1446,
+  "sourceByteCount": 37016,
+  "labeledSourceFileCount": 52,
+  "labeledSourceLineCount": 1429,
+  "labeledSourceByteCount": 36394,
+  "expectedSymbolCount": 199,
+  "maximumInitialBuildMs": 2000,
+  "maximumUnchangedBuildMs": 1000,
+  "maximumPythonExtractionMs": 1000,
+  "maximumKotlinExtractionMs": 1000,
+  "maximumRubyExtractionMs": 1000,
+  "maximumSfmetaExtractionMs": 1000
+}

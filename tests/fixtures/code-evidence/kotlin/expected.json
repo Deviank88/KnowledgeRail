@@ -1,0 +1,36 @@
+{
+  "language": "kotlin",
+  "knownGaps": [
+    "Kotest string-named test cases and computed Ktor paths are intentionally not emitted as independent fragments",
+    "delegated properties and expression-generated declarations are intentionally skipped"
+  ],
+  "symbols": [
+    { "path": "kotlin/KtorRoutes.kt", "kind": "function", "symbol": "configureRouting", "qualifiedName": "Application.configureRouting", "startLine": 10, "endLine": 20, "isTest": false, "docComment": true, "definition": "fun Application.configureRouting() {", "imports": ["io.ktor.server.application.Application", "io.ktor.server.application.call", "io.ktor.server.response.respondText", "io.ktor.server.routing.get", "io.ktor.server.routing.routing"] },
+    { "path": "kotlin/KtorRoutes.kt", "kind": "route", "symbol": "GET /health", "qualifiedName": "route:GET /health:Application.configureRouting", "startLine": 12, "endLine": 14, "isTest": false, "docComment": false, "routes": [{ "method": "GET", "path": "/health", "handler": "Application.configureRouting" }] },
+    { "path": "kotlin/KtorRoutes.kt", "kind": "route", "symbol": "GET /orders/{id}", "qualifiedName": "route:GET /orders/{id}:Application.configureRouting", "startLine": 16, "endLine": 18, "isTest": false, "docComment": false, "routes": [{ "method": "GET", "path": "/orders/{id}", "handler": "Application.configureRouting" }] },
+    { "path": "kotlin/Masking.kt", "kind": "function", "symbol": "visibleAfterTemplates", "qualifiedName": "com.acme.orders.masking.visibleAfterTemplates", "startLine": 11, "endLine": 13, "isTest": false, "docComment": false },
+    { "path": "kotlin/Masking.kt", "kind": "function", "symbol": "slugify", "qualifiedName": "String.slugify", "startLine": 15, "endLine": 15, "isTest": false, "docComment": false },
+    { "path": "kotlin/Masking.kt", "kind": "function", "symbol": "standalone", "qualifiedName": "com.acme.orders.masking.standalone", "startLine": 16, "endLine": 16, "isTest": false, "docComment": false },
+    { "path": "kotlin/OrderController.kt", "kind": "class", "symbol": "OrderRepository", "qualifiedName": "com.acme.orders.api.OrderRepository", "startLine": 11, "endLine": 14, "isTest": false, "docComment": false },
+    { "path": "kotlin/OrderController.kt", "kind": "class", "symbol": "OrderController", "qualifiedName": "com.acme.orders.api.OrderController", "startLine": 19, "endLine": 41, "isTest": false, "docComment": true, "configKeys": ["orders.region"] },
+    { "path": "kotlin/OrderController.kt", "kind": "class", "symbol": "Companion", "qualifiedName": "com.acme.orders.api.OrderController.Companion", "startLine": 23, "endLine": 25, "isTest": false, "docComment": false },
+    { "path": "kotlin/OrderController.kt", "kind": "method", "symbol": "deploymentRegion", "qualifiedName": "com.acme.orders.api.OrderController.deploymentRegion", "startLine": 27, "endLine": 28, "isTest": false, "docComment": false },
+    { "path": "kotlin/OrderController.kt", "kind": "method", "symbol": "load", "qualifiedName": "com.acme.orders.api.OrderController.load", "startLine": 32, "endLine": 34, "isTest": false, "docComment": true },
+    { "path": "kotlin/OrderController.kt", "kind": "route", "symbol": "GET /orders/{id}", "qualifiedName": "route:GET /orders/{id}:com.acme.orders.api.OrderController.load", "startLine": 32, "endLine": 34, "isTest": false, "docComment": true, "routes": [{ "method": "GET", "path": "/orders/{id}", "handler": "com.acme.orders.api.OrderController.load" }] },
+    { "path": "kotlin/OrderController.kt", "kind": "method", "symbol": "create", "qualifiedName": "com.acme.orders.api.OrderController.create", "startLine": 38, "endLine": 40, "isTest": false, "docComment": true },
+    { "path": "kotlin/OrderController.kt", "kind": "route", "symbol": "POST /orders", "qualifiedName": "route:POST /orders:com.acme.orders.api.OrderController.create", "startLine": 38, "endLine": 40, "isTest": false, "docComment": true, "routes": [{ "method": "POST", "path": "/orders", "handler": "com.acme.orders.api.OrderController.create" }] },
+    { "path": "kotlin/OrderController.kt", "kind": "function", "symbol": "configuredRegion", "qualifiedName": "com.acme.orders.api.configuredRegion", "startLine": 43, "endLine": 43, "isTest": false, "docComment": false, "configKeys": ["ORDERS_REGION"] },
+    { "path": "kotlin/OrderModels.kt", "kind": "class", "symbol": "OrderId", "qualifiedName": "com.acme.orders.domain.OrderId", "startLine": 8, "endLine": 8, "isTest": false, "docComment": true },
+    { "path": "kotlin/OrderModels.kt", "kind": "class", "symbol": "Order", "qualifiedName": "com.acme.orders.domain.Order", "startLine": 11, "endLine": 11, "isTest": false, "docComment": true },
+    { "path": "kotlin/OrderModels.kt", "kind": "class", "symbol": "OrderState", "qualifiedName": "com.acme.orders.domain.OrderState", "startLine": 14, "endLine": 20, "isTest": false, "docComment": true },
+    { "path": "kotlin/OrderModels.kt", "kind": "class", "symbol": "Draft", "qualifiedName": "com.acme.orders.domain.OrderState.Draft", "startLine": 15, "endLine": 17, "isTest": false, "docComment": false },
+    { "path": "kotlin/OrderModels.kt", "kind": "method", "symbol": "displayName", "qualifiedName": "com.acme.orders.domain.OrderState.Draft.displayName", "startLine": 16, "endLine": 16, "isTest": false, "docComment": false },
+    { "path": "kotlin/OrderModels.kt", "kind": "class", "symbol": "Accepted", "qualifiedName": "com.acme.orders.domain.OrderState.Accepted", "startLine": 19, "endLine": 19, "isTest": false, "docComment": false },
+    { "path": "kotlin/OrderModels.kt", "kind": "class", "symbol": "PricingRules", "qualifiedName": "com.acme.orders.domain.PricingRules", "startLine": 23, "endLine": 27, "isTest": false, "docComment": true },
+    { "path": "kotlin/OrderModels.kt", "kind": "method", "symbol": "rounded", "qualifiedName": "com.acme.orders.domain.PricingRules.rounded", "startLine": 24, "endLine": 26, "isTest": false, "docComment": false },
+    { "path": "kotlin/OrderModels.kt", "kind": "function", "symbol": "totalWithTax", "qualifiedName": "Order.totalWithTax", "startLine": 30, "endLine": 33, "isTest": false, "docComment": true, "definition": "fun Order.totalWithTax(rate: BigDecimal): BigDecimal {" },
+    { "path": "kotlin/OrderServiceTest.kt", "kind": "class", "symbol": "OrderServiceTest", "qualifiedName": "com.acme.orders.OrderServiceTest", "startLine": 6, "endLine": 11, "isTest": true, "docComment": false },
+    { "path": "kotlin/OrderServiceTest.kt", "kind": "test", "symbol": "loadsExistingOrder", "qualifiedName": "com.acme.orders.OrderServiceTest.loadsExistingOrder", "startLine": 8, "endLine": 10, "isTest": true, "docComment": false },
+    { "path": "kotlin/OrderServiceTest.kt", "kind": "class", "symbol": "PricingSpec", "qualifiedName": "com.acme.orders.PricingSpec", "startLine": 13, "endLine": 17, "isTest": true, "docComment": false }
+  ]
+}
