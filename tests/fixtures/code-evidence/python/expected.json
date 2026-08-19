@@ -1,0 +1,58 @@
+{
+  "language": "python",
+  "knownGaps": [
+    "lambda, exec/dynamic definitions, indirect or qualified decorator-generated routes, metaclass-generated members, and notebooks are intentionally skipped",
+    "calls inside f-string interpolations are intentionally masked in v1",
+    "line-count-changing formatting reflows remain drift because anchors are line-based"
+  ],
+  "symbols": [
+    { "path": "python/contracts.pyi", "kind": "class", "symbol": "OrderRepository", "qualifiedName": "OrderRepository", "startLine": 7, "endLine": 11, "isTest": false, "docComment": true, "imports": ["collections.abc", "typing"] },
+    { "path": "python/contracts.pyi", "kind": "method", "symbol": "save", "qualifiedName": "OrderRepository.save", "startLine": 10, "endLine": 10, "isTest": false, "docComment": false },
+    { "path": "python/contracts.pyi", "kind": "method", "symbol": "load", "qualifiedName": "OrderRepository.load", "startLine": 11, "endLine": 11, "isTest": false, "docComment": false },
+    { "path": "python/contracts.pyi", "kind": "function", "symbol": "with_transaction", "qualifiedName": "with_transaction", "startLine": 14, "endLine": 16, "isTest": false, "docComment": false, "definition": "def with_transaction( callback: Callable[[OrderRepository], Awaitable[None]], ) -> Awaitable[None]: ..." },
+
+    { "path": "python/flask_app.py", "kind": "function", "symbol": "health", "qualifiedName": "health", "startLine": 9, "endLine": 12, "isTest": false, "docComment": true, "routes": [{ "method": "GET", "path": "/health", "handler": "health" }] },
+    { "path": "python/flask_app.py", "kind": "route", "symbol": "GET /health", "qualifiedName": "route:GET /health:health", "startLine": 9, "endLine": 12, "isTest": false, "docComment": true, "routes": [{ "method": "GET", "path": "/health", "handler": "health" }] },
+    { "path": "python/flask_app.py", "kind": "function", "symbol": "administer_orders", "qualifiedName": "administer_orders", "startLine": 15, "endLine": 19, "isTest": false, "docComment": false, "configKeys": ["ORDER_QUEUE"], "routes": [{ "method": "DELETE", "path": "/admin/orders", "handler": "administer_orders" }, { "method": "GET", "path": "/admin/orders", "handler": "administer_orders" }] },
+    { "path": "python/flask_app.py", "kind": "route", "symbol": "DELETE /admin/orders", "qualifiedName": "route:DELETE /admin/orders:administer_orders", "startLine": 15, "endLine": 19, "isTest": false, "docComment": false, "configKeys": ["ORDER_QUEUE"], "routes": [{ "method": "DELETE", "path": "/admin/orders", "handler": "administer_orders" }] },
+    { "path": "python/flask_app.py", "kind": "route", "symbol": "GET /admin/orders", "qualifiedName": "route:GET /admin/orders:administer_orders", "startLine": 15, "endLine": 19, "isTest": false, "docComment": false, "configKeys": ["ORDER_QUEUE"], "routes": [{ "method": "GET", "path": "/admin/orders", "handler": "administer_orders" }] },
+    { "path": "python/flask_app.py", "kind": "function", "symbol": "create_blueprint_order", "qualifiedName": "create_blueprint_order", "startLine": 25, "endLine": 28, "isTest": false, "docComment": true, "routes": [{ "method": "POST", "path": "/blueprint/orders", "handler": "create_blueprint_order" }] },
+    { "path": "python/flask_app.py", "kind": "route", "symbol": "POST /blueprint/orders", "qualifiedName": "route:POST /blueprint/orders:create_blueprint_order", "startLine": 25, "endLine": 28, "isTest": false, "docComment": true, "routes": [{ "method": "POST", "path": "/blueprint/orders", "handler": "create_blueprint_order" }] },
+
+    { "path": "python/models.py", "kind": "class", "symbol": "Base", "qualifiedName": "Base", "startLine": 16, "endLine": 17, "isTest": false, "docComment": false },
+    { "path": "python/models.py", "kind": "class", "symbol": "OrderRecord", "qualifiedName": "OrderRecord", "startLine": 20, "endLine": 27, "isTest": false, "docComment": true, "configKeys": ["DEFAULT_TENANT"], "databaseRefs": ["orders"] },
+    { "path": "python/models.py", "kind": "method", "symbol": "tenant", "qualifiedName": "OrderRecord.tenant", "startLine": 26, "endLine": 27, "isTest": false, "docComment": false, "configKeys": ["DEFAULT_TENANT"] },
+    { "path": "python/models.py", "kind": "class", "symbol": "Shipment", "qualifiedName": "Shipment", "startLine": 30, "endLine": 40, "isTest": false, "docComment": true, "databaseRefs": ["shipments"] },
+    { "path": "python/models.py", "kind": "class", "symbol": "Meta", "qualifiedName": "Shipment.Meta", "startLine": 35, "endLine": 36, "isTest": false, "docComment": false, "databaseRefs": ["shipments"] },
+    { "path": "python/models.py", "kind": "method", "symbol": "describe", "qualifiedName": "Shipment.describe", "startLine": 38, "endLine": 40, "isTest": false, "docComment": false, "databaseRefs": ["shipments"] },
+
+    { "path": "python/order_service.py", "kind": "class", "symbol": "OrderService", "qualifiedName": "OrderService", "startLine": 12, "endLine": 49, "isTest": false, "docComment": true, "imports": ["collections.abc", "fastapi", "os", "sqlalchemy"] },
+    { "path": "python/order_service.py", "kind": "method", "symbol": "__init__", "qualifiedName": "OrderService.__init__", "startLine": 17, "endLine": 19, "isTest": false, "docComment": false },
+    { "path": "python/order_service.py", "kind": "method", "symbol": "place", "qualifiedName": "OrderService.place", "startLine": 21, "endLine": 35, "isTest": false, "docComment": true, "definition": "async def place( self, order_id: str, *, validate: bool = True, ) -> dict[str, str]:", "routes": [{ "method": "POST", "path": "/orders", "handler": "OrderService.place" }] },
+    { "path": "python/order_service.py", "kind": "route", "symbol": "POST /orders", "qualifiedName": "route:POST /orders:OrderService.place", "startLine": 21, "endLine": 35, "isTest": false, "docComment": true, "routes": [{ "method": "POST", "path": "/orders", "handler": "OrderService.place" }] },
+    { "path": "python/order_service.py", "kind": "method", "symbol": "_validator", "qualifiedName": "OrderService._validator", "startLine": 37, "endLine": 43, "isTest": false, "docComment": false },
+    { "path": "python/order_service.py", "kind": "function", "symbol": "validate_order", "qualifiedName": "OrderService._validator.validate_order", "startLine": 39, "endLine": 41, "isTest": false, "docComment": true },
+    { "path": "python/order_service.py", "kind": "class", "symbol": "Metrics", "qualifiedName": "OrderService.Metrics", "startLine": 45, "endLine": 49, "isTest": false, "docComment": true },
+    { "path": "python/order_service.py", "kind": "method", "symbol": "increment", "qualifiedName": "OrderService.Metrics.increment", "startLine": 48, "endLine": 49, "isTest": false, "docComment": false, "calls": ["print"] },
+    { "path": "python/order_service.py", "kind": "function", "symbol": "load_order", "qualifiedName": "load_order", "startLine": 52, "endLine": 56, "isTest": false, "docComment": true, "databaseRefs": ["orders"], "routes": [{ "method": "GET", "path": "/orders/{order_id}", "handler": "load_order" }] },
+    { "path": "python/order_service.py", "kind": "route", "symbol": "GET /orders/{order_id}", "qualifiedName": "route:GET /orders/{order_id}:load_order", "startLine": 52, "endLine": 56, "isTest": false, "docComment": true, "routes": [{ "method": "GET", "path": "/orders/{order_id}", "handler": "load_order" }] },
+    { "path": "python/order_service.py", "kind": "function", "symbol": "build_label", "qualifiedName": "build_label", "startLine": 59, "endLine": 65, "isTest": false, "docComment": false, "calls": [] },
+
+    { "path": "python/strings_and_indentation.py", "kind": "class", "symbol": "TabIndented", "qualifiedName": "TabIndented", "startLine": 10, "endLine": 20, "isTest": false, "docComment": true },
+    { "path": "python/strings_and_indentation.py", "kind": "method", "symbol": "calculate", "qualifiedName": "TabIndented.calculate", "startLine": 13, "endLine": 20, "isTest": false, "docComment": false, "definition": "def calculate( self, values: list[int], ) -> int:" },
+    { "path": "python/strings_and_indentation.py", "kind": "class", "symbol": "SpaceIndented", "qualifiedName": "SpaceIndented", "startLine": 23, "endLine": 34, "isTest": false, "docComment": false },
+    { "path": "python/strings_and_indentation.py", "kind": "method", "symbol": "visible", "qualifiedName": "SpaceIndented.visible", "startLine": 25, "endLine": 34, "isTest": false, "docComment": true },
+    { "path": "python/strings_and_indentation.py", "kind": "function", "symbol": "testimonial_view", "qualifiedName": "testimonial_view", "startLine": 37, "endLine": 38, "isTest": false, "docComment": false },
+    { "path": "python/strings_and_indentation.py", "kind": "function", "symbol": "inline_documented", "qualifiedName": "inline_documented", "startLine": 41, "endLine": 41, "isTest": false, "docComment": true },
+
+    { "path": "python/test_order_service.py", "kind": "test", "symbol": "repository", "qualifiedName": "repository", "startLine": 8, "endLine": 10, "isTest": true, "docComment": false },
+    { "path": "python/test_order_service.py", "kind": "test", "symbol": "test_places_order", "qualifiedName": "test_places_order", "startLine": 13, "endLine": 17, "isTest": true, "docComment": false },
+    { "path": "python/test_order_service.py", "kind": "class", "symbol": "OrderServiceTests", "qualifiedName": "OrderServiceTests", "startLine": 20, "endLine": 27, "isTest": true, "docComment": true },
+    { "path": "python/test_order_service.py", "kind": "method", "symbol": "setUp", "qualifiedName": "OrderServiceTests.setUp", "startLine": 23, "endLine": 24, "isTest": true, "docComment": false },
+    { "path": "python/test_order_service.py", "kind": "method", "symbol": "test_loads_order", "qualifiedName": "OrderServiceTests.test_loads_order", "startLine": 26, "endLine": 27, "isTest": true, "docComment": false },
+    { "path": "python/test_order_service.py", "kind": "test", "symbol": "helper_for_tests", "qualifiedName": "helper_for_tests", "startLine": 30, "endLine": 31, "isTest": true, "docComment": false },
+
+    { "path": "python/urls.py", "kind": "route", "symbol": "ANY /orders/", "qualifiedName": "route:ANY /orders/:views.list_orders", "startLine": 7, "endLine": 7, "isTest": false, "docComment": false, "routes": [{ "method": "ANY", "path": "/orders/", "handler": "views.list_orders" }] },
+    { "path": "python/urls.py", "kind": "route", "symbol": "ANY /^orders/(?P<order_id>[0-9]+)/$", "qualifiedName": "route:ANY /^orders/(?P<order_id>[0-9]+)/$:views.order_detail", "startLine": 8, "endLine": 8, "isTest": false, "docComment": false, "routes": [{ "method": "ANY", "path": "/^orders/(?P<order_id>[0-9]+)/$", "handler": "views.order_detail" }] }
+  ]
+}

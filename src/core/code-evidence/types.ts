@@ -8,6 +8,7 @@ export const RUST_ADAPTER_VERSION = "rust-deterministic-v1";
 export const PHP_ADAPTER_VERSION = "php-deterministic-v1";
 export const C_ADAPTER_VERSION = "c-deterministic-v2";
 export const CPP_ADAPTER_VERSION = "cpp-deterministic-v2";
+export const PYTHON_ADAPTER_VERSION = "python-deterministic-v1";
 
 export type CodeFragmentKind =
   | "module"

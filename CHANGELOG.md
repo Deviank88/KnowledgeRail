@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-08-19
+
+### Added
+
+- Added the dependency-free `python-deterministic-v1` adapter for `.py` and `.pyi`, with logical-line and indentation-aware ranges, nested qualified names, block and one-line docstrings, bounded `test_` conventions, decorators, FastAPI/Flask Blueprint/Django routes, imports, calls, configuration keys, and database references.
+- Added an offset-, UTF-8-width-, and newline-preserving Python masker for comments, prefixed strings, triple strings, and nested-quote f-strings, plus bounded adversarial tests for deep continuations and large string bodies.
+- Expanded the pinned extraction corpus to 32 labeled files, 1,082 lines, and 144 symbols across nine adapters; baseline v3 now validates optional route, definition, import, call, configuration, and database metadata as well as symbol ranges.
+- Extended the drift fixture to 42 cases with unchanged, formatting-only, substantive-change, and parser-upgrade verdicts for decorated Python anchors.
+
+### Changed
+
+- The default code-evidence registry now claims `.py` and `.pyi` exclusively for Python; a parser upgrade reparses only those files while reusing every existing adapter record.
+- Documented the line-based drift boundary explicitly: trailing-whitespace changes remain fresh, while reflows that add or remove lines remain drift because they move the cited range.
+
 ## [2.3.0] - 2026-08-19
 
 ### Added
@@ -174,7 +188,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Initial local-first MCP server with persistent evidence-backed knowledge, bounded retrieval, document workflows, and eight public `knowledge_*` tools.
 - Multi-workspace loopback HTTP gateway, opaque per-chat bindings, desktop adapter, and portable npm/npx distribution.
 
-[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.2.1...v2.3.0
 [2.2.1]: https://github.com/Deviank88/KnowledgeRail/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.1.0...v2.2.0

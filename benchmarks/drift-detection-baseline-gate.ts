@@ -21,7 +21,7 @@ interface DriftBaseline {
 }
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_BASELINE = path.join(HERE, "fixtures", "drift-detection-baseline-v4.json");
+const DEFAULT_BASELINE = path.join(HERE, "fixtures", "drift-detection-baseline-v5.json");
 
 function argValue(name: string): string | undefined {
   const prefix = `--${name}=`;

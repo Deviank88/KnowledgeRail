@@ -13,6 +13,7 @@ import { maskBraceLanguage } from "../src/core/code-evidence/brace-language-engi
 import { codeAnchorHash } from "../src/core/code-evidence/code-anchor.js";
 import { PersistentCodeEvidenceIndex } from "../src/core/code-evidence/index.js";
 import { CppKnowledgeAdapter, JavaKnowledgeAdapter } from "../src/core/code-evidence/language-adapters.js";
+import { PythonKnowledgeAdapter } from "../src/core/code-evidence/python-adapter.js";
 import { codeGrepFallbackDemand, recordCodeGrepFallback } from "../src/core/code-evidence/telemetry.js";
 import { TypeScriptKnowledgeAdapter } from "../src/core/code-evidence/typescript-adapter.js";
 import {
@@ -20,6 +21,7 @@ import {
   CPP_ADAPTER_VERSION,
   JAVA_ADAPTER_VERSION,
   PHP_ADAPTER_VERSION,
+  PYTHON_ADAPTER_VERSION,
   type CodeAnchor,
   type KnowledgeAdapter,
 } from "../src/core/code-evidence/types.js";
@@ -47,10 +49,10 @@ test("the default registry indexes a mixed-language repository in one pass", asy
     const report = await index.rebuild();
     const snapshot = await index.snapshot();
     assert.equal(snapshot.version, CODE_EVIDENCE_INDEX_VERSION);
-    assert.equal(snapshot.adapters.length, 9);
-    assert.equal(report.scannedFiles, 27);
-    assert.equal(report.reparsedFiles, 27);
-    assert.equal(snapshot.files.length, 27);
+    assert.equal(snapshot.adapters.length, 10);
+    assert.equal(report.scannedFiles, 34);
+    assert.equal(report.reparsedFiles, 34);
+    assert.equal(snapshot.files.length, 34);
     assert.equal(snapshot.files.filter((file) => file.path.endsWith(".h"))[0]?.parserVersion, CPP_ADAPTER_VERSION);
     assert.equal(snapshot.files.filter((file) => file.path.endsWith(".php"))[0]?.parserVersion, PHP_ADAPTER_VERSION);
 
@@ -65,6 +67,7 @@ test("the default registry indexes a mixed-language repository in one pass", asy
       ["sum", "c/math.c"],
       ["add", "cpp/calculator.cpp"],
       ["OrderCard", "lwc/orderCard.js"],
+      ["load_order", "python/order_service.py"],
     ];
     for (const [symbol, expectedPath] of expected) {
       assert.equal((await index.symbol(symbol, { maxResults: 20 })).some((hit) =>
@@ -78,6 +81,7 @@ test("the default registry indexes a mixed-language repository in one pass", asy
       ["math.Calculator.add", "math::Calculator::add"],
       ["App.Orders.OrderController.show", "App\\Orders\\OrderController::show"],
       ["OrderController->show", "App\\Orders\\OrderController::show"],
+      ["OrderService#place", "OrderService.place"],
     ];
     for (const [query, qualifiedName] of qualifiedAliases) {
       assert.equal((await index.symbol(query, { maxResults: 20 })).some((hit) =>
@@ -132,10 +136,11 @@ test("the default registry indexes a mixed-language repository in one pass", asy
   });
 });
 
-test("adapter claims are exclusive and headers resolve to the C++ superset", () => {
+test("adapter claims are exclusive and language extensions resolve to one owner", () => {
   const registry = createDefaultKnowledgeAdapterRegistry();
   assert.equal(registry.resolve({ path: "include/orders.h" })?.parserVersion, CPP_ADAPTER_VERSION);
-  assert.equal(registry.resolve({ path: "scripts/orders.py" }), undefined);
+  assert.equal(registry.resolve({ path: "scripts/orders.py" })?.parserVersion, PYTHON_ADAPTER_VERSION);
+  assert.equal(registry.resolve({ path: "stubs/orders.pyi" })?.parserVersion, PYTHON_ADAPTER_VERSION);
   assert.equal(registry.resolve({ path: "templates/orders.blade.php" }), undefined);
   assert.throws(() => new KnowledgeAdapterRegistry([
     { adapter: new TypeScriptKnowledgeAdapter(), extensionClaims: [".ts"] },
@@ -223,6 +228,7 @@ test("C# interpolation expressions may contain nested quoted strings without des
 test("default parser resolution reuses the memoized registry across anchor-sized workloads", () => {
   for (let index = 0; index < 1_000; index++) {
     assert.equal(defaultParserVersionForPath(`src/order-${index}.cpp`), CPP_ADAPTER_VERSION);
+    assert.equal(defaultParserVersionForPath(`src/order-${index}.py`), PYTHON_ADAPTER_VERSION);
   }
 });
 
@@ -267,6 +273,53 @@ test("changing one adapter version reparses only files claimed by that adapter",
       before.fragments.filter((fragment) => fragment.path.endsWith("service.ts"))
     );
     assert.equal(after.files.find((file) => file.path.endsWith("Service.java"))?.parserVersion, "java-deterministic-v2");
+  });
+});
+
+test("a Python parser upgrade reparses only .py and .pyi files", async () => {
+  await withTemporaryRoot("knowledge-rail-python-adapter-isolation-", async (root, wikiRoot) => {
+    await fs.mkdir(path.join(root, "src"), { recursive: true });
+    await Promise.all([
+      fs.writeFile(path.join(root, "src/service.ts"), "export function stableTs() { return 1; }\n", "utf8"),
+      fs.writeFile(path.join(root, "src/service.py"), "def python_service():\n    return 1\n", "utf8"),
+      fs.writeFile(path.join(root, "src/service.pyi"), "def typed_service() -> int: ...\n", "utf8"),
+    ]);
+    const initialRegistry = new KnowledgeAdapterRegistry([
+      new TypeScriptKnowledgeAdapter(),
+      new PythonKnowledgeAdapter(),
+    ]);
+    const initialIndex = new PersistentCodeEvidenceIndex({ repositoryRoot: root, wikiRoot, registry: initialRegistry });
+    await initialIndex.rebuild();
+    const before = await initialIndex.snapshot();
+    const python = new PythonKnowledgeAdapter();
+    const pythonV2: KnowledgeAdapter & { extensionClaims: readonly string[] } = {
+      parserVersion: "python-deterministic-v2",
+      extensionClaims: python.extensionClaims,
+      supports: (source) => python.supports(source),
+      extract: (source) => python.extract(source),
+    };
+    const changedIndex = new PersistentCodeEvidenceIndex({
+      repositoryRoot: root,
+      wikiRoot,
+      registry: new KnowledgeAdapterRegistry([new TypeScriptKnowledgeAdapter(), pythonV2]),
+    });
+    const update = await changedIndex.rebuild();
+    const after = await changedIndex.snapshot();
+    assert.deepEqual(
+      { reused: update.reusedFiles, reparsed: update.reparsedFiles },
+      { reused: 1, reparsed: 2 }
+    );
+    assert.deepEqual(
+      after.files.find((file) => file.path.endsWith("service.ts")),
+      before.files.find((file) => file.path.endsWith("service.ts"))
+    );
+    assert.deepEqual(
+      after.fragments.filter((fragment) => fragment.path.endsWith("service.ts")),
+      before.fragments.filter((fragment) => fragment.path.endsWith("service.ts"))
+    );
+    assert.equal(after.files.filter((file) => /\.pyi?$/u.test(file.path)).every((file) =>
+      file.parserVersion === "python-deterministic-v2"
+    ), true);
   });
 });
 
