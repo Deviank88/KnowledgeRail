@@ -25,6 +25,16 @@ interface DriftScenario {
 
 interface DriftFixture {
   version: number;
+  languageCases?: Array<{
+    id: string;
+    path: string;
+    capturedContent: string;
+    changedContent: string;
+    startLine: number;
+    endLine: number;
+    parserVersion: string;
+    upgradedParserVersion: string;
+  }>;
   scenarios: DriftScenario[];
 }
 
@@ -79,7 +89,52 @@ export async function evaluateDriftDetection(
   fixturePath = DEFAULT_DRIFT_FIXTURE
 ): Promise<DriftEvaluationReport> {
   const fixture = JSON.parse(await fs.readFile(fixturePath, "utf8")) as DriftFixture;
-  const results = fixture.scenarios.map((scenario): DriftScenarioResult => {
+  const languageScenarios = (fixture.languageCases ?? []).flatMap((item): DriftScenario[] => {
+    const formattingContent = item.capturedContent.split("\n")
+      .map((line) => line ? `${line}   ` : line)
+      .join("\n");
+    const common = {
+      path: item.path,
+      capturedContent: item.capturedContent,
+      startLine: item.startLine,
+      endLine: item.endLine,
+      anchorParserVersion: item.parserVersion,
+    };
+    return [
+      {
+        ...common,
+        id: `${item.id}:unchanged`,
+        currentContent: item.capturedContent,
+        currentParserVersion: item.parserVersion,
+        expectedVerdict: "fresh",
+      },
+      {
+        ...common,
+        id: `${item.id}:formatting`,
+        currentContent: formattingContent,
+        currentParserVersion: item.parserVersion,
+        expectedVerdict: "fresh",
+      },
+      {
+        ...common,
+        id: `${item.id}:content-change`,
+        currentContent: item.changedContent,
+        currentParserVersion: item.parserVersion,
+        expectedVerdict: "drift_suspected",
+        expectedReason: "content_changed",
+      },
+      {
+        ...common,
+        id: `${item.id}:parser-upgrade`,
+        currentContent: item.capturedContent,
+        currentParserVersion: item.upgradedParserVersion,
+        expectedVerdict: "fresh",
+        expectedReason: "parser_version_changed",
+      },
+    ];
+  });
+  const scenarios = [...languageScenarios, ...fixture.scenarios];
+  const results = scenarios.map((scenario): DriftScenarioResult => {
     const actual = evaluateCodeAnchor({
       anchor: anchorFor(scenario),
       content: scenario.currentContent,
@@ -100,7 +155,7 @@ export async function evaluateDriftDetection(
   const silentMisses = expectedDrift.filter((result) => result.actualVerdict === "fresh").length;
 
   const scaleAnchors = Array.from({ length: 1_000 }, (_, index) => {
-    const scenario = fixture.scenarios[index % fixture.scenarios.length]!;
+    const scenario = scenarios[index % scenarios.length]!;
     return {
       anchor: { ...anchorFor(scenario), path: `src/${index < 100 ? "scoped" : "other"}/file-${index}.ts` },
       scenario,

@@ -299,7 +299,7 @@ test("code anchors detect substantive drift without formatting false positives",
     const parserOnly = evaluateCodeAnchor({
       anchor: fixture.anchor,
       content: fixture.serviceContent,
-      parserVersion: "typescript-javascript-deterministic-v2",
+      parserVersion: "typescript-javascript-deterministic-v3",
     });
     assert.deepEqual(parserOnly, {
       verdict: "fresh",

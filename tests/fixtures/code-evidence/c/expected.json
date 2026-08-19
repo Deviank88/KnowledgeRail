@@ -1,0 +1,12 @@
+{
+  "language": "c",
+  "knownGaps": ["K&R definitions and macro-generated declarations are intentionally skipped"],
+  "symbols": [
+    { "path": "c/math.c", "kind": "function", "symbol": "sum", "qualifiedName": "sum", "startLine": 4, "endLine": 6, "isTest": false, "docComment": true },
+    { "path": "c/order_store.c", "kind": "function", "symbol": "ensure_capacity", "qualifiedName": "ensure_capacity", "startLine": 18, "endLine": 36, "isTest": false, "docComment": false },
+    { "path": "c/order_store.c", "kind": "function", "symbol": "order_store_init", "qualifiedName": "order_store_init", "startLine": 39, "endLine": 45, "isTest": false, "docComment": true },
+    { "path": "c/order_store.c", "kind": "function", "symbol": "order_store_append", "qualifiedName": "order_store_append", "startLine": 48, "endLine": 58, "isTest": false, "docComment": true },
+    { "path": "c/order_store.c", "kind": "function", "symbol": "order_store_find", "qualifiedName": "order_store_find", "startLine": 60, "endLine": 70, "isTest": false, "docComment": false },
+    { "path": "c/order_store.c", "kind": "function", "symbol": "order_store_dispose", "qualifiedName": "order_store_dispose", "startLine": 72, "endLine": 78, "isTest": false, "docComment": false }
+  ]
+}

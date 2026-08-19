@@ -1,0 +1,19 @@
+{
+  "language": "java",
+  "knownGaps": ["anonymous classes are intentionally skipped"],
+  "symbols": [
+    { "path": "java/OrderController.java", "kind": "class", "symbol": "OrderController", "qualifiedName": "com.acme.orders.OrderController", "startLine": 8, "endLine": 14, "isTest": false, "docComment": true },
+    { "path": "java/OrderController.java", "kind": "method", "symbol": "load", "qualifiedName": "com.acme.orders.OrderController#load", "startLine": 11, "endLine": 13, "isTest": false, "docComment": true },
+    { "path": "java/OrderController.java", "kind": "route", "symbol": "GET /orders/{id}", "qualifiedName": "route:GET /orders/{id}:com.acme.orders.OrderController#load", "startLine": 11, "endLine": 13, "isTest": false, "docComment": true },
+    { "path": "java/OrderControllerTest.java", "kind": "class", "symbol": "OrderControllerTest", "qualifiedName": "com.acme.orders.OrderControllerTest", "startLine": 5, "endLine": 10, "isTest": true, "docComment": false },
+    { "path": "java/OrderControllerTest.java", "kind": "method", "symbol": "loadsAnOrder", "qualifiedName": "com.acme.orders.OrderControllerTest#loadsAnOrder", "startLine": 7, "endLine": 9, "isTest": true, "docComment": false },
+    { "path": "java/OrderApplicationService.java", "kind": "class", "symbol": "OrderApplicationService", "qualifiedName": "com.acme.orders.application.OrderApplicationService", "startLine": 13, "endLine": 74, "isTest": false, "docComment": true },
+    { "path": "java/OrderApplicationService.java", "kind": "method", "symbol": "OrderApplicationService", "qualifiedName": "com.acme.orders.application.OrderApplicationService#OrderApplicationService", "startLine": 21, "endLine": 29, "isTest": false, "docComment": false },
+    { "path": "java/OrderApplicationService.java", "kind": "method", "symbol": "place", "qualifiedName": "com.acme.orders.application.OrderApplicationService#place", "startLine": 33, "endLine": 51, "isTest": false, "docComment": true },
+    { "path": "java/OrderApplicationService.java", "kind": "method", "symbol": "find", "qualifiedName": "com.acme.orders.application.OrderApplicationService#find", "startLine": 53, "endLine": 58, "isTest": false, "docComment": false },
+    { "path": "java/OrderApplicationService.java", "kind": "method", "symbol": "validate", "qualifiedName": "com.acme.orders.application.OrderApplicationService#validate", "startLine": 60, "endLine": 67, "isTest": false, "docComment": false },
+    { "path": "java/OrderApplicationService.java", "kind": "method", "symbol": "publish", "qualifiedName": "com.acme.orders.application.OrderApplicationService#publish", "startLine": 69, "endLine": 73, "isTest": false, "docComment": false },
+    { "path": "java/OrderApplicationService.java", "kind": "class", "symbol": "OrderState", "qualifiedName": "com.acme.orders.application.OrderState", "startLine": 76, "endLine": 84, "isTest": false, "docComment": false },
+    { "path": "java/OrderApplicationService.java", "kind": "method", "symbol": "terminal", "qualifiedName": "com.acme.orders.application.OrderState#terminal", "startLine": 81, "endLine": 83, "isTest": false, "docComment": false }
+  ]
+}

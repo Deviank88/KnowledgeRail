@@ -46,6 +46,9 @@ jobs:
       - name: Typecheck and tests
         run: npm run verify
 
+      - name: Cross-platform code-evidence extraction and drift gates
+        run: npm run eval:code-evidence:languages:gate && npm run eval:drift:gate
+
   installed-package:
     name: installed-package-${{ matrix.os }}-node-${{ matrix.node }}
     strategy:

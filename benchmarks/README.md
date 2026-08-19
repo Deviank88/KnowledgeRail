@@ -101,6 +101,17 @@ The gate pins the fixture digest, claim/event IDs and output page. It requires `
 
 ## Code-evidence drift detection
 
+The multi-language extraction corpus and its pinned gate run with:
+
+```bash
+npm run eval:code-evidence:languages
+npm run eval:code-evidence:languages:gate
+```
+
+It hand-labels 102 symbols in 25 real-world-shaped source files totaling 849 source lines across Java, Apex, C#, Go, Rust, PHP, C, and C++. The mixed-repository benchmark adds two LWC files, bringing that tree to 27 files and 866 lines. The baseline separately pins both sets of file, line, and byte counts, the label count, and the corpus digest, then requires at least 0.95 precision and 0.90 recall per language. Adversarial masks cover text blocks, C# interpolations containing nested quoted expressions, raw/verbatim strings, Rust nested comments and lifetimes, PHP HTML interleaving and heredoc, and C/C++ macro/raw-string cases. C/C++ fixtures additionally pin access-label start lines, pointer-return functions, namespace-qualified free functions, and constructors. The mixed pass also pins file reuse after an unchanged rebuild.
+
+The resulting in-corpus score is a regression signal over reviewed labels, not evidence that a deterministic heuristic extractor recognizes every construct found in the language ecosystem. New syntax families and production misses should extend this corpus before parser changes are accepted; thresholds must not be weakened to absorb them.
+
 Run the deterministic drift scenarios and their CI gate:
 
 ```bash

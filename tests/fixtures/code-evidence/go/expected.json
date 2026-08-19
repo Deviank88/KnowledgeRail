@@ -1,0 +1,20 @@
+{
+  "language": "go",
+  "knownGaps": ["router registrations composed indirectly at runtime are intentionally skipped"],
+  "symbols": [
+    { "path": "go/server.go", "kind": "class", "symbol": "Server", "qualifiedName": "orders.Server", "startLine": 9, "endLine": 11, "isTest": false, "docComment": true },
+    { "path": "go/server.go", "kind": "method", "symbol": "Handle", "qualifiedName": "Server.Handle", "startLine": 14, "endLine": 17, "isTest": false, "docComment": true },
+    { "path": "go/server.go", "kind": "route", "symbol": "GET /orders/{id}", "qualifiedName": "route:GET /orders/{id}", "startLine": 15, "endLine": 15, "isTest": false, "docComment": false },
+    { "path": "go/server_test.go", "kind": "test", "symbol": "TestHandle", "qualifiedName": "orders.TestHandle", "startLine": 4, "endLine": 6, "isTest": true, "docComment": true },
+    { "path": "go/repository.go", "kind": "class", "symbol": "Store", "qualifiedName": "orders.Store", "startLine": 12, "endLine": 15, "isTest": false, "docComment": true },
+    { "path": "go/repository.go", "kind": "class", "symbol": "SQLStore", "qualifiedName": "orders.SQLStore", "startLine": 18, "endLine": 20, "isTest": false, "docComment": true },
+    { "path": "go/repository.go", "kind": "class", "symbol": "orderRow", "qualifiedName": "orders.orderRow", "startLine": 22, "endLine": 26, "isTest": false, "docComment": false },
+    { "path": "go/repository.go", "kind": "function", "symbol": "NewSQLStore", "qualifiedName": "orders.NewSQLStore", "startLine": 29, "endLine": 31, "isTest": false, "docComment": true },
+    { "path": "go/repository.go", "kind": "method", "symbol": "Find", "qualifiedName": "SQLStore.Find", "startLine": 34, "endLine": 49, "isTest": false, "docComment": true },
+    { "path": "go/repository.go", "kind": "method", "symbol": "Save", "qualifiedName": "SQLStore.Save", "startLine": 52, "endLine": 67, "isTest": false, "docComment": true },
+    { "path": "go/repository.go", "kind": "function", "symbol": "RegisterRoutes", "qualifiedName": "orders.RegisterRoutes", "startLine": 70, "endLine": 75, "isTest": false, "docComment": true },
+    { "path": "go/repository.go", "kind": "route", "symbol": "GET /orders/{id}", "qualifiedName": "route:GET /orders/{id}", "startLine": 72, "endLine": 72, "isTest": false, "docComment": false },
+    { "path": "go/repository.go", "kind": "route", "symbol": "POST /orders", "qualifiedName": "route:POST /orders", "startLine": 73, "endLine": 73, "isTest": false, "docComment": false },
+    { "path": "go/repository.go", "kind": "route", "symbol": "ANY /healthz", "qualifiedName": "route:ANY /healthz", "startLine": 74, "endLine": 74, "isTest": false, "docComment": false }
+  ]
+}

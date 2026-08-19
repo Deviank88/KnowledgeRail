@@ -1,11 +1,9 @@
 import { createHash } from "node:crypto";
+import { defaultParserVersionForPath } from "./adapter-registry.js";
 import { readCodeEvidenceSnapshot } from "./index.js";
 import { readConfinedRepositoryFile } from "./confined-reader.js";
 import { parseCodeResourceUri } from "./resource-uri.js";
-import {
-  TYPESCRIPT_ADAPTER_VERSION,
-  type CodeAnchor,
-} from "./types.js";
+import type { CodeAnchor } from "./types.js";
 
 export function normalizedCodeRange(lines: readonly string[]): string {
   return lines
@@ -36,12 +34,16 @@ export async function captureCodeAnchor(params: {
   capturedAt?: string;
 }): Promise<CodeAnchor> {
   const reference = parseCodeResourceUri(params.resourceUri, { allowWorkspaceBinding: false });
-  const snapshot = await readCodeEvidenceSnapshot(params.wikiRoot, TYPESCRIPT_ADAPTER_VERSION);
+  const snapshot = await readCodeEvidenceSnapshot(params.wikiRoot);
   const file = snapshot.files.find((candidate) => candidate.path === reference.path);
   const fragment = snapshot.fragments.find((candidate) =>
     candidate.id === reference.fragmentId && candidate.path === reference.path
   );
   if (!file || !fragment) throw new Error(`Code evidence target is not indexed: ${params.resourceUri}`);
+  const currentParserVersion = defaultParserVersionForPath(reference.path);
+  if (currentParserVersion && file.parserVersion !== currentParserVersion) {
+    throw new Error(`Code evidence parser changed for ${reference.path}; rebuild before capturing an anchor.`);
+  }
   const content = await readConfinedRepositoryFile({
     repositoryRoot: params.repositoryRoot,
     relativePath: reference.path,

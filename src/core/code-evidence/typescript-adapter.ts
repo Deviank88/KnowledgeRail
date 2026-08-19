@@ -8,9 +8,10 @@ import {
   type KnowledgeFragment,
 } from "./types.js";
 
-const CODE_EXTENSIONS = new Set([
+export const TYPESCRIPT_EXTENSION_CLAIMS = [
   ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs",
-]);
+  ".js-meta.xml",
+] as const;
 
 const KEYWORDS = new Set([
   "as", "async", "await", "break", "case", "catch", "class", "const", "continue",
@@ -41,9 +42,8 @@ interface Candidate {
   extraRoutes?: CodeRoute[];
 }
 
-function extension(path: string): string {
-  const dot = path.lastIndexOf(".");
-  return dot < 0 ? "" : path.slice(dot).toLowerCase();
+function isLwcMetadata(path: string): boolean {
+  return path.toLowerCase().endsWith(".js-meta.xml");
 }
 
 function lineNumberAt(content: string, offset: number): number {
@@ -245,6 +245,35 @@ function databaseRefsIn(content: string): string[] {
   return unique(refs);
 }
 
+function lwcExtrasIn(content: string): { references: string[]; calls: string[] } {
+  const references: string[] = [];
+  const calls: string[] = [];
+  for (const match of content.matchAll(/@(api|track|wire)\b(?:\s*\(\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?))?/g)) {
+    references.push(match[1]!);
+    if (match[2]) {
+      references.push(match[2], match[2].split(".").at(-1)!);
+      calls.push(match[2], match[2].split(".").at(-1)!);
+    }
+  }
+  return { references: unique(references), calls: unique(calls) };
+}
+
+function isLwcComponentSource(path: string, content: string, masked: string): boolean {
+  if (!path.toLowerCase().endsWith(".js")) return false;
+  for (const match of content.matchAll(/\bimport\s+[\s\S]*?\s+from\s+["']lwc["']/g)) {
+    const start = match.index ?? 0;
+    if (masked.slice(start, start + "import".length) === "import") return true;
+  }
+  return false;
+}
+
+function lwcTargetsIn(content: string): string[] {
+  const visible = content.replace(/<!--[\s\S]*?-->/gu, (comment) =>
+    comment.replace(/[^\r\n]/gu, " ")
+  );
+  return unique([...visible.matchAll(/<target>\s*([^<]+?)\s*<\/target>/gi)].map((match) => match[1]!));
+}
+
 function fragmentId(path: string, kind: CodeFragmentKind, qualifiedName: string, startLine: number): string {
   const digest = createHash("sha256")
     .update(`${path}\0${kind}\0${qualifiedName}\0${startLine}`)
@@ -352,17 +381,38 @@ function addTestCandidates(content: string, masked: string, path: string, candid
 
 export class TypeScriptKnowledgeAdapter implements KnowledgeAdapter {
   readonly parserVersion = TYPESCRIPT_ADAPTER_VERSION;
+  readonly extensionClaims = TYPESCRIPT_EXTENSION_CLAIMS;
 
   supports(source: Pick<CodeSource, "path">): boolean {
-    return CODE_EXTENSIONS.has(extension(source.path));
+    return this.extensionClaims.some((claim) => source.path.toLowerCase().endsWith(claim));
   }
 
   async extract(source: CodeSource): Promise<KnowledgeFragment[]> {
     if (!this.supports(source)) return [];
     const { content, path } = source;
+    if (isLwcMetadata(path)) {
+      const endLine = Math.max(1, content.split(/\r?\n/).length);
+      return [{
+        id: fragmentId(path, "module", path, 1),
+        path,
+        symbol: path,
+        qualifiedName: path,
+        kind: "module",
+        definition: `LWC metadata ${path}`,
+        range: { startLine: 1, endLine },
+        imports: [],
+        references: [],
+        calls: [],
+        routes: [],
+        configKeys: lwcTargetsIn(content),
+        databaseRefs: [],
+        isTest: false,
+      }];
+    }
     const masked = maskNonCode(content);
     const comments = commentsIn(content);
     const imports = importsIn(content);
+    const isLwcComponent = isLwcComponentSource(path, content, masked);
     const candidates: Candidate[] = [{
       kind: "module",
       symbol: path,
@@ -415,10 +465,12 @@ export class TypeScriptKnowledgeAdapter implements KnowledgeAdapter {
       const raw = content.slice(candidate.start, candidate.end);
       const code = masked.slice(candidate.start, candidate.end);
       const fragmentRoutes = candidate.extraRoutes ?? routesIn(raw).map((item) => item.route);
-      const calls = unique([...(candidate.extraCalls ?? []), ...callsIn(code)]);
+      const lwc = isLwcComponent ? lwcExtrasIn(code) : { references: [], calls: [] };
+      const calls = unique([...(candidate.extraCalls ?? []), ...callsIn(code), ...lwc.calls]);
       const references = unique([
         ...identifiersIn(code),
         ...imports.symbols,
+        ...lwc.references,
         ...calls.flatMap((call) => [call, call.split(".").at(-1)!]),
       ]).filter((identifier) => identifier !== candidate.symbol);
       const docComment = candidate.kind === "comment"

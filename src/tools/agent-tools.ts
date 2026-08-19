@@ -62,7 +62,7 @@ const RECOVERY_RESOLUTIONS = KNOWLEDGE_RECOVERY_RESOLUTIONS.filter(
 
 const ContextSchema = z.object({
   mode: z.enum(["task", "list", "search", "graph"]).default("task")
-    .describe("task=context/gaps; list=pages; search=passages; graph=relations/dependencies."),
+    .describe("task=evidence/gaps; list=pages; search=passages; graph=relations/dependencies."),
   intent: z.enum(["understand", "implement", "modify", "debug", "review", "document"]).default("understand"),
   objective: z.string().min(1).max(4_096).optional(),
   query: z.string().min(1).max(4_096).optional(),
@@ -128,7 +128,7 @@ const PageSchema = z.object({
 
 const FilesSchema = z.object({
   action: z.enum(["list", "read", "normalize"]).default("list")
-    .describe("list=sources; read=open; normalize=convert to Markdown."),
+    .describe("list=sources; read=open; normalize=Markdown."),
   category: z.enum(CATEGORY_ENUM).optional(),
   pattern: z.string().default("**/*"),
   path: z.string().optional(),
@@ -152,28 +152,28 @@ const IngestSchema = z.object({
     "report",
     "record_recovery",
     "resolve_recovery",
-  ]).describe("start=begin; next=segment; apply_claims=integrate; record_segment=classify; source_status=coverage; evidence_status=debt; finalize=close; report=drafts; record_recovery=track; resolve_recovery=resolve."),
-  normalized_filename: z.string().optional().describe("docs/normalized file."),
-  max_chars: z.number().int().positive().default(12_000).describe("Response limit."),
-  segment_max_chars: z.number().int().min(256).max(50_000).optional().describe("Start segment size."),
-  segment_id: z.string().optional().describe("ID from next."),
+  ]).describe("start=begin; next=segment; apply_claims=integrate claims; record_segment=classify; source_status=coverage; evidence_status=debt; finalize=close; report=drafts; record_recovery=track; resolve_recovery=resolve."),
+  normalized_filename: z.string().optional().describe("Normalized path."),
+  max_chars: z.number().int().positive().default(12_000).describe("Output limit."),
+  segment_max_chars: z.number().int().min(256).max(50_000).optional().describe("Segment size."),
+  segment_id: z.string().optional().describe("Next ID."),
   claims: z.array(z.record(z.string(), z.unknown())).min(1).optional()
-    .describe("Claim fields; optional target/relations."),
+    .describe("Claims; target/relations optional."),
   segment_status: z.enum(["irrelevant", "unresolved", "legacy_unverified"]).optional()
-    .describe("record_segment class."),
+    .describe("Segment class."),
   evidence_refs: z.array(z.string()).optional(),
   page_refs: z.array(z.string()).optional(),
-  reason: z.string().optional().describe("Classification reason."),
-  report_filename: z.string().optional().describe("docs/reports file."),
-  claim_ids: z.array(z.string()).optional().describe("Claim IDs filter."),
-  include_resolved: z.boolean().default(false).describe("Include resolved."),
+  reason: z.string().optional().describe("Reason."),
+  report_filename: z.string().optional().describe("Report path."),
+  claim_ids: z.array(z.string()).optional().describe("Claim filter."),
+  include_resolved: z.boolean().default(false).describe("With resolved."),
   total_evidence_used: z.number().int().nonnegative().optional(),
   recovery_events: z.array(z.record(z.string(), z.unknown())).max(100).optional()
-    .describe("Recovery fields; optional pages."),
-  recovery_event_id: z.string().optional().describe("Recovery event ID."),
-  recovery_resolution: z.enum(RECOVERY_RESOLUTIONS).optional().describe("Recovery disposition."),
-  recovery_page_refs: z.array(z.string().min(1)).max(50).optional().describe("Representing pages."),
-  recovery_reason: z.string().min(1).max(1_024).optional().describe("Resolution reason."),
+    .describe("Recovery events; pages optional."),
+  recovery_event_id: z.string().optional().describe("Recovery ID."),
+  recovery_resolution: z.enum(RECOVERY_RESOLUTIONS).optional().describe("Resolution."),
+  recovery_page_refs: z.array(z.string().min(1)).max(50).optional().describe("Page refs."),
+  recovery_reason: z.string().min(1).max(1_024).optional().describe("Reason."),
 }).superRefine((value, context) => {
   const sourceAction = [
     "start",
@@ -263,7 +263,7 @@ const DocumentContextSchema = z.object({
 
 const DocumentSchema = z.object({
   action: z.enum(["write", "review"])
-    .describe("write=save Markdown; review=terminal delivery-readiness check."),
+    .describe("write=save Markdown; review=delivery check."),
   filename: z.string().trim().min(4).max(255).regex(/^[^\r\n]+\.md$/i),
   document_type: z.string().trim().min(1).max(128).regex(/^[^\r\n]+$/),
   required_sections: z.array(
@@ -284,8 +284,8 @@ const DocumentSchema = z.object({
 });
 
 const AdminSchema = z.object({
-  action: z.enum(["init", "lint", "drift", "migrate"])
-    .describe("init=bootstrap; lint=broken links/orphans; drift=stale code; migrate=upgrade stored knowledge."),
+  action: z.enum(["init", "status", "lint", "drift", "migrate"])
+    .describe("init=bootstrap; status=code demand; lint=broken links/orphans; drift=code anchors; migrate=data."),
   force: z.boolean().default(false),
   include_orphans: z.boolean().default(true),
   include_missing: z.boolean().default(true),
@@ -539,7 +539,7 @@ export function registerAgentTools(
   };
 
   server.registerTool(AGENT_TOOL_NAMES.context, {
-    description: "Project evidence and gaps; page list/search; relation graph.",
+    description: "Evidence/gaps, pages, search, and graph.",
     inputSchema: schemas.context,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -631,7 +631,7 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.files, {
-    description: "Controlled source files: list, read or normalize to Markdown.",
+    description: "Source files: list, read, or normalize.",
     inputSchema: schemas.files,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
@@ -663,7 +663,7 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.ingest, {
-    description: "Source ingestion: claims, coverage, recovery and report drafts.",
+    description: "Ingest sources, claims, coverage, and recovery.",
     inputSchema: schemas.ingest,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
@@ -781,7 +781,7 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.code, {
-    description: "Code index, symbols, callers and raw fallback.",
+    description: "Code index, symbols, callers, and fallback.",
     inputSchema: schemas.code,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
@@ -817,7 +817,7 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.documentContext, {
-    description: "Plan any document profile or gather section evidence.",
+    description: "Plan documents or gather section evidence.",
     inputSchema: schemas.documentContext,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -845,7 +845,7 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.document, {
-    description: "Write or review an evidence-backed Markdown deliverable.",
+    description: "Write or review an evidence-backed document.",
     inputSchema: schemas.document,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
@@ -903,7 +903,7 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.admin, {
-    description: "Initialize, lint, check drift, or migrate.",
+    description: "Initialize, status, lint, drift, or migrate.",
     inputSchema: schemas.admin,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
@@ -914,6 +914,9 @@ export function registerAgentTools(
           tool: "knowledge_context", requiredArguments: ["mode", "objective"],
           suggestedArguments: { mode: "task" },
         });
+      }
+      if (args.action === "status") {
+        return withGuidance(await call("codeEvidence", { action: "status" }, context), "code_status_complete", null);
       }
       if (args.action === "lint") {
         return withGuidance(await call("lint", {

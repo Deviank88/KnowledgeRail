@@ -9,9 +9,15 @@ import { wikiMetaDir } from "../manifest-service.js";
 import { safeResolveWithin } from "../paths.js";
 import { tokenizeSearchText } from "../text-analysis.js";
 import { readFileSafe } from "../utils.js";
-import { TypeScriptKnowledgeAdapter } from "./typescript-adapter.js";
+import {
+  createDefaultKnowledgeAdapterRegistry,
+  KnowledgeAdapterRegistry,
+  sameAdapterRoster,
+  type AdapterRegistration,
+} from "./adapter-registry.js";
 import {
   CODE_EVIDENCE_INDEX_VERSION,
+  type CodeEvidenceAdapterRosterEntry,
   type CodeEvidenceFileRecord,
   type CodeEvidenceHit,
   type CodeEvidenceIndex,
@@ -28,7 +34,6 @@ const DEFAULT_MAX_RESULTS = 12;
 const MAX_RESULTS = 100;
 const MAX_CODE_FILE_BYTES = 2 * 1024 * 1024;
 const INDEX_FILE_NAME = "code-evidence-index.json";
-const CODE_GLOB = "**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}";
 const CODE_IGNORES = [
   ".git/**",
   ".agents/**",
@@ -56,10 +61,13 @@ function fingerprint(path: string, contentHash: string, parserVersion: string): 
   return sha256(`${path}\0${contentHash}\0${parserVersion}`);
 }
 
-function emptySnapshot(parserVersion: string): CodeEvidenceSnapshot {
+function emptySnapshot(adapters: readonly CodeEvidenceAdapterRosterEntry[]): CodeEvidenceSnapshot {
   return {
     version: CODE_EVIDENCE_INDEX_VERSION,
-    parserVersion,
+    adapters: adapters.map((entry) => ({
+      extensionClaims: [...entry.extensionClaims],
+      parserVersion: entry.parserVersion,
+    })),
     generatedAt: new Date(0).toISOString(),
     files: [],
     fragments: [],
@@ -68,6 +76,14 @@ function emptySnapshot(parserVersion: string): CodeEvidenceSnapshot {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function validAdapterRosterEntry(value: unknown): value is CodeEvidenceAdapterRosterEntry {
+  if (!value || typeof value !== "object") return false;
+  const entry = value as Partial<CodeEvidenceAdapterRosterEntry>;
+  return typeof entry.parserVersion === "string" && entry.parserVersion.length > 0 &&
+    isStringArray(entry.extensionClaims) && entry.extensionClaims.length > 0 &&
+    entry.extensionClaims.every((claim) => /^\.[a-z0-9.-]+$/.test(claim));
 }
 
 function validFragment(value: unknown): value is KnowledgeFragment {
@@ -99,15 +115,22 @@ function validFragment(value: unknown): value is KnowledgeFragment {
 function validateSnapshot(value: unknown): CodeEvidenceSnapshot {
   if (!value || typeof value !== "object") throw new Error("Code evidence index is not an object.");
   const snapshot = value as Partial<CodeEvidenceSnapshot>;
+  if ((snapshot as { version?: unknown }).version === 1) {
+    throw new Error("Code evidence index v1 requires a one-time rebuild to snapshot v2.");
+  }
   if (
     snapshot.version !== CODE_EVIDENCE_INDEX_VERSION ||
-    typeof snapshot.parserVersion !== "string" ||
+    !Array.isArray(snapshot.adapters) || !snapshot.adapters.every(validAdapterRosterEntry) ||
     typeof snapshot.generatedAt !== "string" ||
     !Array.isArray(snapshot.files) ||
     !Array.isArray(snapshot.fragments) ||
     !snapshot.fragments.every(validFragment)
   ) {
     throw new Error("Code evidence index has an unsupported or invalid schema.");
+  }
+  const claimedExtensions = snapshot.adapters.flatMap((entry) => entry.extensionClaims);
+  if (new Set(claimedExtensions).size !== claimedExtensions.length) {
+    throw new Error("Code evidence index adapter roster contains overlapping extension claims.");
   }
   const ids = new Set(snapshot.fragments.map((fragment) => fragment.id));
   if (ids.size !== snapshot.fragments.length) throw new Error("Code evidence index contains duplicate fragment ids.");
@@ -133,10 +156,10 @@ export function codeEvidenceIndexFile(wikiRoot: string): string {
 
 export async function readCodeEvidenceSnapshot(
   wikiRoot: string,
-  parserVersion: string
+  adapters: readonly CodeEvidenceAdapterRosterEntry[] = createDefaultKnowledgeAdapterRegistry().roster()
 ): Promise<CodeEvidenceSnapshot> {
   const raw = await readFileSafe(codeEvidenceIndexFile(wikiRoot));
-  if (raw === null) return emptySnapshot(parserVersion);
+  if (raw === null) return emptySnapshot(adapters);
   try {
     return validateSnapshot(JSON.parse(raw) as unknown);
   } catch (error: unknown) {
@@ -146,12 +169,12 @@ export async function readCodeEvidenceSnapshot(
 
 async function discardCorruptSnapshot(
   wikiRoot: string,
-  parserVersion: string,
+  adapters: readonly CodeEvidenceAdapterRosterEntry[],
   error: unknown
 ): Promise<CodeEvidenceSnapshot> {
   logger.warn("code-evidence", "corrupt_index_discarded", {}, error);
   await fs.unlink(codeEvidenceIndexFile(wikiRoot)).catch(() => undefined);
-  return emptySnapshot(parserVersion);
+  return emptySnapshot(adapters);
 }
 
 async function writeSnapshot(wikiRoot: string, snapshot: CodeEvidenceSnapshot): Promise<void> {
@@ -209,6 +232,13 @@ function normalized(value: string): string {
   return value.normalize("NFKC").toLowerCase();
 }
 
+function normalizedQualifiedSymbol(value: string): string {
+  return normalized(value)
+    .trim()
+    .replace(/\s*(?:->|::|#|\\)\s*/gu, ".")
+    .replace(/^\.+|\.+$/gu, "");
+}
+
 function fieldIncludes(values: readonly string[], term: string): boolean {
   return values.some((value) => normalized(value).includes(term));
 }
@@ -261,43 +291,103 @@ export function codeResourceUri(fragment: KnowledgeFragment): string {
   return `code://repo/${encodedPath}#${encodeURIComponent(fragment.id)}`;
 }
 
+function sortedFragments(fragments: readonly KnowledgeFragment[]): KnowledgeFragment[] {
+  return [...fragments].sort((left, right) =>
+    left.path.localeCompare(right.path) ||
+    left.range.startLine - right.range.startLine ||
+    left.id.localeCompare(right.id)
+  );
+}
+
+function uniqueSorted(values: readonly string[]): string[] {
+  return [...new Set(values)].sort();
+}
+
+function enrichLwcBundles(fragments: readonly KnowledgeFragment[]): KnowledgeFragment[] {
+  const targetsByJavaScriptPath = new Map<string, string[]>();
+  for (const fragment of fragments) {
+    if (!fragment.path.toLowerCase().endsWith(".js-meta.xml") || fragment.configKeys.length === 0) continue;
+    const javaScriptPath = fragment.path.slice(0, -"-meta.xml".length);
+    targetsByJavaScriptPath.set(javaScriptPath, uniqueSorted([
+      ...(targetsByJavaScriptPath.get(javaScriptPath) ?? []),
+      ...fragment.configKeys,
+    ]));
+  }
+  return fragments.map((fragment) => {
+    const targets = targetsByJavaScriptPath.get(fragment.path);
+    if (!targets) return fragment;
+    return { ...fragment, configKeys: uniqueSorted([...fragment.configKeys, ...targets]) };
+  });
+}
+
+function rosterWithAdapter(
+  roster: readonly CodeEvidenceAdapterRosterEntry[],
+  registry: KnowledgeAdapterRegistry,
+  adapter: KnowledgeAdapter
+): CodeEvidenceAdapterRosterEntry[] {
+  const claims = [...registry.extensionClaimsFor(adapter)].sort();
+  const retained = roster.filter((entry) =>
+    !entry.extensionClaims.some((claim) => claims.includes(claim))
+  );
+  return [...retained, { extensionClaims: claims, parserVersion: adapter.parserVersion }]
+    .sort((left, right) => left.extensionClaims.join("\0").localeCompare(right.extensionClaims.join("\0")));
+}
+
 export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
   readonly repositoryRoot: string;
   readonly wikiRoot: string;
-  readonly adapter: KnowledgeAdapter;
+  readonly registry: KnowledgeAdapterRegistry;
 
-  constructor(params: { repositoryRoot: string; wikiRoot: string; adapter?: KnowledgeAdapter }) {
+  constructor(params: {
+    repositoryRoot: string;
+    wikiRoot: string;
+    adapter?: KnowledgeAdapter;
+    adapters?: readonly (KnowledgeAdapter | AdapterRegistration)[];
+    registry?: KnowledgeAdapterRegistry;
+  }) {
     this.repositoryRoot = nodePath.resolve(params.repositoryRoot);
     this.wikiRoot = nodePath.resolve(params.wikiRoot);
-    this.adapter = params.adapter ?? new TypeScriptKnowledgeAdapter();
+    const supplied = Number(Boolean(params.adapter)) + Number(Boolean(params.adapters)) + Number(Boolean(params.registry));
+    if (supplied > 1) throw new Error("Configure only one of adapter, adapters, or registry.");
+    this.registry = params.registry ?? (params.adapters
+      ? new KnowledgeAdapterRegistry(params.adapters)
+      : params.adapter
+        ? new KnowledgeAdapterRegistry([params.adapter])
+        : createDefaultKnowledgeAdapterRegistry());
   }
 
   async snapshot(): Promise<CodeEvidenceSnapshot> {
-    return readCodeEvidenceSnapshot(this.wikiRoot, this.adapter.parserVersion);
+    return readCodeEvidenceSnapshot(this.wikiRoot, this.registry.roster());
   }
 
   private async querySnapshot(): Promise<CodeEvidenceSnapshot> {
     let snapshot: CodeEvidenceSnapshot;
     try {
       snapshot = await this.snapshot();
-    } catch (error: unknown) {
+    } catch {
       await this.rebuild();
       snapshot = await this.snapshot();
     }
-    if (snapshot.files.length > 0 && snapshot.parserVersion !== this.adapter.parserVersion) {
-      throw new Error(
-        `Code evidence parser version changed from ${snapshot.parserVersion} to ${this.adapter.parserVersion}; rebuild the index.`
-      );
+    if (snapshot.files.length > 0 && !sameAdapterRoster(snapshot.adapters, this.registry.roster())) {
+      throw new Error("Code evidence adapter roster changed; rebuild the index to refresh only affected languages.");
     }
-    return snapshot;
+    return { ...snapshot, fragments: enrichLwcBundles(snapshot.fragments) };
+  }
+
+  private async ensureCurrentSnapshotSchema(): Promise<void> {
+    try {
+      await this.snapshot();
+    } catch {
+      await this.rebuild();
+    }
   }
 
   async rebuild(): Promise<CodeEvidenceUpdateReport> {
     return withWikiFileLock(this.wikiRoot, codeEvidenceIndexFile(this.wikiRoot), async () => {
       const before = await this.snapshot().catch((error: unknown) =>
-        discardCorruptSnapshot(this.wikiRoot, this.adapter.parserVersion, error)
+        discardCorruptSnapshot(this.wikiRoot, this.registry.roster(), error)
       );
-      const paths = (await fg(CODE_GLOB, {
+      const paths = (await fg(this.registry.globPatterns(), {
         cwd: this.repositoryRoot,
         dot: false,
         onlyFiles: true,
@@ -312,11 +402,12 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
       let reparsedFiles = 0;
 
       for (const path of paths) {
+        const adapter = this.registry.resolve({ path });
+        if (!adapter) continue;
         const { source, contentHash } = await readCodeSource(this.repositoryRoot, path);
-        if (!this.adapter.supports(source)) continue;
-        const nextFingerprint = fingerprint(path, contentHash, this.adapter.parserVersion);
+        const nextFingerprint = fingerprint(path, contentHash, adapter.parserVersion);
         const previous = oldFiles.get(path);
-        if (previous?.fingerprint === nextFingerprint && previous.parserVersion === this.adapter.parserVersion) {
+        if (previous?.fingerprint === nextFingerprint && previous.parserVersion === adapter.parserVersion) {
           const reused = previous.fragmentIds.map((id) => oldFragments.get(id));
           if (reused.every((fragment): fragment is KnowledgeFragment => fragment !== undefined)) {
             reusedFiles++;
@@ -325,13 +416,13 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
             continue;
           }
         }
-        const extracted = await this.adapter.extract(source);
+        const extracted = await adapter.extract(source);
         reparsedFiles++;
         files.push({
           path,
           contentHash,
           fingerprint: nextFingerprint,
-          parserVersion: this.adapter.parserVersion,
+          parserVersion: adapter.parserVersion,
           fragmentIds: extracted.map((fragment) => fragment.id),
         });
         fragments.push(...extracted);
@@ -339,12 +430,10 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
 
       const snapshot: CodeEvidenceSnapshot = {
         version: CODE_EVIDENCE_INDEX_VERSION,
-        parserVersion: this.adapter.parserVersion,
+        adapters: this.registry.roster(),
         generatedAt: new Date().toISOString(),
         files: files.sort((left, right) => left.path.localeCompare(right.path)),
-        fragments: fragments.sort((left, right) =>
-          left.path.localeCompare(right.path) || left.range.startLine - right.range.startLine || left.id.localeCompare(right.id)
-        ),
+        fragments: sortedFragments(fragments),
       };
       await writeSnapshot(this.wikiRoot, snapshot);
       return report({
@@ -358,39 +447,36 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
   }
 
   async updateFile(path: string): Promise<CodeEvidenceUpdateReport> {
+    await this.ensureCurrentSnapshotSchema();
     return withWikiFileLock(this.wikiRoot, codeEvidenceIndexFile(this.wikiRoot), async () => {
       const normalizedPath = normalizedRelativePath(path);
       const before = await this.snapshot();
-      if (before.files.length > 0 && before.parserVersion !== this.adapter.parserVersion) {
-        throw new Error("Code evidence parser version changed; rebuild the complete index before updating one file.");
-      }
+      const adapter = this.registry.resolve({ path: normalizedPath });
+      if (!adapter) throw new Error(`No code evidence adapter supports: ${normalizedPath}`);
       const { source, contentHash } = await readCodeSource(this.repositoryRoot, normalizedPath);
-      if (!this.adapter.supports(source)) throw new Error(`No code evidence adapter supports: ${normalizedPath}`);
-      const nextFingerprint = fingerprint(normalizedPath, contentHash, this.adapter.parserVersion);
+      const nextFingerprint = fingerprint(normalizedPath, contentHash, adapter.parserVersion);
       const previous = before.files.find((record) => record.path === normalizedPath);
-      if (previous?.fingerprint === nextFingerprint && previous.parserVersion === this.adapter.parserVersion) {
+      if (previous?.fingerprint === nextFingerprint && previous.parserVersion === adapter.parserVersion) {
         return report({ scannedFiles: 1, reusedFiles: 1, reparsedFiles: 0, removedFiles: 0, snapshot: before });
       }
-      const extracted = await this.adapter.extract(source);
+      const extracted = await adapter.extract(source);
       const files = before.files.filter((record) => record.path !== normalizedPath);
       files.push({
         path: normalizedPath,
         contentHash,
         fingerprint: nextFingerprint,
-        parserVersion: this.adapter.parserVersion,
+        parserVersion: adapter.parserVersion,
         fragmentIds: extracted.map((fragment) => fragment.id),
       });
       const snapshot: CodeEvidenceSnapshot = {
         version: CODE_EVIDENCE_INDEX_VERSION,
-        parserVersion: this.adapter.parserVersion,
+        adapters: rosterWithAdapter(before.adapters, this.registry, adapter),
         generatedAt: new Date().toISOString(),
         files: files.sort((left, right) => left.path.localeCompare(right.path)),
-        fragments: [
+        fragments: sortedFragments([
           ...before.fragments.filter((fragment) => fragment.path !== normalizedPath),
           ...extracted,
-        ].sort((left, right) =>
-          left.path.localeCompare(right.path) || left.range.startLine - right.range.startLine || left.id.localeCompare(right.id)
-        ),
+        ]),
       };
       await writeSnapshot(this.wikiRoot, snapshot);
       return report({ scannedFiles: 1, reusedFiles: 0, reparsedFiles: 1, removedFiles: 0, snapshot });
@@ -398,6 +484,7 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
   }
 
   async removeFile(path: string): Promise<CodeEvidenceUpdateReport> {
+    await this.ensureCurrentSnapshotSchema();
     return withWikiFileLock(this.wikiRoot, codeEvidenceIndexFile(this.wikiRoot), async () => {
       const normalizedPath = normalizedRelativePath(path);
       safeResolveWithin(this.repositoryRoot, normalizedPath);
@@ -438,7 +525,8 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
   async symbol(name: string, options: CodeSearchOptions = {}): Promise<CodeEvidenceHit[]> {
     if (!name.trim()) throw new Error("Symbol name must not be empty.");
     const maxResults = clampResults(options.maxResults);
-    const sought = normalized(name).trim();
+    const sought = normalizedQualifiedSymbol(name);
+    if (!sought) throw new Error("Symbol name must contain an identifier.");
     const kindFilter = options.kinds ? new Set(options.kinds) : null;
     const snapshot = await this.querySnapshot();
     return snapshot.fragments
@@ -446,8 +534,8 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
       .filter((fragment) => !kindFilter || kindFilter.has(fragment.kind))
       .filter((fragment) => pathAllowed(fragment.path, options.paths))
       .map((fragment) => {
-        const symbol = normalized(fragment.symbol);
-        const qualified = normalized(fragment.qualifiedName);
+        const symbol = normalizedQualifiedSymbol(fragment.symbol);
+        const qualified = normalizedQualifiedSymbol(fragment.qualifiedName);
         const score = symbol === sought || qualified === sought ? 200
           : qualified.endsWith(`.${sought}`) ? 160
           : symbol.includes(sought) || qualified.includes(sought) ? 80

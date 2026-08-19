@@ -7,6 +7,7 @@ const gates = [
   "eval:source-coverage:gate",
   "eval:evidence-ir:gate",
   "eval:code-evidence:gate",
+  "eval:code-evidence:languages:gate",
   "eval:drift:gate",
   "eval:recovery:gate",
   "eval:task-context:gate",

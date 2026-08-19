@@ -1,5 +1,13 @@
-export const CODE_EVIDENCE_INDEX_VERSION = 1 as const;
-export const TYPESCRIPT_ADAPTER_VERSION = "typescript-javascript-deterministic-v1";
+export const CODE_EVIDENCE_INDEX_VERSION = 2 as const;
+export const TYPESCRIPT_ADAPTER_VERSION = "typescript-javascript-deterministic-v2";
+export const JAVA_ADAPTER_VERSION = "java-deterministic-v1";
+export const APEX_ADAPTER_VERSION = "apex-deterministic-v1";
+export const CSHARP_ADAPTER_VERSION = "csharp-deterministic-v1";
+export const GO_ADAPTER_VERSION = "go-deterministic-v1";
+export const RUST_ADAPTER_VERSION = "rust-deterministic-v1";
+export const PHP_ADAPTER_VERSION = "php-deterministic-v1";
+export const C_ADAPTER_VERSION = "c-deterministic-v2";
+export const CPP_ADAPTER_VERSION = "cpp-deterministic-v2";
 
 export type CodeFragmentKind =
   | "module"
@@ -68,9 +76,14 @@ export interface CodeEvidenceFileRecord {
   fragmentIds: string[];
 }
 
+export interface CodeEvidenceAdapterRosterEntry {
+  extensionClaims: string[];
+  parserVersion: string;
+}
+
 export interface CodeEvidenceSnapshot {
   version: typeof CODE_EVIDENCE_INDEX_VERSION;
-  parserVersion: string;
+  adapters: CodeEvidenceAdapterRosterEntry[];
   generatedAt: string;
   files: CodeEvidenceFileRecord[];
   fragments: KnowledgeFragment[];
@@ -127,9 +140,10 @@ export interface CodeResourceRead {
 }
 
 export interface CodeGrepFallbackEvent {
-  version: 1;
+  version: 2;
   timestamp: string;
   query: string;
   reason: string;
   resultCount: number;
+  extensionHistogram: Record<string, number>;
 }
