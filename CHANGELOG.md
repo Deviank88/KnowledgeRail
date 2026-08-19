@@ -25,7 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - Normalized `.`, `#`, `::`, PHP namespace backslashes, and `->` only while matching qualified `symbol` queries, so agents can use a familiar separator across languages without changing persisted language-native names.
-- Made C/C++ signature matching non-ambiguous under adversarial repeated tokens and canonicalized golden-corpus newline metrics across Git checkouts without altering indexed source bytes.
+- Made C/C++ signature matching non-ambiguous under adversarial repeated tokens and canonicalized golden-corpus and drift-fixture integrity metrics across Git checkouts without altering indexed source bytes.
 - Code-evidence snapshot v1 is treated as disposable derived state and rebuilt once into snapshot v2; unchanged files remain reusable on later adapter-specific upgrades.
 
 ## [2.2.1] - 2026-08-19

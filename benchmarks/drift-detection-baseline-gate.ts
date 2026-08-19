@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,6 +5,7 @@ import {
   DEFAULT_DRIFT_FIXTURE,
   evaluateDriftDetection,
 } from "./drift-detection-eval.js";
+import { canonicalFixtureSha256 } from "./fixture-integrity.js";
 
 interface DriftBaseline {
   version: number;
@@ -28,10 +28,6 @@ function argValue(name: string): string | undefined {
   return process.argv.find((argument) => argument.startsWith(prefix))?.slice(prefix.length);
 }
 
-function digest(bytes: Buffer): string {
-  return createHash("sha256").update(bytes).digest("hex");
-}
-
 function sameValues(actual: readonly string[], expected: readonly string[]): boolean {
   return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
 }
@@ -45,12 +41,13 @@ async function main(): Promise<void> {
   const baselinePath = path.resolve(argValue("baseline") ?? DEFAULT_BASELINE);
   const fixturePath = path.resolve(argValue("fixture") ?? DEFAULT_DRIFT_FIXTURE);
   const baseline = JSON.parse(await fs.readFile(baselinePath, "utf8")) as DriftBaseline;
-  const fixtureBytes = await fs.readFile(fixturePath);
+  const fixtureText = await fs.readFile(fixturePath, "utf8");
+  const fixtureSha256 = canonicalFixtureSha256(fixtureText);
   const report = await evaluateDriftDetection(fixturePath);
   const failures: string[] = [];
 
   check(failures, "fixtureVersion", report.fixtureVersion === baseline.fixtureVersion, report.fixtureVersion);
-  check(failures, "fixtureSha256", digest(fixtureBytes) === baseline.fixtureSha256, digest(fixtureBytes));
+  check(failures, "fixtureSha256", fixtureSha256 === baseline.fixtureSha256, fixtureSha256);
   check(failures, "scenarioCount", report.scenarioCount === baseline.scenarioCount, report.scenarioCount);
   check(failures, "VerdictAccuracy", report.verdictAccuracy >= baseline.minimumVerdictAccuracy, report.verdictAccuracy);
   check(failures, "FalsePositiveRate", report.falsePositiveRate <= baseline.maximumFalsePositiveRate, report.falsePositiveRate);

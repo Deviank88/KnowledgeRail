@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
+import { canonicalFixtureText } from "./fixture-integrity.js";
 import { maskBraceLanguage, type BraceLanguage } from "../src/core/code-evidence/brace-language-engine.js";
 import { PersistentCodeEvidenceIndex } from "../src/core/code-evidence/index.js";
 import {
@@ -133,10 +134,6 @@ async function filesBelow(root: string): Promise<string[]> {
   }
   await visit(root);
   return results.sort();
-}
-
-function canonicalFixtureText(content: string): string {
-  return content.replace(/\r\n?/gu, "\n");
 }
 
 export async function multiLanguageCorpusSha256(fixtureRoot: string): Promise<string> {
