@@ -129,10 +129,19 @@ export function registerWikiPrompts(
         codeContext: code_context,
         sources: sources?.split(",").map((source) => source.trim()).filter(Boolean),
       });
+      const applicationGuidance = page_type === "decision" ? [
+        "Before creating a new page, reuse a decision only when its flow/component/context matches, or run one targeted search with exact context terms and page_types=[\"decision\"]; an empty result is normal and must not trigger a broader scan.",
+        "During recovery, materialize only an exact relevant decision resource link; prefer its selected passage and read the bounded whole page only when no passage is available.",
+        "If that page is truncated, query only the missing decision section and never blindly overwrite unread content. If two matching decisions conflict, read only that pair and report the contradiction instead of choosing by rank.",
+        "Complete every placeholder with the accepted, user-facing conclusion; do not persist proposals, raw conversation, or hidden chain-of-thought.",
+        "Read and update the matching decision page when the scope is unchanged; preserve its created date and history, record what changed and why, then append one knowledge_page action=append_log level=DECISION entry.",
+      ] : [
+        "Apply the completed draft with knowledge_page action=write and record the update with action=append_log.",
+      ];
       return promptText([
         `Output language: ${language?.trim() || "the user's current request language"}. Translate all human-readable headings and prose in the draft before writing; keep technical frontmatter values stable.`,
         `Suggested path: ${draft.path}`,
-        "Apply the draft with knowledge_page action=write and record the decision with action=append_log.",
+        ...applicationGuidance,
         "```markdown",
         draft.content,
         "```",

@@ -29,6 +29,11 @@ const CONTEXT_SECTION_LABELS: Readonly<Record<
 
 function compactManifestText(manifest: TaskContext): string {
   const catalog = new Map(manifest.evidence.map((evidence) => [evidence.uri, evidence] as const));
+  const decisionCandidateCount = new Set(
+    manifest.evidence
+      .filter((evidence) => evidence.type === "decision")
+      .map((evidence) => evidence.path)
+  ).size;
   const lines = [
     `Task context: ${manifest.evidence.length} evidence, ${manifest.unknowns.length} unknown(s), ` +
       `~${manifest.size.heuristicTokens} heuristic tokens (${manifest.size.estimator}).`,
@@ -38,6 +43,16 @@ function compactManifestText(manifest: TaskContext): string {
       `coverage=${manifest.retrieval.coverageSufficient}; mode=${manifest.retrieval.coverageMode}; ` +
       `fallback=${manifest.retrieval.fallbackUsed}.`,
   ];
+
+  if (decisionCandidateCount > 0) {
+    lines.push(
+      `Decision candidates: ${decisionCandidateCount}. Inspect title, heading, retrieval reason, staleness, and ` +
+        "change impact; materialize only an exact context match, never the whole decisions directory. Prefer its " +
+        "passage URI. If that match has no reliable passage, read only its bounded page; if truncated, query the " +
+        "missing section and never overwrite unread content. Surface the minimum conflicting set instead of " +
+        "choosing by rank."
+    );
+  }
 
   for (const warning of manifest.retrieval.coverageWarnings) lines.push(`WARNING: ${warning}`);
 
@@ -90,6 +105,11 @@ export function compactStructuredContext(manifest: TaskContext) {
       staleReason: evidence.staleReason,
       driftClaimIds: evidence.driftClaimIds,
     })),
+    decisions: manifest.decisions,
+    changeImpact: {
+      mode: manifest.changeImpact.mode,
+      decisions: manifest.changeImpact.decisions,
+    },
     gaps: manifest.unknowns,
     retrieval: {
       profile: manifest.retrieval.profile,

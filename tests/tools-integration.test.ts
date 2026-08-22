@@ -844,6 +844,25 @@ test("document tools: open profiles, section context, Markdown write, terminal r
   assert.equal(draft.messages[0].content.text.includes("analysis/Requisiti_Alpha.md"), true);
   assert.equal(draft.messages[0].content.text.includes("knowledge_page action=write"), true);
 
+  const decisionDraft = await prompts.get("prepare_knowledge_update")!({
+    finding: "La chiave Alpha rimane stabile tra i retry.",
+    page_type: "decision",
+    title: "Stabilità della chiave Alpha",
+    knowledge_context: sectionContext.content[0].text,
+  });
+  const decisionText = decisionDraft.messages[0].content.text;
+  assert.match(decisionText, /decisions\/Stabilit._della_chiave_Alpha\.md/i);
+  assert.match(decisionText, /page_types=\["decision"\]/);
+  assert.match(decisionText, /existing|matching decision page/i);
+  assert.match(decisionText, /empty result is normal/i);
+  assert.match(decisionText, /exact relevant decision resource link/i);
+  assert.match(decisionText, /bounded whole page only when no passage/i);
+  assert.match(decisionText, /never blindly overwrite unread content/i);
+  assert.match(decisionText, /report the contradiction instead of choosing by rank/i);
+  assert.match(decisionText, /level=DECISION/);
+  assert.match(decisionText, /## Decision history/);
+  assert.match(decisionText, /hidden chain-of-thought/);
+
   assert.equal(tools.has("knowledge_export_docx"), false);
 });
 

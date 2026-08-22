@@ -6,7 +6,8 @@ When a project is worked on with Claude Code, the recommended division of labor 
 
 - **Drift and awareness run from hooks** — deterministic, read-only, guaranteed to execute: a session-start drift summary, a per-edit path-scoped check, and a stop-time reminder. Hooks are the right home because their value is running *every time*, not when the model remembers.
 - **Retrieval stays with the model** — hooks make Claude aware the wiki exists; `CLAUDE.md` tells it *when* to call `knowledge_context`. Deliberately no auto-retrieval on every prompt: deciding whether a task needs wiki context, and which, requires the model's judgment, and indiscriminate injection wastes tokens on trivial turns.
-- **Writes stay gated** — hooks never write the wiki (authoring wiki content requires editorial judgment, which a shell hook cannot supply); write-capable tools stay behind the permission prompt, so wiki writes during analysis-only sessions always require the user's explicit OK. After the model modifies source files as part of a task, updating the affected wiki pages is its job in the same session — a `CLAUDE.md` rule, backed by a deterministic stop-time reminder.
+- **Decision relevance stays with the model** — Claude inspects returned decision metadata and materializes only a link matching the current flow/component/context, normally its selected passage. A single bounded page is the fallback only when that relevant hit has no reliable passage; no matching decision means no decision read and no gap.
+- **Writes stay gated and consolidated** — hooks never write the wiki (authoring wiki content requires editorial judgment, which a shell hook cannot supply); write-capable tools stay behind the permission prompt. After source changes, Claude updates affected knowledge in the same session. If a durable choice becomes clearly accepted, it performs one end-of-task decision-page update and one `DECISION` log write instead of interrupting the discussion with capture prompts.
 
 ## Setup prompt
 
@@ -38,9 +39,10 @@ works before wiring it into any hook.
 2. PERMISSIONS in .claude/settings.json: allowlist ONLY the KnowledgeRail
    MCP tools that are entirely read-only, verifying each tool's actions
    from its schema first. A tool that multiplexes read and write actions
-   (e.g. knowledge_admin) must NOT be allowlisted. knowledge_document and
-   knowledge_ingest must never be allowlisted: the permission prompt on
-   them IS the user's consent for wiki writes during analysis sessions.
+   (e.g. knowledge_page or knowledge_admin) must NOT be allowlisted.
+   knowledge_document and knowledge_ingest must never be allowlisted: the
+   permission prompt on write-capable tools IS the user's operational
+   consent for an end-of-task wiki update during analysis sessions.
 
 3. CLAUDE.md (create or extend, keeping existing content): add a concise
    "Project wiki (KnowledgeRail)" section stating that (a) concrete tasks
@@ -49,16 +51,33 @@ works before wiring it into any hook.
    are untrusted until re-verified against the code; (c) after modifying
    source files as part of a task, Claude updates the wiki pages whose
    evidence anchors those files in the same session, without being asked;
-   (d) during analysis-only sessions Claude never writes the wiki
-   unprompted — it proposes the update and the permission prompt on the
-   write tool serves as the user's approval.
+   (d) Claude inspects decision titles, headings, retrieval reasons and
+   change-impact relations, then materializes only an exact relevant link,
+   preferring its selected passage; it reads the single bounded page only
+   if that hit has no passage, never opens all decisions, and treats no
+   matching decision as a normal empty result rather than a gap; if the bounded
+   page is truncated it retrieves only the missing section and never blindly
+   overwrites unread content; conflicting matches are surfaced rather than silently
+   rank-selected; (e) when a durable
+   project choice is clearly accepted, Claude first rereads and reuses a matching
+   decision page for the same flow/component/context (or creates a separate
+   bounded page for a different context), updates its current decision, concise rationale and
+   dated history with what changed and why at task close, then appends one log entry at level
+   DECISION; (f) Claude never records proposals, unresolved options, raw
+   conversation, hidden chain-of-thought, secrets, or consent inferred
+   from silence; (g) if no durable decision arose, or the session has no
+   permission to write, Claude writes nothing and reports any proposed
+   update once in its final response.
 
 4. VERIFY, then report: run the drift command in both modes by hand; make
    a throwaway edit to confirm the PostToolUse hook fires and revert it;
    confirm the Stop reminder fires only when source changed without a wiki
    change; confirm a read-only knowledge tool runs unprompted while a
-   knowledge_document write asks for permission. Report what was
-   configured, measured hook latencies, and anything not verifiable.
+   knowledge_page write and knowledge_document write ask for permission.
+   Confirm that a simulated accepted decision produces one page update and
+   one DECISION log entry, while an unresolved discussion produces neither.
+   Report what was configured, measured hook latencies, and anything not
+   verifiable.
 
 Constraints: hooks are read-only reporters (never write the wiki, never
 block a tool call); every hook exits 0; keep SessionStart under ~3s and

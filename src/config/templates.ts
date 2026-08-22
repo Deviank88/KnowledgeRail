@@ -176,6 +176,60 @@ Use these page types for consulting-project knowledge:
 
 ---
 
+## Decision Memory
+
+Decision pages are living project knowledge, not an immutable approval ledger. Their purpose is to let people and
+agents recover what was chosen, why it was chosen, when it changed, and where it applies. Keep one bounded page per
+coherent flow, component, or project context; never aggregate unrelated decisions into a catch-all page.
+
+### Retrieval and use
+
+1. Start normal project work with \`knowledge_context mode="task"\`.
+2. Inspect the title, heading, retrieval reason, and \`changeImpact.decisions\` relation before reading decision content.
+3. Materialize only the exact decision resource link that matches the objective. Prefer its selected passage URI; when
+   no passage can be resolved reliably, reading that one bounded page is correct after relevance has been established.
+4. Do not open every returned decision, scan the whole \`decisions/\` directory, or load unrelated decision history.
+5. If no matching decision exists, return no decision context. Absence is normal and is not a coverage gap.
+6. If the one-page fallback is truncated, issue a targeted decision query for the missing section or report the limit;
+   never compensate with a directory-wide page dump. Before an update, do not overwrite a page whose relevant current
+   sections and history could not be reread; use an exact targeted edit/read or report the limit.
+7. If two decisions match the same context and conflict, materialize only that minimum conflicting set and surface the
+   contradiction instead of silently selecting the higher-ranked result.
+8. Briefly remind the user of an applicable prior choice and rationale only when it constrains or clarifies the current work.
+9. Treat a prior decision as context, not as unquestionable authority; surface conflicts or stale evidence explicitly.
+
+### Capture threshold
+
+Record a decision only after a durable project choice is clearly accepted by the user or made concrete by an authorized
+implementation task. Do not record proposals, unresolved options, incidental reversible edits, raw conversation,
+hidden chain-of-thought, secrets, or consent inferred from silence. If no durable decision arose, write nothing.
+
+Before creating a page, reuse a relevant decision returned by task context or run a targeted search restricted to
+\`page_types=["decision"]\`. Read the matching page immediately before changing it. Update the existing page only when
+the flow/component/context is the same; create a separate page for a different context. This keeps one canonical,
+current account of each scoped choice, avoids duplicate ADRs, and keeps retrieval passages small and precise.
+
+### Recommended decision page
+
+- **Context**: the exact flow, component, or request plus its problem, constraints, and boundaries. Put the same
+  identifying terms in the title, tags, links, and \`request_id\` when available so retrieval can select it precisely.
+- **Current decision**: the accepted choice stated precisely.
+- **Rationale**: concise user-facing reasons, not a transcript or model reasoning trace.
+- **Alternatives considered**: only material options actually discussed, with the reason they were not selected.
+- **Consequences**: positive, negative, and operational effects.
+- **Related evidence**: wiki links, source references, and code evidence that informed or implements the choice.
+- **Decision history**: dated, concise entries for the initial choice and each material change, including why it changed.
+
+On update, preserve \`created\`, set \`updated\`, refresh the current sections, and append one history entry. When the
+current choice changes, retain a concise account of the previous choice and state what changed and why; never silently
+erase its history. Then append one \`knowledge_page action="append_log" level="DECISION"\` entry naming the page and
+summarizing the accepted change. The page is canonical; \`log.md\` is only the timestamped operational register. A log
+failure does not roll back or invalidate a completed page update and may be retried; there is no cross-file transaction.
+If wiki writes are not authorized, propose the exact update in the final response instead of mutating the wiki. Report
+any completed decision-page update once in the task summary; do not interrupt the discussion with repeated capture prompts.
+
+---
+
 ## Cross-Reference Format
 
 Use \`[[Page Name]]\` for wiki-internal links. The page name matches the \`title\` field.
@@ -210,7 +264,7 @@ When answering a question using the wiki:
 
 1. Call \`knowledge_context mode="task"\` with the appropriate intent and a concrete objective; compact response detail is the default.
 2. Use \`mode="search"\` or \`mode="graph"\` only for targeted diagnostics, not as a mandatory chain.
-3. Materialize only relevant resource links.
+3. Materialize only relevant resource links, including applicable entries from \`decisions\` and \`changeImpact.decisions\`.
 4. If the response contains a widening \`nextAction\`, execute it with the suggested budget.
 5. Do not manually chain search, graph, and page dumps.
 6. If knowledge remains insufficient and no further widening is suggested, report \`evidenceGaps\` as GAP/unknown without hallucinating.

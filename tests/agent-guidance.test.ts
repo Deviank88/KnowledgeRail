@@ -7,6 +7,7 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import { getWikiRoot, setWikiRoot } from "../src/core/paths.js";
 import { DEFAULT_SCHEMA_MD } from "../src/config/templates.js";
 import {
+  DECISION_MEMORY_POLICY,
   MCP_AGENT_INSTRUCTIONS,
   USER_OUTPUT_LANGUAGE_POLICY,
 } from "../src/mcp/server.js";
@@ -52,6 +53,35 @@ test("English MCP metadata does not force English wiki output", () => {
   }
   assert.doesNotMatch(DEFAULT_SCHEMA_MD, /Write all wiki pages in English by default/i);
   assert.match(USER_OUTPUT_LANGUAGE_POLICY, /tool names, schemas, control files, and operational messages in English/i);
+});
+
+test("agent contract closes durable decisions without turning discussion into an audit ledger", () => {
+  assert.equal(DECISION_MEMORY_POLICY.length <= 800, true);
+  for (const policy of [DECISION_MEMORY_POLICY, MCP_AGENT_INSTRUCTIONS]) {
+    assert.match(policy, /decisions.*candidates/i);
+    assert.match(policy, /rationale/i);
+    assert.match(policy, /reread and reuse the same-context decision page/i);
+    assert.match(policy, /dated.*histor|history.*dated/i);
+    assert.match(policy, /DECISION.*log|log.*DECISION/i);
+    assert.match(policy, /proposals/i);
+    assert.match(policy, /chain-of-thought/i);
+    assert.match(policy, /unauthorized.*write nothing|write nothing.*unauthorized/i);
+  }
+  assert.match(DECISION_MEMORY_POLICY, /materialize only an exact context match/i);
+  assert.match(DECISION_MEMORY_POLICY, /prefer its passage URI/i);
+  assert.match(DECISION_MEMORY_POLICY, /never scan or open every decision page/i);
+  assert.match(DECISION_MEMORY_POLICY, /No match is normal, not a gap/i);
+  assert.match(DECISION_MEMORY_POLICY, /Preserve its created date and history/i);
+  assert.match(DECISION_MEMORY_POLICY, /what changed and why/i);
+  assert.match(DEFAULT_SCHEMA_MD, /living project knowledge, not an immutable approval ledger/i);
+  assert.match(DEFAULT_SCHEMA_MD, /one bounded page per\s+coherent flow, component, or project context/i);
+  assert.match(DEFAULT_SCHEMA_MD, /do not overwrite a page whose relevant current\s+sections and history could not be reread/i);
+  assert.match(DEFAULT_SCHEMA_MD, /surface the\s+contradiction instead of silently selecting/i);
+  assert.match(DEFAULT_SCHEMA_MD, /do not treat stale evidence as current|surface conflicts or stale evidence explicitly/i);
+  assert.match(DEFAULT_SCHEMA_MD, /incidental reversible edits/i);
+  assert.match(DEFAULT_SCHEMA_MD, /preserve `created`/i);
+  assert.match(DEFAULT_SCHEMA_MD, /there is no cross-file transaction/i);
+  assert.doesNotMatch(DECISION_MEMORY_POLICY, /automatically approve|infer(?:red)? consent from silence/i);
 });
 
 test("action schemas reject incomplete calls before an operation can mutate state", () => {

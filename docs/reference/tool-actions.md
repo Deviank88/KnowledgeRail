@@ -64,7 +64,7 @@ Actions/modes: `rebuild`, `update`, `remove`, `search`, `symbol`, `references`, 
 
 Evidence/gaps, pages, search, and graph.
 
-Task responses report `retrieval.coverageMode` (`lexical` or `semantic`) and `coverageWarnings`. Coverage uses the full fused candidate set while returned evidence remains bounded; relevant evidence excluded from display is `budget_limited`, not `missing_evidence`. Configured embedding provider failures degrade to lexical mode without failing the tool call.
+Task responses report `retrieval.coverageMode` (`lexical` or `semantic`) and `coverageWarnings`. Coverage uses the full fused candidate set while returned evidence remains bounded; relevant evidence excluded from display is `budget_limited`, not `missing_evidence`. Compact task responses retain scoped decision references in `decisions` and `changeImpact.decisions` while keeping decision page bodies behind their resource links. A missing decision is optional context, not an automatic coverage gap. Configured embedding provider failures degrade to lexical mode without failing the tool call.
 
 Actions/modes: `task`, `list`, `search`, `graph`.
 

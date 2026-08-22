@@ -235,13 +235,12 @@ const INTENT_POLICIES: Readonly<Record<ContextIntent, IntentPolicy>> = {
       "affectedComponents",
       "dependencies",
       "requirements",
-      "decisions",
       "invariants",
       "tests",
       "incidents",
       "risks",
     ],
-    requiredPageTypes: ["implementation", "requirement", "decision", "test_result"],
+    requiredPageTypes: ["implementation", "requirement", "test_result"],
     impact: true,
   },
   debug: {
@@ -252,8 +251,8 @@ const INTENT_POLICIES: Readonly<Record<ContextIntent, IntentPolicy>> = {
   },
   review: {
     priorities: ["requirements", "invariants", "decisions", "tests", "risks", "contradictions"],
-    requiredCategories: ["requirements", "invariants", "decisions", "tests", "risks"],
-    requiredPageTypes: ["requirement", "decision", "test_result", "risk"],
+    requiredCategories: ["requirements", "invariants", "tests", "risks"],
+    requiredPageTypes: ["requirement", "test_result", "risk"],
     impact: true,
   },
   document: {
@@ -267,8 +266,8 @@ const INTENT_POLICIES: Readonly<Record<ContextIntent, IntentPolicy>> = {
       "tests",
       "contradictions",
     ],
-    requiredCategories: ["requirements", "decisions"],
-    requiredPageTypes: ["requirement", "decision"],
+    requiredCategories: ["requirements"],
+    requiredPageTypes: ["requirement"],
     impact: false,
   },
 };
