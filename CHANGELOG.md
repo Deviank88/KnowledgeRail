@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.6.1] - 2026-08-23
+
+### Changed
+
+- Normal task guidance now treats only context-matched decision references as optional project context: selected passages are preferred, one bounded page is the fallback, unrelated decisions are not opened, and an absent decision produces neither evidence nor an artificial gap.
+- Durable choices are consolidated at task close by reusing one bounded decision page per coherent flow/component/context and the existing `DECISION` log level.
+- Decision-memory guidance explicitly avoids proposals, incidental implementation details, raw conversation, hidden chain-of-thought, secrets, inferred consent, duplicate pages, and silent history replacement; unauthorized sessions report a proposed update without writing.
+- `prepare_knowledge_update` now emits a decision-specific living-page draft with current choice, rationale, alternatives, consequences, related evidence, and dated history, without adding a ledger, CLI action, persistence schema, or public tool.
+- The always-on decision-memory instruction is intentionally compact; detailed retrieval safeguards are disclosed by `knowledge_context` only when decision candidates are present, while authoring rules stay in the decision update prompt and workspace schema.
+- The public MCP catalog removes redundant one-line field glosses while retaining action mappings and complex-payload guidance, restoring deliberate byte/token headroom without weakening routing affordances.
+
 ## [2.6.0] - 2026-08-20
 
 ### Added

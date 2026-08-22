@@ -1687,17 +1687,40 @@ export function prepareKnowledgeUpdateDraft(options: KnowledgeUpdateOptions): {
     ? normalizeRelPath(options.targetPagePath)
     : `${pathPrefix[pageType]}/${titleToSlug(title)}.md`;
   const sources = uniqueStrings(options.sources ?? []);
-  const tags = uniqueStrings(["document-review", pageType, "knowledge-gap"]);
-  const content = [
-    "---",
-    `title: "${escapeYamlString(title)}"`,
-    `type: ${pageType}`,
-    `tags: [${tags.join(", ")}]`,
-    `created: ${today}`,
-    `updated: ${today}`,
-    `sources: [${sources.map((source) => `"${escapeYamlString(source)}"`).join(", ")}]`,
-    "---",
+  const decisionContextTag = titleToSlug(title).replace(/_/g, "-").toLocaleLowerCase("en-US");
+  const tags = pageType === "decision"
+    ? uniqueStrings(["decision", decisionContextTag])
+    : uniqueStrings(["document-review", pageType, "knowledge-gap"]);
+  const body = pageType === "decision" ? [
+    `# ${title}`,
     "",
+    "## Context",
+    options.finding.trim(),
+    "",
+    "[Name the exact flow, component, request, and boundaries. Keep unrelated decisions in separate pages.]",
+    "",
+    "## Current decision",
+    "[State the accepted durable choice precisely. Do not record a proposal or an unresolved option.]",
+    "",
+    "## Rationale",
+    "[Summarize the user-facing reasons for the choice. Do not copy raw conversation or hidden chain-of-thought.]",
+    "",
+    "## Alternatives considered",
+    "[List only material alternatives that were actually considered and why they were not selected, or state that none were material.]",
+    "",
+    "## Consequences",
+    "[Record positive, negative, and operational consequences.]",
+    "",
+    "## Related evidence",
+    "### Wiki evidence",
+    options.wikiContext?.trim() || "Complete with relevant decision/task links returned by `knowledge_context`.",
+    "",
+    "### Code evidence",
+    options.codeContext?.trim() || "Add only code evidence that informed or implements the decision, when applicable.",
+    "",
+    "## Decision history",
+    `- ${today} — [Summarize the accepted decision and why it was recorded.]`,
+  ] : [
     `# ${title}`,
     "",
     "## Reason for the update",
@@ -1714,6 +1737,18 @@ export function prepareKnowledgeUpdateDraft(options: KnowledgeUpdateOptions): {
     "",
     "## Impact on client documents",
     "Regenerate the affected section context packs and update the final document without internal-process references.",
+  ];
+  const content = [
+    "---",
+    `title: "${escapeYamlString(title)}"`,
+    `type: ${pageType}`,
+    `tags: [${tags.join(", ")}]`,
+    `created: ${today}`,
+    `updated: ${today}`,
+    `sources: [${sources.map((source) => `"${escapeYamlString(source)}"`).join(", ")}]`,
+    "---",
+    "",
+    ...body,
   ].join("\n");
 
   return { path: pagePath, content };

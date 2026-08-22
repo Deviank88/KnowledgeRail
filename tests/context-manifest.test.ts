@@ -111,6 +111,29 @@ test("retrieval manifest exposes compact passage evidence instead of page bodies
   assert.equal(manifest.gaps.length, 0);
 });
 
+test("a relevant hit without a reliable passage falls back to its one bounded page", () => {
+  const page = record(
+    "decisions/PaymentRetry.md",
+    "Payment retry decision",
+    "# Payment retry\n\nUse stable keys.\n\n## Rationale\n\nRetries must remain idempotent."
+  );
+  const unresolved = {
+    ...hit(page, "Payment retry", 1),
+    heading: "",
+    excerpt: "",
+  };
+
+  const manifest = buildRetrievalContextManifest({
+    intent: "understand",
+    objective: "Understand payment retry decisions",
+    hits: [unresolved],
+  });
+
+  assert.equal(manifest.evidence.length, 1);
+  assert.equal(manifest.evidence[0]?.uri, wikiPageUri(page.path));
+  assert.equal(manifest.evidence[0]?.passageId, undefined);
+});
+
 test("manifest budget omits extra evidence and declares the limitation", () => {
   const first = record(
     "requirements/REQ_A.md",

@@ -163,6 +163,32 @@ test("modify context compiles decision evidence and directional change impact", 
   });
 });
 
+test("a task without a scoped decision returns no decision evidence and no artificial gap", async () => {
+  await withFixture(async (wikiRoot) => {
+    await fs.rm(path.join(wikiRoot, "decisions", "PineCorrelation.md"));
+    clearRetrievalIndexes();
+    clearRuntimeWikiGraphs();
+    invalidateWikiGraph(wikiRoot);
+
+    const context = await compileTaskContext({
+      wikiRoot,
+      intent: "modify",
+      objective: "Modify the Pine envelope emitter without breaking traceability",
+      query: "Pine originating transaction identifier emitter regression incident risk",
+      changedPaths: ["implementations/PineEmitter.md"],
+      maxEvidence: 8,
+      heuristicTokenBudget: 4_000,
+    });
+
+    assert.deepEqual(context.decisions, []);
+    assert.deepEqual(context.changeImpact.decisions, []);
+    assert.equal(
+      context.unknowns.some((gap) => /decision/i.test(gap.description)),
+      false
+    );
+  });
+});
+
 test("debug intent prioritizes incidents, tests and current implementation", async () => {
   await withFixture(async (wikiRoot) => {
     const context = await compileTaskContext({

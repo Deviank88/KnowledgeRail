@@ -28,6 +28,17 @@ export const USER_OUTPUT_LANGUAGE_POLICY =
   "the user asks for translation. If the language cannot be inferred safely, ask before writing instead of " +
   "defaulting to English. Keep tool names, schemas, control files, and operational messages in English.";
 
+export const DECISION_MEMORY_POLICY =
+  "Treat decisions and changeImpact.decisions from knowledge_context as candidates: materialize only an exact " +
+  "context match, prefer its passage URI, and never scan or open every decision page. No match is normal, not a " +
+  "gap. At task close, if a durable project choice was clearly accepted or made concrete by authorized " +
+  "implementation, reread and reuse the same-context decision page or prepare a separate bounded page. Preserve " +
+  "its created date and history, record concise user-facing rationale plus what changed and why in dated history, " +
+  "and append one " +
+  "DECISION log entry. Never persist proposals, raw " +
+  "conversation, hidden chain-of-thought, secrets, or inferred consent. If no durable decision arose or writes " +
+  "are unauthorized, write nothing and report a proposed update once.";
+
 export function mcpAgentInstructions(era: ProtocolEra): string {
   void era;
   return (
@@ -38,6 +49,7 @@ export function mcpAgentInstructions(era: ProtocolEra): string {
     "knowledge-rail:// or code:// links with resources/read when available; otherwise use " +
     "knowledge_page action=read for knowledge-rail:// links. If coverage remains insufficient after " +
     "the suggested widening, preserve evidenceGaps as explicit unknowns instead of guessing. " +
+    DECISION_MEMORY_POLICY + " " +
     USER_OUTPUT_LANGUAGE_POLICY
   );
 }

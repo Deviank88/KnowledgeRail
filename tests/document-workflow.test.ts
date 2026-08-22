@@ -571,6 +571,36 @@ test("prepareKnowledgeUpdateDraft produces a valid wiki page draft", async () =>
   assert.equal(hasErrors(validation.issues), false);
 });
 
+test("prepareKnowledgeUpdateDraft produces a living decision-memory draft", async () => {
+  const draft = prepareKnowledgeUpdateDraft({
+    finding: "Il flusso pagamenti deve mantenere la chiave di idempotenza originale.",
+    pageType: "decision",
+    title: "Idempotenza dei pagamenti",
+    wikiContext: "[[Payment Requirements]] definisce l'unicità della richiesta.",
+    codeContext: "code://repo/src/payments.ts#fragment",
+    date: "2026-08-22",
+  });
+
+  assert.equal(draft.path, "decisions/Idempotenza_dei_pagamenti.md");
+  assert.match(draft.content, /type: decision/);
+  assert.match(draft.content, /tags: \[decision, idempotenza-dei-pagamenti\]/);
+  assert.match(draft.content, /## Context/);
+  assert.match(draft.content, /exact flow, component, request, and boundaries/i);
+  assert.match(draft.content, /Keep unrelated decisions in separate pages/i);
+  assert.match(draft.content, /## Current decision/);
+  assert.match(draft.content, /## Rationale/);
+  assert.match(draft.content, /## Alternatives considered/);
+  assert.match(draft.content, /## Consequences/);
+  assert.match(draft.content, /## Related evidence/);
+  assert.match(draft.content, /## Decision history/);
+  assert.match(draft.content, /2026-08-22/);
+  assert.match(draft.content, /Do not copy raw conversation or hidden chain-of-thought/);
+  assert.doesNotMatch(draft.content, /## Impact on client documents/);
+
+  const validation = await validateWikiPageContent(draft.content, { checkSourceExists: false });
+  assert.equal(hasErrors(validation.issues), false);
+});
+
 test("development report contract blocks incomplete reports and prepares request drafts for valid reports", () => {
   const plan = buildDevReportPlan({
     client: "Cliente",
