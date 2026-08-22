@@ -97,7 +97,7 @@
     "fast-glob": "^3.3.3",
     "jszip": "^3.10.1",
     "marked": "18.0.9",
-    "pdf-to-png-converter": "3.14.0",
+    "pdf-to-png-converter": "4.2.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
