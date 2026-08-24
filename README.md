@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://cdn.jsdelivr.net/npm/knowledge-rail@2.6.1/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
+  <img src="https://cdn.jsdelivr.net/npm/knowledge-rail@2.6.2/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
 </p>
 
 <h1 align="center">KnowledgeRail</h1>
@@ -8,7 +8,7 @@ KnowledgeRail is a local-first MCP server that turns project documentation and s
 
 It is designed for agents that need to understand, change, review, or document a codebase without loading the whole repository into the model context. Retrieval is bounded, provenance is preserved, missing evidence is reported explicitly, and difficult queries widen progressively instead of silently losing relevant information.
 
-> **Current status:** stable release `2.6.1`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports path-free local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
+> **Current status:** stable release `2.6.2`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports explicitly bound or safely inferred local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
 
 ## What it provides
 
@@ -20,7 +20,7 @@ It is designed for agents that need to understand, change, review, or document a
 - Incremental graph, retrieval, and semantic indexes stored beside the project wiki.
 - Contract-driven Markdown deliverables with terminal review, content hashes, and optional caller-authored diagrams.
 - Conservative migration of existing v1/v2/v3 wikis and pre-rebrand `.llm-wiki` metadata.
-- Automatic per-process workspace binding for IDEs and terminal agents.
+- Deterministic project binding through explicit Cursor workspace configuration, cwd-aware IDE processes, and terminal agents.
 - A local HTTP gateway that keeps concurrent clients and projects isolated per request.
 - A desktop-chat workspace catalog with opaque, expiring per-chat bindings.
 
@@ -58,13 +58,13 @@ KnowledgeRail ships no browser or document renderer. Mermaid source remains ordi
 
 ## Quick start with npx
 
-Run this from any directory inside the project you opened in VS Code, Cursor, a terminal, or another context-aware coding client:
+Run this from any directory inside the project in a terminal or another client that launches stdio servers with the project as its working directory:
 
 ```bash
-npx -y knowledge-rail@2.6.1
+npx -y knowledge-rail@2.6.2
 ```
 
-No project path is needed in the persistent MCP configuration. KnowledgeRail discovers the opened project independently for each process, so project X and project Y can be used at the same time by different agent sessions.
+No project path is needed when the MCP client guarantees a project-scoped process cwd or supplies one unambiguous legacy MCP Root. Cursor project setup is explicit because its global MCP process may be shared across windows.
 
 The reviewed package is published to npm. Pin an exact version in persistent configurations; reserve `@latest` for one-time trials.
 
@@ -86,37 +86,94 @@ cd /path/to/your-project
 node /absolute/path/to/KnowledgeRail/dist/index.js
 ```
 
-## IDE, Cursor and terminal configuration
+## Cursor configuration
 
-Use the standard `stdio` server shape once. Do not hard-code one repository:
+Run this once from the project root or any nested directory:
+
+```bash
+npx -y knowledge-rail@2.6.2 setup cursor
+```
+
+The command discovers the project upward and safely creates or merges `.cursor/mcp.json`. It preserves other MCP servers and pins an explicit `${workspaceFolder}` binding. Re-running it is idempotent.
+
+The equivalent manual project configuration is:
+
+```json
+{
+  "mcpServers": {
+    "knowledge-rail": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "knowledge-rail@2.6.2",
+        "--root",
+        "${workspaceFolder}"
+      ]
+    }
+  }
+}
+```
+
+Keep this file at `<project>/.cursor/mcp.json`, not in the global `~/.cursor/mcp.json`. Recent Cursor releases can reuse a global stdio MCP process whose cwd is the user home or an empty window, so global cwd-based project inference is not a supported bound-workspace configuration. Cursor documents `type: "stdio"`, project configuration, and `${workspaceFolder}` interpolation in its [MCP guide](https://cursor.com/docs/mcp).
+
+For a source checkout, use the compiled entry point while retaining the explicit workspace root:
+
+```json
+{
+  "mcpServers": {
+    "knowledge-rail": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "/absolute/path/to/KnowledgeRail/dist/index.js",
+        "--root",
+        "${workspaceFolder}"
+      ]
+    }
+  }
+}
+```
+
+For a Cursor multi-root workspace, install one project configuration in every root that should expose KnowledgeRail. The server never selects the first open root silently.
+
+## Claude Code configuration
+
+From the project, add KnowledgeRail at project scope:
+
+```bash
+claude mcp add --transport stdio --scope project knowledge-rail -- npx -y knowledge-rail@2.6.2
+```
+
+Claude Code writes the shared project entry to `.mcp.json` and launches the local server in project context. Use `claude mcp list` to verify the connection. The command shape and project scope follow the [official Claude Code MCP guide](https://docs.anthropic.com/en/docs/claude-code/mcp).
+
+## Other IDE and terminal clients
+
+For a client that explicitly guarantees one stdio process per project with the project as cwd, the minimal server configuration remains:
 
 ```json
 {
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.6.1"]
+      "args": ["-y", "knowledge-rail@2.6.2"]
     }
   }
 }
 ```
 
-For a source checkout, replace `knowledge-rail` with Node and the compiled entry point:
+If the client does not guarantee that cwd contract, pass an absolute `--root` in its project-scoped configuration. Do not place a repository-specific absolute root in a global configuration.
 
-```json
-{
-  "mcpServers": {
-    "knowledge-rail": {
-      "command": "node",
-      "args": ["/absolute/path/to/KnowledgeRail/dist/index.js"]
-    }
-  }
-}
+The workspace precedence is explicit `--root`; one unambiguous legacy MCP Root; `WIKI_ROOT` for compatibility; the nearest existing KnowledgeRail marker; the nearest project/VCS marker; finally a safe non-empty cwd. Filesystem roots, the user home, package caches, and known Claude/Cursor application directories fail closed.
+
+Inspect the exact choice without starting MCP:
+
+```bash
+npx -y knowledge-rail@2.6.2 doctor
+npx -y knowledge-rail@2.6.2 doctor --root /absolute/project/path
 ```
 
-The workspace is resolved separately for every launched server with this precedence: explicit `--root`; one unambiguous legacy MCP Root; `WIKI_ROOT` for compatibility; the nearest existing KnowledgeRail marker; the nearest project/VCS marker; finally a safe non-empty cwd. Filesystem roots, the user home, package caches, and known desktop-application directories fail closed. `--root <absolute-path>` remains an operator troubleshooting override, not normal configuration.
-
-When a client has multiple open roots, its integration must launch KnowledgeRail with the active project as cwd (or expose one unambiguous legacy Root). KnowledgeRail never chooses the first root silently and never sends an IDE user through the desktop workspace selector.
+The command prints the canonical root and its resolution source, or exits non-zero with corrective guidance.
 
 ## Claude Desktop and other context-free desktop chats
 
@@ -127,7 +184,7 @@ A desktop chat does not open a filesystem folder, so it cannot safely infer a pr
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.6.1", "desktop"]
+      "args": ["-y", "knowledge-rail@2.6.2", "desktop"]
     }
   }
 }
@@ -140,10 +197,10 @@ In a new chat, ask KnowledgeRail to list workspaces, choose one entry, and confi
 Projects opened successfully by an IDE/terminal are added to the local catalog automatically without changing their clean eight-tool workflow. Operators can also manage catalog metadata locally:
 
 ```bash
-npx -y knowledge-rail@2.6.1 workspace list
-npx -y knowledge-rail@2.6.1 workspace register
-npx -y knowledge-rail@2.6.1 workspace register /absolute/project/path
-npx -y knowledge-rail@2.6.1 workspace unregister ws_example
+npx -y knowledge-rail@2.6.2 workspace list
+npx -y knowledge-rail@2.6.2 workspace register
+npx -y knowledge-rail@2.6.2 workspace register /absolute/project/path
+npx -y knowledge-rail@2.6.2 workspace unregister ws_example
 ```
 
 Registration never copies, uploads, scans the disk, or deletes project files. `workspace register` without a path discovers only upward from cwd.
@@ -153,7 +210,7 @@ Registration never copies, uploads, scans the disk, or deletes project files. `w
 Start one gateway for many concurrent local clients and workspaces:
 
 ```bash
-npx -y knowledge-rail@2.6.1 --transport http
+npx -y knowledge-rail@2.6.2 --transport http
 ```
 
 The default endpoint is `http://127.0.0.1:3333/mcp`; liveness only is available at `/healthz`. MCP requests require the random credential stored in the OS-protected per-user KnowledgeRail state directory. The desktop adapter reads it automatically, so it never belongs in project configuration or a repository.
@@ -164,7 +221,8 @@ The shipped gateway deliberately rejects non-loopback binding. It is local self-
 
 | Client context | Entry point | Workspace behavior | Tool catalog |
 | --- | --- | --- | --- |
-| VS Code, Cursor, terminal agent | default `stdio` | automatic from the opened project, per process | 8 domain tools |
+| Cursor | default `stdio` | explicit project-scoped `${workspaceFolder}` binding | 8 domain tools |
+| Claude Code, cwd-aware IDE or terminal agent | default `stdio` | automatic from a project process cwd or one legacy Root | 8 domain tools |
 | Claude Desktop/local desktop chat | `desktop` | user chooses an approved catalog entry per chat | `knowledge_workspace` + 8 domain tools |
 | Generic trusted local HTTP client | `--transport http` | binding supplied on every filesystem-capable request | `knowledge_workspace` + 8 domain tools |
 
@@ -279,15 +337,15 @@ knowledge_admin {
 The same detector is available without an MCP server for agent hooks and CI. Hook mode reports non-fresh anchors but never blocks the calling tool; it is silent when everything checked is fresh:
 
 ```bash
-npx -y knowledge-rail@2.6.1 drift --no-ledger
-npx -y knowledge-rail@2.6.1 drift --no-ledger --path src/payments.ts --path src/invoices
+npx -y knowledge-rail@2.6.2 drift --no-ledger
+npx -y knowledge-rail@2.6.2 drift --no-ledger --path src/payments.ts --path src/invoices
 ```
 
 An absolute event path is accepted only when it is confined to the discovered project. For pre-commit or CI, `--check` exits `2` on any non-fresh anchor or timeout; operational failures exit `1`. JSON mode returns the complete shared-core result:
 
 ```bash
-npx -y knowledge-rail@2.6.1 drift --check --no-ledger
-npx -y knowledge-rail@2.6.1 drift --format json --no-ledger
+npx -y knowledge-rail@2.6.2 drift --check --no-ledger
+npx -y knowledge-rail@2.6.2 drift --format json --no-ledger
 ```
 
 Text output is capped at 20 affected anchors. Its `stale` count is the aggregate of `drift_suspected` and `anchor_unresolvable`, not a fourth detector verdict. The default timeout is three seconds: ordinary hook mode reports a timeout on stderr and exits `0`, while `--check` exits `2`. Omit `--no-ledger` only when the disposable freshness ledger should be updated for later context compilation.
@@ -390,7 +448,8 @@ Optional embedding variables are `KNOWLEDGE_RAIL_EMBEDDING_API_KEY`, `KNOWLEDGE_
 | --- | --- |
 | MCP SDK | official `@modelcontextprotocol/server`, `client`, and `node` `2.x` packages |
 | Modern protocol | `2026-07-28` |
-| IDE/terminal transport | local `stdio`, automatic project root, exact eight-tool bound profile |
+| Cursor transport | project-scoped local `stdio`, explicit `${workspaceFolder}` root, exact eight-tool bound profile |
+| Cwd-aware IDE/terminal transport | local `stdio`, automatic project root, exact eight-tool bound profile |
 | Local HTTP transport | self-hosted loopback gateway, stateless per-request workspace resolution |
 | Desktop chat | local `stdio`-to-HTTP adapter with user-selected opaque per-chat binding |
 | Legacy wire adapter | Served for existing 2025-era clients with the same eight public tool names |

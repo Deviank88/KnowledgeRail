@@ -17,7 +17,7 @@ Please avoid accessing data that is not yours and do not publish details before 
 
 ## Current trust boundary
 
-KnowledgeRail is local-first. Bound IDE/terminal `stdio` processes infer one project independently; the self-hosted loopback HTTP gateway resolves an opaque workspace binding on every filesystem-capable request; context-free desktop chats select from an approved local catalog. Its tools can read and modify files under the selected workspace, and optional providers can receive source text or document images when explicitly configured. Review MCP tool calls and provider privacy terms before using it with sensitive repositories.
+KnowledgeRail is local-first. Cursor binds project-scoped `stdio` through an explicit `${workspaceFolder}` root; cwd-aware IDE/terminal processes can infer one project independently. The self-hosted loopback HTTP gateway resolves an opaque workspace binding on every filesystem-capable request, and context-free desktop chats select from an approved local catalog. Its tools can read and modify files under the selected workspace, and optional providers can receive source text or document images when explicitly configured. Review MCP tool calls and provider privacy terms before using it with sensitive repositories.
 
 The shipped HTTP mode authenticates requests but accepts loopback binding only. It is not a public endpoint, OAuth deployment, or hostile-user multi-tenant service. Exposing it through an ad-hoc tunnel or reverse proxy bypasses the controls required in [SELF_HOSTING.md](SELF_HOSTING.md).
 

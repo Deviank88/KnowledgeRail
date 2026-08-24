@@ -42,3 +42,22 @@ test("automatic root safety rejects filesystem and user-home roots on every plat
   assert.equal(unsafeAutomaticRootReason(path.parse(process.cwd()).root), "filesystem root");
   assert.equal(unsafeAutomaticRootReason(os.homedir()), "user home directory");
 });
+
+test("automatic root safety rejects known Cursor shared-process directories", () => {
+  assert.equal(
+    unsafeAutomaticRootReason(path.join(os.homedir(), "Library", "Application Support", "Cursor", "User")),
+    "Cursor application directory"
+  );
+  assert.equal(
+    unsafeAutomaticRootReason(path.join(os.homedir(), ".config", "Cursor")),
+    "Cursor application directory"
+  );
+  assert.equal(
+    unsafeAutomaticRootReason(path.join(os.homedir(), ".cursor")),
+    "Cursor application directory"
+  );
+  assert.equal(
+    unsafeAutomaticRootReason(path.join(os.homedir(), ".cursor", "extensions", "publisher.tool")),
+    "Cursor application directory"
+  );
+});

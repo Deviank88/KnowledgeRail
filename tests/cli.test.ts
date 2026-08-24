@@ -47,6 +47,11 @@ test("CLI keeps desktop selection separate from automatic IDE binding", () => {
     kind: "workspace-unregister",
     workspaceId: "ws_123",
   });
+  assert.deepEqual(parseCli(["setup", "cursor"]), { kind: "setup-cursor" });
+  assert.deepEqual(parseCli(["setup", "cursor", "fixture"]), {
+    kind: "setup-cursor",
+    path: "fixture",
+  });
 });
 
 test("CLI accepts an explicit absolute stdio override", () => {
@@ -91,6 +96,16 @@ test("CLI parses hook-safe drift defaults and repeated path scopes", () => {
   assert.deepEqual(parseCli(["drift", "--help"]), { kind: "drift-help" });
 });
 
+test("CLI parses read-only workspace diagnostics", () => {
+  assert.deepEqual(parseCli(["doctor"]), { kind: "doctor", options: {} });
+  const root = path.resolve("fixture project");
+  assert.deepEqual(parseCli(["doctor", "--root", root]), {
+    kind: "doctor",
+    options: { root },
+  });
+  assert.deepEqual(parseCli(["doctor", "--help"]), { kind: "doctor-help" });
+});
+
 test("CLI rejects ambiguous and unsafe combinations before starting a runtime", () => {
   const invalid = [
     ["--port", "3334"],
@@ -102,12 +117,20 @@ test("CLI rejects ambiguous and unsafe combinations before starting a runtime", 
     ["--transport", "http", "--allowed-origin", "https://example.com/path"],
     ["--transport", "http", "--transport", "stdio"],
     ["workspace", "register", "--unknown"],
+    ["setup"],
+    ["setup", "unknown"],
+    ["setup", "cursor", "--unknown"],
+    ["setup", "cursor", "one", "two"],
     ["drift", "--root", "relative"],
     ["drift", "--format", "xml"],
     ["drift", "--timeout-ms", "0"],
     ["drift", "--timeout-ms", "60001"],
     ["drift", "--check", "--check"],
     ["drift", "--unknown"],
+    ["doctor", "--root", "relative"],
+    ["doctor", "--unknown"],
+    ["doctor", "--root"],
+    ["doctor", "--root", path.resolve("one"), "extra"],
     ["--unknown"],
   ];
   for (const args of invalid) {

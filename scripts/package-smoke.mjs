@@ -152,6 +152,10 @@ try {
   if (!driftHelp.stdout.includes("knowledge-rail drift") || !driftHelp.stdout.includes("--no-ledger")) {
     throw new Error("Installed drift subcommand help is incomplete.");
   }
+  const doctorHelp = await run(process.execPath, [installedBin, "doctor", "--help"], { cwd: projectDirectory });
+  if (!doctorHelp.stdout.includes("knowledge-rail doctor") || !doctorHelp.stdout.includes("read-only")) {
+    throw new Error("Installed doctor subcommand help is incomplete.");
+  }
   const version = await run(process.execPath, [installedBin, "--version"], { cwd: projectDirectory });
   if (!/^\d+\.\d+\.\d+\s*$/.test(version.stdout)) throw new Error("Installed --version is invalid.");
   const installedShim = path.join(
@@ -167,6 +171,52 @@ try {
   );
   if (shimVersion.stdout.trim() !== installedPackage.version) {
     throw new Error("Installed knowledge-rail command shim is missing or reports the wrong version.");
+  }
+
+  const doctor = await run(process.execPath, [installedBin, "doctor"], { cwd: projectDirectory });
+  if (
+    !doctor.stdout.includes("status: ready") ||
+    !doctor.stdout.includes(`workspace_root: ${await fs.realpath(projectDirectory)}`) ||
+    !doctor.stdout.includes("workspace_source: project_marker")
+  ) {
+    throw new Error("Installed doctor command did not report the discovered project.");
+  }
+  const nestedCursorDirectory = path.join(projectDirectory, "packages", "app");
+  await fs.mkdir(nestedCursorDirectory, { recursive: true });
+  const cursorSetup = await run(
+    process.execPath,
+    [installedBin, "setup", "cursor"],
+    { cwd: nestedCursorDirectory }
+  );
+  if (!cursorSetup.stdout.startsWith("Configured Cursor for ")) {
+    throw new Error("Installed Cursor setup command did not configure the project.");
+  }
+  const cursorConfigPath = path.join(projectDirectory, ".cursor", "mcp.json");
+  const cursorConfigRaw = await fs.readFile(cursorConfigPath, "utf8");
+  const cursorConfig = JSON.parse(cursorConfigRaw);
+  const cursorServer = cursorConfig.mcpServers?.["knowledge-rail"];
+  if (
+    cursorServer?.type !== "stdio" ||
+    cursorServer.command !== "npx" ||
+    JSON.stringify(cursorServer.args) !== JSON.stringify([
+      "-y",
+      `knowledge-rail@${installedPackage.version}`,
+      "--root",
+      "${workspaceFolder}",
+    ])
+  ) {
+    throw new Error("Installed Cursor setup command wrote an invalid project binding.");
+  }
+  const repeatedCursorSetup = await run(
+    process.execPath,
+    [installedBin, "setup", "cursor"],
+    { cwd: projectDirectory }
+  );
+  if (!repeatedCursorSetup.stdout.startsWith("Already configured Cursor for ")) {
+    throw new Error("Installed Cursor setup command is not idempotent.");
+  }
+  if (await fs.readFile(cursorConfigPath, "utf8") !== cursorConfigRaw) {
+    throw new Error("Installed Cursor setup rewrote an already-correct configuration.");
   }
 
   const childEnvironment = { ...process.env, KNOWLEDGE_RAIL_STATE_DIR: stateDirectory };

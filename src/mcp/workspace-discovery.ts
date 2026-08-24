@@ -76,6 +76,17 @@ export function unsafeAutomaticRootReason(candidate: string): string | null {
   ) {
     return "desktop application directory";
   }
+  if (
+    joined.includes("/application support/cursor") ||
+    joined.includes("/appdata/local/cursor") ||
+    joined.includes("/appdata/local/programs/cursor") ||
+    joined.includes("/appdata/roaming/cursor") ||
+    joined.includes("/.config/cursor") ||
+    joined.includes("/.cursor/") ||
+    joined.endsWith("/.cursor")
+  ) {
+    return "Cursor application directory";
+  }
   return null;
 }
 

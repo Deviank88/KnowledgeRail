@@ -75,6 +75,23 @@ test("public documentation distinguishes local self-hosting from future remote s
   assert.match(security, /opaque workspace binding/i);
 });
 
+test("public setup guidance binds Cursor explicitly without changing cwd-aware clients", async () => {
+  const [readme, selfHosting, security] = await Promise.all([
+    readFile(path.join(repositoryRoot, "README.md"), "utf8"),
+    readFile(path.join(repositoryRoot, "SELF_HOSTING.md"), "utf8"),
+    readFile(path.join(repositoryRoot, "SECURITY.md"), "utf8"),
+  ]);
+  assert.match(readme, /knowledge-rail@\d+\.\d+\.\d+ setup cursor/);
+  assert.match(readme, /<project>\/\.cursor\/mcp\.json/);
+  assert.match(readme, /not in the global `~\/\.cursor\/mcp\.json`/);
+  assert.match(readme, /"type": "stdio"/);
+  assert.match(readme, /"\$\{workspaceFolder\}"/);
+  assert.match(readme, /claude mcp add --transport stdio --scope project/);
+  assert.match(readme, /knowledge-rail@\d+\.\d+\.\d+ doctor/);
+  assert.match(selfHosting, /Cursor project process.*explicit workspace root/);
+  assert.match(security, /Cursor binds project-scoped `stdio` through an explicit/);
+});
+
 test("public attribution credits the conceptual origin without redefining the product", async () => {
   const readme = await readFile(path.join(repositoryRoot, "README.md"), "utf8");
   const acknowledgements = await readFile(path.join(repositoryRoot, "ACKNOWLEDGEMENTS.md"), "utf8");

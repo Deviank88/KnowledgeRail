@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.6.2] - 2026-08-24
+
+### Added
+
+- Added `knowledge-rail setup cursor [<path>]`, which safely creates or merges a project-scoped `.cursor/mcp.json`, preserves unrelated configuration, pins the installed package version, passes `${workspaceFolder}` through `--root`, and remains idempotent.
+- Added the read-only `knowledge-rail doctor [--root <absolute-path>]` command for reporting the canonical workspace root and resolution source without starting an MCP server.
+
+### Changed
+
+- Cursor guidance now uses deterministic project-scoped configuration, while Claude Code, cwd-aware IDEs, terminal agents, desktop chats, and multi-root workspaces have separate setup contracts and examples.
+- Known Cursor application, shared-process, and global configuration directories now fail closed during automatic root discovery.
+
+### Fixed
+
+- Fixed Cursor sessions binding KnowledgeRail through an application or user-home cwd by replacing global cwd inference with explicit project-scoped setup.
+
 ## [2.6.1] - 2026-08-23
 
 ### Changed

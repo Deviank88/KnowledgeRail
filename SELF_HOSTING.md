@@ -9,7 +9,8 @@ KnowledgeRail ships a local, self-hosted multi-workspace gateway. It does not sh
 The local architecture is:
 
 ```text
-IDE/terminal process --stdio + automatic cwd/root--> one bound workspace
+Cursor project process --stdio + explicit workspace root--> one bound workspace
+cwd-aware IDE/terminal --stdio + automatic cwd/root-----> one bound workspace
 
 desktop chat --stdio adapter--\
 local HTTP client ----------+--> loopback gateway --> binding A --> project A

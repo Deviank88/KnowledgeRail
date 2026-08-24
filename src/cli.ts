@@ -3,9 +3,12 @@ import * as nodePath from "node:path";
 export type CliCommand =
   | { kind: "help" }
   | { kind: "drift-help" }
+  | { kind: "doctor-help" }
   | { kind: "version" }
   | { kind: "desktop" }
   | { kind: "drift"; options: DriftCliOptions }
+  | { kind: "doctor"; options: DoctorCliOptions }
+  | { kind: "setup-cursor"; path?: string }
   | { kind: "workspace-list" }
   | { kind: "workspace-register"; path?: string }
   | { kind: "workspace-unregister"; workspaceId: string }
@@ -18,6 +21,10 @@ export interface DriftCliOptions {
   check: boolean;
   writeLedger: boolean;
   timeoutMs: number;
+}
+
+export interface DoctorCliOptions {
+  root?: string;
 }
 
 export interface ServeCliOptions {
@@ -49,6 +56,8 @@ Usage:
   knowledge-rail workspace list
   knowledge-rail workspace register [<path>]
   knowledge-rail workspace unregister <workspace-id>
+  knowledge-rail setup cursor [<path>]
+  knowledge-rail doctor [--root <absolute-path>]
   knowledge-rail drift [--root <absolute-path>] [--path <path>]...
                        [--format text|json] [--check] [--no-ledger]
                        [--timeout-ms <milliseconds>]
@@ -56,8 +65,9 @@ Usage:
   knowledge-rail --help
   knowledge-rail --version
 
-The default transport is stdio. IDEs, Cursor and terminal agents infer the
-opened project automatically; only context-free desktop chats select a catalog workspace.`;
+The default transport is stdio. Cursor uses project-scoped setup with an
+explicit workspace root; cwd-aware IDEs and terminal agents infer the project.
+Only context-free desktop chats select a catalog workspace.`;
 
 export const DRIFT_CLI_HELP = `KnowledgeRail drift - read-only code-evidence drift check
 
@@ -77,6 +87,17 @@ Options:
   --help                  Show this help.
 
 Without --check, completed checks and timeouts exit 0 so agent hooks never block.`;
+
+export const DOCTOR_CLI_HELP = `KnowledgeRail doctor - inspect workspace resolution
+
+Usage:
+  knowledge-rail doctor [--root <absolute-path>]
+  knowledge-rail doctor --help
+
+Options:
+  --root <absolute-path>  Project override; otherwise discover safely from cwd.
+
+This command is read-only and does not start an MCP server or create project files.`;
 
 function requireValue(args: readonly string[], index: number, flag: string): string {
   const value = args[index + 1];
@@ -135,6 +156,26 @@ function parseWorkspaceCommand(args: readonly string[]): CliCommand {
     return { kind: "workspace-unregister", workspaceId: args[2] };
   }
   throw new CliUsageError("Invalid workspace command. Use workspace list, register [path], or unregister <workspace-id>.");
+}
+
+function parseSetupCommand(args: readonly string[]): CliCommand {
+  if (args[1] === "cursor" && args.length <= 3) {
+    const supplied = args[2];
+    if (supplied?.startsWith("--")) throw new CliUsageError(`Unknown setup cursor argument: ${supplied}`);
+    return { kind: "setup-cursor", ...(supplied ? { path: supplied } : {}) };
+  }
+  throw new CliUsageError("Invalid setup command. Use setup cursor [path].");
+}
+
+function parseDoctorCommand(args: readonly string[]): CliCommand {
+  if (args.length === 2 && (args[1] === "--help" || args[1] === "-h")) return { kind: "doctor-help" };
+  if (args.length === 1) return { kind: "doctor", options: {} };
+  if (args.length === 3 && args[1] === "--root") {
+    const value = requireValue(args, 1, "--root");
+    if (!nodePath.isAbsolute(value)) throw new CliUsageError("doctor --root must be an absolute path.");
+    return { kind: "doctor", options: { root: nodePath.resolve(value) } };
+  }
+  throw new CliUsageError("Invalid doctor arguments. Use doctor [--root <absolute-path>].");
 }
 
 function parseDriftCommand(args: readonly string[]): CliCommand {
@@ -200,6 +241,8 @@ export function parseCli(args: readonly string[]): CliCommand {
   if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) return { kind: "help" };
   if (args.length === 1 && (args[0] === "--version" || args[0] === "-v")) return { kind: "version" };
   if (args[0] === "workspace") return parseWorkspaceCommand(args);
+  if (args[0] === "setup") return parseSetupCommand(args);
+  if (args[0] === "doctor") return parseDoctorCommand(args);
   if (args[0] === "drift") return parseDriftCommand(args);
   if (args[0] === "desktop") {
     if (args.length !== 1) throw new CliUsageError("desktop does not accept serve options.");

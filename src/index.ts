@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { CLI_HELP, DRIFT_CLI_HELP, CliUsageError, parseCli } from "./cli.js";
+import { CLI_HELP, DOCTOR_CLI_HELP, DRIFT_CLI_HELP, CliUsageError, parseCli } from "./cli.js";
 import { assertSupportedNodeRuntime } from "./core/runtime-compatibility.js";
 import { logger } from "./core/logger.js";
 import { PRODUCT_VERSION } from "./product.js";
@@ -13,6 +13,8 @@ import {
   runWorkspaceUnregister,
 } from "./runtime/workspace-cli.js";
 import { runDriftCli } from "./runtime/drift-cli.js";
+import { runCursorSetup } from "./runtime/cursor-setup-cli.js";
+import { runDoctorCli } from "./runtime/doctor-cli.js";
 
 function installShutdownHandlers(handle: { close(): Promise<void> }): void {
   let closing = false;
@@ -43,6 +45,10 @@ async function main(): Promise<void> {
     process.stdout.write(`${DRIFT_CLI_HELP}\n`);
     return;
   }
+  if (command.kind === "doctor-help") {
+    process.stdout.write(`${DOCTOR_CLI_HELP}\n`);
+    return;
+  }
   if (command.kind === "version") {
     process.stdout.write(`${PRODUCT_VERSION}\n`);
     return;
@@ -57,6 +63,14 @@ async function main(): Promise<void> {
   }
   if (command.kind === "workspace-unregister") {
     await runWorkspaceUnregister(command.workspaceId);
+    return;
+  }
+  if (command.kind === "setup-cursor") {
+    await runCursorSetup(command.path);
+    return;
+  }
+  if (command.kind === "doctor") {
+    process.exitCode = await runDoctorCli(command.options);
     return;
   }
   if (command.kind === "drift") {
