@@ -19,6 +19,7 @@ import { WorkspaceBindingManager } from "../workspaces/bindings.js";
 import { WorkspaceRegistry } from "../workspaces/registry.js";
 import { GatewayStateStore } from "./gateway-state.js";
 import { qualifyWorkspaceResponse, resolveRequestWorkspace } from "./request-workspace.js";
+import { startupMark } from "../runtime/startup-timing.js";
 
 const DEFAULT_BODY_LIMIT = 4 * 1024 * 1024;
 const DEFAULT_MAX_CONCURRENT_REQUESTS = 64;
@@ -62,6 +63,7 @@ export async function runHttpGateway(
   options: ServeCliOptions,
   dependencies: { stateDirectory?: string; bodyLimit?: number } = {}
 ): Promise<HttpGatewayHandle> {
+  startupMark("gateway_start_started");
   if (!isLoopbackHost(options.host)) {
     throw new Error("Non-loopback HTTP binding is disabled in the local self-hosted release; use loopback or a separately secured future deployment.");
   }
@@ -262,6 +264,7 @@ export async function runHttpGateway(
       : options.host;
     const endpoint = `http://${endpointHost}:${address.port}${options.httpPath}`;
     await state.publish(endpoint, nonce);
+    startupMark("gateway_listening", { host: options.host, port: address.port });
 
     void discoverWorkspaceFromCwd().then((workspace) => registry.register(workspace.root, "automatic")).catch(() => undefined);
     logger.info("gateway", "ready", { host: options.host, port: address.port, path: options.httpPath });

@@ -1,0 +1,186 @@
+{
+  "version": 1,
+  "seed": 27082026,
+  "cases": [
+    {
+      "id": "order-payment-capture", "class": "same_bag_different_order", "split": "development",
+      "query": "authorize payment before capture", "exactPhraseExpected": true, "critical": false,
+      "relevant": { "path": "pairs/01-b-relevant.md", "title": "Payment sequencing", "grade": 3, "expectedHeading": "Required sequence", "passages": [{ "heading": "Alternative wording", "text": "Capture happens before operators authorize payment." }, { "heading": "Required sequence", "text": "The service must authorize payment before capture." }] },
+      "decoy": { "path": "pairs/01-a-decoy.md", "title": "Payment sequencing", "passages": [{ "heading": "Observed sequence", "text": "The service performs capture before payment authorization." }] }
+    },
+    {
+      "id": "order-token-refresh", "class": "same_bag_different_order", "split": "development",
+      "query": "validate token before refresh", "exactPhraseExpected": true, "critical": false,
+      "relevant": { "path": "pairs/02-b-relevant.md", "title": "Token sequencing", "grade": 3, "expectedHeading": "Required sequence", "passages": [{ "heading": "Rejected sequence", "text": "Refresh occurs before operators validate the token." }, { "heading": "Required sequence", "text": "Clients validate token before refresh." }] },
+      "decoy": { "path": "pairs/02-a-decoy.md", "title": "Token sequencing", "passages": [{ "heading": "Legacy sequence", "text": "Clients refresh before token validation." }] }
+    },
+    {
+      "id": "order-stock-shipment", "class": "same_bag_different_order", "split": "heldout",
+      "query": "reserve stock before shipment", "exactPhraseExpected": true, "critical": false,
+      "relevant": { "path": "pairs/03-b-relevant.md", "title": "Stock sequencing", "grade": 3, "expectedHeading": "Required sequence", "passages": [{ "heading": "Invalid sequence", "text": "Shipment starts before workers reserve stock." }, { "heading": "Required sequence", "text": "Workers reserve stock before shipment." }] },
+      "decoy": { "path": "pairs/03-a-decoy.md", "title": "Stock sequencing", "passages": [{ "heading": "Invalid sequence", "text": "Workers start shipment before stock reservation." }] }
+    },
+    {
+      "id": "entity-central-bank", "class": "multi_token_entity", "split": "development",
+      "query": "European Central Bank settlement", "exactPhraseExpected": true, "critical": false,
+      "relevant": { "path": "pairs/04-b-relevant.md", "title": "Settlement authority", "grade": 3, "expectedHeading": "Authority", "passages": [{ "heading": "Other wording", "text": "European settlement uses a central authority and a bank." }, { "heading": "Authority", "text": "European Central Bank settlement guidance applies." }] },
+      "decoy": { "path": "pairs/04-a-decoy.md", "title": "Settlement authority", "passages": [{ "heading": "Regional model", "text": "A European settlement bank uses a central ledger." }] }
+    },
+    {
+      "id": "entity-customer-success", "class": "multi_token_entity", "split": "development",
+      "query": "customer success manager escalation", "exactPhraseExpected": true, "critical": false,
+      "relevant": { "path": "pairs/05-b-relevant.md", "title": "Escalation owner", "grade": 3, "expectedHeading": "Owner", "passages": [{ "heading": "Unrelated roles", "text": "A customer manager reports success after escalation." }, { "heading": "Owner", "text": "The customer success manager owns escalation." }] },
+      "decoy": { "path": "pairs/05-a-decoy.md", "title": "Escalation owner", "passages": [{ "heading": "Split ownership", "text": "The customer manager reports escalation success." }] }
+    },
+    {
+      "id": "entity-ordine-acquisto", "class": "multi_token_entity", "split": "heldout",
+      "query": "ordine di acquisto approvato", "exactPhraseExpected": true, "critical": false,
+      "relevant": { "path": "pairs/06-b-relevant.md", "title": "Approvazione acquisti", "grade": 3, "expectedHeading": "Documento", "passages": [{ "heading": "Parole separate", "text": "L'acquisto viene approvato e genera un ordine di lavoro." }, { "heading": "Documento", "text": "Ogni ordine di acquisto approvato viene protocollato." }] },
+      "decoy": { "path": "pairs/06-a-decoy.md", "title": "Approvazione acquisti", "passages": [{ "heading": "Documento diverso", "text": "Ogni ordine approvato genera una richiesta di acquisto." }] }
+    },
+    {
+      "id": "negation-secrets", "class": "negation", "split": "development",
+      "query": "must not expose secrets", "exactPhraseExpected": true, "critical": true,
+      "relevant": { "path": "pairs/07-b-relevant.md", "title": "Secret handling rule", "grade": 3, "expectedHeading": "Prohibition", "passages": [{ "heading": "Unsafe wording", "text": "The interface might expose data but not ordinary secrets." }, { "heading": "Prohibition", "text": "The interface must not expose secrets." }] },
+      "decoy": { "path": "pairs/07-a-decoy.md", "title": "Secret handling rule", "passages": [{ "heading": "Unsafe proposal", "text": "The interface must expose non-production secrets." }] }
+    },
+    {
+      "id": "negation-permanent-retry", "class": "negation", "split": "development",
+      "query": "never retry permanent failures", "exactPhraseExpected": true, "critical": true,
+      "relevant": { "path": "pairs/08-b-relevant.md", "title": "Permanent failure policy", "grade": 3, "expectedHeading": "Current rule", "passages": [{ "heading": "Rejected rule", "text": "Retry permanent failures but never transient ones." }, { "heading": "Current rule", "text": "Workers never retry permanent failures." }] },
+      "decoy": { "path": "pairs/08-a-decoy.md", "title": "Permanent failure policy", "passages": [{ "heading": "Rejected rule", "text": "Workers retry permanent failures and never stop." }] }
+    },
+    {
+      "id": "negation-delete-data", "class": "negation", "split": "heldout",
+      "query": "non deve eliminare dati", "exactPhraseExpected": true, "critical": true,
+      "relevant": { "path": "pairs/09-b-relevant.md", "title": "Conservazione dati", "grade": 3, "expectedHeading": "Divieto", "passages": [{ "heading": "Frase errata", "text": "Il processo deve eliminare copie ma non dati validi." }, { "heading": "Divieto", "text": "Il processo non deve eliminare dati." }] },
+      "decoy": { "path": "pairs/09-a-decoy.md", "title": "Conservazione dati", "passages": [{ "heading": "Procedura obsoleta", "text": "Il processo deve eliminare dati non confermati." }] }
+    },
+    {
+      "id": "identifier-http-header", "class": "identifier_adjacent_phrase", "split": "development",
+      "query": "HTTP 429 Retry-After", "exactPhraseExpected": true, "critical": true,
+      "relevant": { "path": "pairs/10-b-relevant.md", "title": "Throttle contract", "grade": 3, "expectedHeading": "Wire contract", "passages": [{ "heading": "Separate facts", "text": "Retry-After is documented; HTTP clients may also observe 429." }, { "heading": "Wire contract", "text": "The API returns HTTP 429 Retry-After metadata." }] },
+      "decoy": { "path": "pairs/10-a-decoy.md", "title": "Throttle contract", "passages": [{ "heading": "Separate facts", "text": "Retry-After metadata is optional after an HTTP warning and code 429." }] }
+    },
+    {
+      "id": "identifier-route", "class": "identifier_adjacent_phrase", "split": "development",
+      "query": "POST /v2/invoices tenant", "exactPhraseExpected": true, "critical": true,
+      "relevant": { "path": "pairs/11-b-relevant.md", "title": "Invoice route", "grade": 3, "expectedHeading": "Route", "passages": [{ "heading": "Separate facts", "text": "A tenant can POST data; /v2/invoices is versioned." }, { "heading": "Route", "text": "POST /v2/invoices creates a tenant invoice." }] },
+      "decoy": { "path": "pairs/11-a-decoy.md", "title": "Invoice route", "passages": [{ "heading": "Different operation", "text": "A tenant reads /v2/invoices before a POST audit." }] }
+    },
+    {
+      "id": "identifier-salesforce", "class": "identifier_adjacent_phrase", "split": "heldout",
+      "query": "Asset__c validation rule", "exactPhraseExpected": true, "critical": true,
+      "relevant": { "path": "pairs/12-b-relevant.md", "title": "Asset validation", "grade": 3, "expectedHeading": "Rule", "passages": [{ "heading": "Separate facts", "text": "Asset__c is stored and another validation runs a rule." }, { "heading": "Rule", "text": "The Asset__c validation rule blocks empty owners." }] },
+      "decoy": { "path": "pairs/12-a-decoy.md", "title": "Asset validation", "passages": [{ "heading": "Other rule", "text": "A validation check stores Asset__c after the rule." }] }
+    },
+    {
+      "id": "italian-invoice-order", "class": "italian_phrase_order", "split": "development",
+      "query": "approva fattura prima contabilizzazione", "exactPhraseExpected": true, "critical": false,
+      "relevant": { "path": "pairs/13-b-relevant.md", "title": "Sequenza fattura", "grade": 3, "expectedHeading": "Sequenza corretta", "passages": [{ "heading": "Sequenza errata", "text": "La contabilizzazione avviene prima che il responsabile approva la fattura." }, { "heading": "Sequenza corretta", "text": "Il responsabile approva fattura prima contabilizzazione." }] },
+      "decoy": { "path": "pairs/13-a-decoy.md", "title": "Sequenza fattura", "passages": [{ "heading": "Sequenza inversa", "text": "Il sistema esegue contabilizzazione prima di approvare la fattura." }] }
+    },
+    {
+      "id": "italian-identity-order", "class": "italian_phrase_order", "split": "development",
+      "query": "verifica identità prima attivazione", "exactPhraseExpected": true, "critical": false,
+      "relevant": { "path": "pairs/14-b-relevant.md", "title": "Attivazione account", "grade": 3, "expectedHeading": "Sequenza corretta", "passages": [{ "heading": "Sequenza errata", "text": "L'attivazione precede la verifica dell'identità." }, { "heading": "Sequenza corretta", "text": "Il servizio verifica identità prima attivazione." }] },
+      "decoy": { "path": "pairs/14-a-decoy.md", "title": "Attivazione account", "passages": [{ "heading": "Sequenza inversa", "text": "Il servizio completa attivazione prima della verifica identità." }] }
+    },
+    {
+      "id": "italian-draft-order", "class": "italian_phrase_order", "split": "heldout",
+      "query": "salva bozza dopo validazione", "exactPhraseExpected": true, "critical": false,
+      "relevant": { "path": "pairs/15-b-relevant.md", "title": "Persistenza bozza", "grade": 3, "expectedHeading": "Sequenza corretta", "passages": [{ "heading": "Sequenza errata", "text": "La validazione avviene dopo che il sistema salva la bozza." }, { "heading": "Sequenza corretta", "text": "Il sistema salva bozza dopo validazione." }] },
+      "decoy": { "path": "pairs/15-a-decoy.md", "title": "Persistenza bozza", "passages": [{ "heading": "Sequenza inversa", "text": "Il sistema esegue validazione dopo il salvataggio della bozza." }] }
+    },
+    {
+      "id": "long-idempotency", "class": "long_query_short_phrase", "split": "development",
+      "query": "please review the current implementation and investigate idempotency key propagation", "exactPhraseExpected": true, "critical": false,
+      "relevant": { "path": "pairs/16-b-relevant.md", "title": "Implementation review", "grade": 3, "expectedHeading": "Finding", "passages": [{ "heading": "Generic task", "text": "Please review implementation details and investigate current propagation behavior." }, { "heading": "Finding", "text": "The current implementation preserves idempotency key propagation." }] },
+      "decoy": { "path": "pairs/16-a-decoy.md", "title": "Implementation review", "passages": [{ "heading": "Generic task", "text": "Please investigate the current key and review propagation implementation." }] }
+    },
+    {
+      "id": "long-backoff", "class": "long_query_short_phrase", "split": "development",
+      "query": "review the worker problem in the current implementation exponential backoff jitter", "exactPhraseExpected": true, "critical": false,
+      "relevant": { "path": "pairs/17-b-relevant.md", "title": "Worker review", "grade": 3, "expectedHeading": "Finding", "passages": [{ "heading": "Generic task", "text": "Review the current worker implementation and its jitter problem." }, { "heading": "Finding", "text": "The worker uses exponential backoff jitter." }] },
+      "decoy": { "path": "pairs/17-a-decoy.md", "title": "Worker review", "passages": [{ "heading": "Generic task", "text": "Review jitter in the current backoff implementation for the exponential worker problem." }] }
+    },
+    {
+      "id": "long-rate-limit", "class": "long_query_short_phrase", "split": "heldout",
+      "query": "debug the current API problem and inspect tenant rate limit enforcement", "exactPhraseExpected": true, "critical": false,
+      "relevant": { "path": "pairs/18-b-relevant.md", "title": "API debugging", "grade": 3, "expectedHeading": "Finding", "passages": [{ "heading": "Generic task", "text": "Debug the API problem and inspect the current tenant behavior." }, { "heading": "Finding", "text": "The gateway owns tenant rate limit enforcement." }] },
+      "decoy": { "path": "pairs/18-a-decoy.md", "title": "API debugging", "passages": [{ "heading": "Generic task", "text": "Debug rate enforcement for the current API tenant limit problem." }] }
+    },
+    {
+      "id": "irrelevant-exact-delete", "class": "phrase_only_irrelevant", "split": "development",
+      "query": "current policy automatic deletion allowed", "exactPhraseExpected": false, "critical": true,
+      "relevant": { "path": "pairs/19-b-relevant.md", "title": "Current policy", "grade": 3, "expectedHeading": "Binding rule", "passages": [{ "heading": "Binding rule", "text": "Current policy prohibits automatic deletion; deletion is never allowed." }] },
+      "decoy": { "path": "pairs/19-a-decoy.md", "title": "Rejected proposal", "passages": [{ "heading": "Rejected text", "text": "The historical proposal said automatic deletion allowed." }] }
+    },
+    {
+      "id": "irrelevant-exact-bypass", "class": "phrase_only_irrelevant", "split": "development",
+      "query": "current control emergency bypass procedure", "exactPhraseExpected": false, "critical": true,
+      "relevant": { "path": "pairs/20-b-relevant.md", "title": "Current control", "grade": 3, "expectedHeading": "Binding rule", "passages": [{ "heading": "Binding rule", "text": "Current control forbids the emergency bypass; the procedure was removed." }] },
+      "decoy": { "path": "pairs/20-a-decoy.md", "title": "Archived proposal", "passages": [{ "heading": "Rejected text", "text": "An archived document defines an emergency bypass procedure." }] }
+    },
+    {
+      "id": "irrelevant-exact-password", "class": "phrase_only_irrelevant", "split": "heldout",
+      "query": "current decision shared password authentication", "exactPhraseExpected": false, "critical": true,
+      "relevant": { "path": "pairs/21-b-relevant.md", "title": "Current decision", "grade": 3, "expectedHeading": "Binding rule", "passages": [{ "heading": "Binding rule", "text": "Current decision prohibits authentication through a shared password." }] },
+      "decoy": { "path": "pairs/21-a-decoy.md", "title": "Legacy note", "passages": [{ "heading": "Obsolete behavior", "text": "The legacy system used shared password authentication." }] }
+    },
+    {
+      "id": "paraphrase-idempotency", "class": "paraphrase_without_exact_phrase", "split": "development",
+      "query": "avoid duplicate side effects", "exactPhraseExpected": false, "critical": false,
+      "relevant": { "path": "pairs/22-b-relevant.md", "title": "Avoid duplicate side effects", "grade": 3, "expectedHeading": "Pattern", "passages": [{ "heading": "Pattern", "text": "Persisting an idempotency token makes repeated delivery harmless." }] },
+      "decoy": { "path": "pairs/22-a-decoy.md", "title": "Duplicate report", "passages": [{ "heading": "Metrics", "text": "Reports count duplicate events and unrelated side effects." }] }
+    },
+    {
+      "id": "paraphrase-outage", "class": "paraphrase_without_exact_phrase", "split": "development",
+      "query": "downstream service outage recovery", "exactPhraseExpected": false, "critical": false,
+      "relevant": { "path": "pairs/23-b-relevant.md", "title": "Downstream service outage recovery", "grade": 3, "expectedHeading": "Pattern", "passages": [{ "heading": "Pattern", "text": "Circuit breakers and delayed retries restore calls after dependency failure." }] },
+      "decoy": { "path": "pairs/23-a-decoy.md", "title": "Service inventory", "passages": [{ "heading": "Inventory", "text": "The downstream service has an outage dashboard and recovery contact." }] }
+    },
+    {
+      "id": "paraphrase-italian-duplicates", "class": "paraphrase_without_exact_phrase", "split": "heldout",
+      "query": "evitare elaborazioni duplicate", "exactPhraseExpected": false, "critical": false,
+      "relevant": { "path": "pairs/24-b-relevant.md", "title": "Evitare elaborazioni duplicate", "grade": 3, "expectedHeading": "Pattern", "passages": [{ "heading": "Pattern", "text": "Una chiave idempotente rende innocua la ripetizione dello stesso evento." }] },
+      "decoy": { "path": "pairs/24-a-decoy.md", "title": "Conteggio duplicati", "passages": [{ "heading": "Report", "text": "Il report conta elaborazioni e righe duplicate." }] }
+    },
+    {
+      "id": "multi-passage-audit", "class": "multiple_relevant_passages", "split": "development",
+      "query": "immutable audit log", "exactPhraseExpected": true, "critical": false,
+      "relevant": { "path": "pairs/25-b-relevant.md", "title": "Audit storage", "grade": 3, "expectedHeading": "Retention", "passages": [{ "heading": "Access", "text": "Audit readers use immutable views over a log." }, { "heading": "Retention", "text": "The immutable audit log is retained for seven years." }] },
+      "decoy": { "path": "pairs/25-a-decoy.md", "title": "Audit storage", "passages": [{ "heading": "Access", "text": "An audit view reads the log after immutable export." }] }
+    },
+    {
+      "id": "multi-passage-order", "class": "multiple_relevant_passages", "split": "development",
+      "query": "order status transition", "exactPhraseExpected": true, "critical": false,
+      "relevant": { "path": "pairs/26-b-relevant.md", "title": "Order lifecycle", "grade": 3, "expectedHeading": "Transition", "passages": [{ "heading": "Overview", "text": "An order has status fields and transition events." }, { "heading": "Transition", "text": "Every order status transition emits one event." }] },
+      "decoy": { "path": "pairs/26-a-decoy.md", "title": "Order lifecycle", "passages": [{ "heading": "Overview", "text": "An order transition event stores the previous status." }] }
+    },
+    {
+      "id": "multi-passage-tenant", "class": "multiple_relevant_passages", "split": "heldout",
+      "query": "tenant isolation boundary", "exactPhraseExpected": true, "critical": true,
+      "relevant": { "path": "pairs/27-b-relevant.md", "title": "Tenant security", "grade": 3, "expectedHeading": "Boundary", "passages": [{ "heading": "Overview", "text": "A tenant has isolation controls around each boundary." }, { "heading": "Boundary", "text": "The tenant isolation boundary is enforced before lookup." }] },
+      "decoy": { "path": "pairs/27-a-decoy.md", "title": "Tenant security", "passages": [{ "heading": "Overview", "text": "An isolation control maps each boundary to a tenant." }] }
+    },
+    {
+      "id": "long-italian-domain", "class": "long_query_short_phrase", "split": "development",
+      "query": "analizza il problema attuale e verifica la soglia approvazione fattura nel flusso", "exactPhraseExpected": true, "critical": false,
+      "relevant": { "path": "pairs/28-b-relevant.md", "title": "Analisi flusso", "grade": 3, "expectedHeading": "Regola", "passages": [{ "heading": "Attività", "text": "Analizza il problema attuale e verifica il flusso della fattura." }, { "heading": "Regola", "text": "La soglia approvazione fattura è diecimila euro." }] },
+      "decoy": { "path": "pairs/28-a-decoy.md", "title": "Analisi flusso", "passages": [{ "heading": "Attività", "text": "Analizza la fattura e verifica nel flusso la soglia del problema di approvazione attuale." }] }
+    },
+    {
+      "id": "split-heading-coordinator", "class": "phrase_split_heading_body", "split": "heldout",
+      "query": "distributed transaction coordinator", "exactPhraseExpected": true, "critical": false,
+      "relevant": { "path": "pairs/29-b-relevant.md", "title": "Transaction architecture", "grade": 3, "expectedHeading": "Distributed transaction", "passages": [{ "heading": "Coordinator distributed", "text": "The transaction service is described separately." }, { "heading": "Distributed transaction", "text": "Coordinator ownership belongs to the workflow engine." }] },
+      "decoy": { "path": "pairs/29-a-decoy.md", "title": "Transaction architecture", "passages": [{ "heading": "Distributed coordinator", "text": "A transaction boundary exists elsewhere." }] }
+    },
+    {
+      "id": "split-heading-invoice", "class": "phrase_split_heading_body", "split": "heldout",
+      "query": "invoice approval threshold", "exactPhraseExpected": true, "critical": false,
+      "relevant": { "path": "pairs/30-b-relevant.md", "title": "Invoice policy", "grade": 3, "expectedHeading": "Invoice approval", "passages": [{ "heading": "Approval threshold", "text": "An invoice uses separate controls." }, { "heading": "Invoice approval", "text": "Threshold enforcement occurs before posting." }] },
+      "decoy": { "path": "pairs/30-a-decoy.md", "title": "Invoice policy", "passages": [{ "heading": "Invoice threshold", "text": "An approval task occurs later." }] }
+    }
+  ]
+}

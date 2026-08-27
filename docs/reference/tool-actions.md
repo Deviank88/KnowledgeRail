@@ -18,185 +18,188 @@ Every successful domain operation returns `structuredContent.state` and `structu
 
 ## `knowledge_admin`
 
-Initialize, status, lint, drift, or migrate.
+Initialize/inspect/rebuild, project client setup, lint, drift, and migration.
 
-Actions/modes: `init`, `status`, `lint`, `drift`, `migrate`.
+Actions/modes: `init`, `status`, `checkpoint`, `client_setup`, `lint`, `drift`, `migrate`.
 
-| Parameter | Type / values | Required | Default | Description |
-|---|---|---:|---|---|
-| `action` | `init` &#124; `status` &#124; `lint` &#124; `drift` &#124; `migrate` | yes | — | init=bootstrap; status=code demand; lint=broken links/orphans; drift=code anchors; migrate=data. |
-| `force` | boolean | no | `false` | — |
-| `include_orphans` | boolean | no | `true` | — |
-| `include_missing` | boolean | no | `true` | — |
-| `include_broken_links` | boolean | no | `true` | — |
-| `migration_action` | `plan` &#124; `apply` &#124; `rollback` | no | `"plan"` | — |
-| `target_version` | string | no | `"4"` | — |
-| `dry_run` | boolean | no | — | — |
-| `backup` | boolean | no | `false` | — |
-| `run_id` | string | no | — | — |
-| `scope` | string | no | — | — |
-| `paths` | array<string> | no | — | — |
+| Parameter | Type / values | Required | Default | Constraints | Description |
+|---|---|---:|---|---|---|
+| `action` | `init` &#124; `status` &#124; `checkpoint` &#124; `client_setup` &#124; `lint` &#124; `drift` &#124; `migrate` | yes | — | — | init=bootstrap;status=state;checkpoint=rebuild;client_setup=hooks;lint=validate links;drift=anchors;migrate=upgrade stored knowledge format. |
+| `force` | boolean | no | `false` | — | — |
+| `integrity_mode` | `metadata` &#124; `content` | no | `"metadata"` | — | — |
+| `include_orphans` | boolean | no | `true` | — | — |
+| `include_missing` | boolean | no | `true` | — | — |
+| `include_broken_links` | boolean | no | `true` | — | — |
+| `migration_action` | `plan` &#124; `apply` &#124; `rollback` | no | `"plan"` | — | — |
+| `target_version` | string | no | `"4"` | — | — |
+| `dry_run` | boolean | no | — | — | — |
+| `backup` | boolean | no | `false` | — | — |
+| `run_id` | string | no | — | — | — |
+| `scope` | string | no | — | — | — |
+| `paths` | array<string> | no | — | — | — |
+| `clients` | array<claude &#124; codex &#124; cursor> | no | — | items ≥ 1; items ≤ 3 | — |
+| `setup_mode` | `preview` &#124; `apply` &#124; `status` | no | `"preview"` | — | — |
 
 ## `knowledge_code`
 
-Code index, symbols, callers, and fallback.
+Code index, symbols, callers, fallback.
 
 Actions/modes: `rebuild`, `update`, `remove`, `search`, `symbol`, `references`, `read`, `status`, `record_fallback`.
 
-| Parameter | Type / values | Required | Default | Description |
-|---|---|---:|---|---|
-| `action` | `rebuild` &#124; `update` &#124; `remove` &#124; `search` &#124; `symbol` &#124; `references` &#124; `read` &#124; `status` &#124; `record_fallback` | yes | — | status=index/demand; rebuild=recreate; update=refresh path; remove=drop path; search=find; symbol=definition; references=callers of symbol; read=URI; record_fallback=raw lookup telemetry. |
-| `path` | string | no | — | — |
-| `query` | string | no | — | — |
-| `symbol` | string | no | — | — |
-| `symbol_id` | string | no | — | — |
-| `resource_uri` | string | no | — | — |
-| `path_prefixes` | array<string> | no | — | — |
-| `kinds` | array<module &#124; class &#124; function &#124; method &#124; route &#124; test &#124; comment> | no | — | — |
-| `max_results` | integer | no | `12` | — |
-| `max_chars` | integer | no | `6000` | — |
-| `fallback_reason` | string | no | — | — |
-| `fallback_result_count` | integer | no | — | — |
-| `fallback_result_paths` | array<string> | no | — | Hit paths; only extension counts persist. |
-| `recovered_evidence` | array<object> | no | — | — |
+| Parameter | Type / values | Required | Default | Constraints | Description |
+|---|---|---:|---|---|---|
+| `action` | `rebuild` &#124; `update` &#124; `remove` &#124; `search` &#124; `symbol` &#124; `references` &#124; `read` &#124; `status` &#124; `record_fallback` | yes | — | — | status=index;rebuild=recreate;update=refresh;remove=drop;search=find;symbol=definition;references=callers of symbol;read=URI;record_fallback=raw lookup. |
+| `path` | string | no | — | length ≥ 1 | — |
+| `query` | string | no | — | length ≥ 1; length ≤ 4096 | — |
+| `symbol` | string | no | — | length ≥ 1; length ≤ 512 | — |
+| `symbol_id` | string | no | — | length ≥ 1; length ≤ 256 | — |
+| `resource_uri` | string | no | — | pattern "^code:\\/\\/repo\\/.*" | — |
+| `path_prefixes` | array<string> | no | — | items ≤ 20 | — |
+| `kinds` | array<module &#124; class &#124; function &#124; method &#124; route &#124; test &#124; comment> | no | — | items ≤ 7 | — |
+| `max_results` | integer | no | `12` | ≥ 1; ≤ 100 | — |
+| `max_chars` | integer | no | `6000` | ≥ 1; ≤ 50000 | — |
+| `fallback_reason` | string | no | — | length ≥ 1; length ≤ 1024 | — |
+| `fallback_result_count` | integer | no | — | ≥ 0; ≤ 1000000 | — |
+| `fallback_result_paths` | array<string> | no | — | items ≤ 1000 | — |
+| `recovered_evidence` | array<object> | no | — | items ≤ 100 | — |
 
 ## `knowledge_context`
 
 Evidence/gaps, pages, search, and graph.
 
-Task responses report `retrieval.coverageMode` (`lexical` or `semantic`) and `coverageWarnings`. Coverage uses the full fused candidate set while returned evidence remains bounded; relevant evidence excluded from display is `budget_limited`, not `missing_evidence`. Compact task responses retain scoped decision references in `decisions` and `changeImpact.decisions` while keeping decision page bodies behind their resource links. A missing decision is optional context, not an automatic coverage gap. Configured embedding provider failures degrade to lexical mode without failing the tool call.
+Task responses report `retrieval.coverageMode` (`lexical` or `semantic`) and `coverageWarnings`. Coverage uses the full fused candidate set while returned evidence remains bounded; relevant evidence excluded from display is `budget_limited`, not `missing_evidence`. Configured embedding provider failures degrade to lexical mode without failing the tool call.
 
 Actions/modes: `task`, `list`, `search`, `graph`.
 
-| Parameter | Type / values | Required | Default | Description |
-|---|---|---:|---|---|
-| `mode` | `task` &#124; `list` &#124; `search` &#124; `graph` | no | `"task"` | task=evidence/gaps; list=pages; search=passages; graph=relations/dependencies. |
-| `intent` | `understand` &#124; `implement` &#124; `modify` &#124; `debug` &#124; `review` &#124; `document` | no | `"understand"` | — |
-| `objective` | string | no | — | — |
-| `query` | string | no | — | — |
-| `changed_paths` | array<string> | no | — | — |
-| `page_types` | array<string> | no | — | — |
-| `retrieval_profile` | `precision` &#124; `balanced` &#124; `coverage` | no | `"balanced"` | — |
-| `max_evidence` | integer | no | `8` | — |
-| `heuristic_token_budget` | integer | no | `2000` | — |
-| `response_detail` | `compact` &#124; `full` | no | `"compact"` | — |
-| `max_results` | integer | no | `10` | — |
-| `max_nodes` | integer | no | `12` | — |
-| `max_depth` | integer | no | `1` | — |
-| `view` | `subgraph` &#124; `traceability` | no | `"subgraph"` | — |
+| Parameter | Type / values | Required | Default | Constraints | Description |
+|---|---|---:|---|---|---|
+| `mode` | `task` &#124; `list` &#124; `search` &#124; `graph` | no | `"task"` | — | task=evidence/gaps; list=pages; search=passages; graph=relations/dependencies. |
+| `intent` | `understand` &#124; `implement` &#124; `modify` &#124; `debug` &#124; `review` &#124; `document` | no | `"understand"` | — | — |
+| `objective` | string | no | — | length ≥ 1; length ≤ 4096 | — |
+| `query` | string | no | — | length ≥ 1; length ≤ 4096 | — |
+| `changed_paths` | array<string> | no | — | items ≤ 20 | — |
+| `page_types` | array<string> | no | — | items ≤ 20 | — |
+| `retrieval_profile` | `precision` &#124; `balanced` &#124; `coverage` | no | `"balanced"` | — | — |
+| `max_evidence` | integer | no | `8` | ≥ 1; ≤ 20 | — |
+| `heuristic_token_budget` | integer | no | `2000` | ≥ 256; ≤ 12000 | — |
+| `response_detail` | `compact` &#124; `full` | no | `"compact"` | — | — |
+| `max_results` | integer | no | `10` | ≥ 1; ≤ 100 | — |
+| `max_nodes` | integer | no | `12` | ≥ 1; ≤ 100 | — |
+| `max_depth` | integer | no | `1` | ≥ 0; ≤ 8 | — |
+| `view` | `subgraph` &#124; `traceability` | no | `"subgraph"` | — | — |
 
 ## `knowledge_document`
 
-Write or review an evidence-backed document.
+Write or review evidence-backed documents.
 
 Actions/modes: `write`, `review`.
 
-| Parameter | Type / values | Required | Default | Description |
-|---|---|---:|---|---|
-| `action` | `write` &#124; `review` | yes | — | write=save Markdown; review=delivery check. |
-| `filename` | string | yes | — | — |
-| `document_type` | string | yes | — | — |
-| `required_sections` | array<string> | no | — | — |
-| `diagram_mode` | `none` &#124; `mermaid` &#124; `external_asset` | no | — | — |
-| `title` | string | no | — | — |
-| `content` | string | no | — | — |
-| `project_name` | string | no | — | — |
-| `language` | string | no | — | — |
-| `client_facing` | boolean | no | — | — |
-| `include_wiki_update_plan` | boolean | no | `true` | — |
-| `overwrite` | boolean | no | `false` | — |
+| Parameter | Type / values | Required | Default | Constraints | Description |
+|---|---|---:|---|---|---|
+| `action` | `write` &#124; `review` | yes | — | — | write=save Markdown; review=delivery check. |
+| `filename` | string | yes | — | length ≥ 4; length ≤ 255; pattern "^[^\\r\\n]+\\.md$" | — |
+| `document_type` | string | yes | — | length ≥ 1; length ≤ 128; pattern "^[^\\r\\n]+$" | — |
+| `required_sections` | array<string> | no | — | items ≤ 30 | — |
+| `diagram_mode` | `none` &#124; `mermaid` &#124; `external_asset` | no | — | — | — |
+| `title` | string | no | — | — | — |
+| `content` | string | no | — | — | — |
+| `project_name` | string | no | — | — | — |
+| `language` | string | no | — | — | — |
+| `client_facing` | boolean | no | — | — | — |
+| `include_wiki_update_plan` | boolean | no | `true` | — | — |
+| `overwrite` | boolean | no | `false` | — | — |
 
 ## `knowledge_document_context`
 
-Plan documents or gather section evidence.
+Document plans and section evidence.
 
 Actions/modes: `plan`, `section`.
 
-| Parameter | Type / values | Required | Default | Description |
-|---|---|---:|---|---|
-| `action` | `plan` &#124; `section` | yes | — | plan=design outline; section=collect evidence. |
-| `document_type` | string | yes | — | — |
-| `required_sections` | array<string> | no | — | — |
-| `diagram_mode` | `none` &#124; `mermaid` &#124; `external_asset` | no | — | — |
-| `project_name` | string | no | — | — |
-| `objective` | string | no | — | — |
-| `audience` | string | no | — | — |
-| `max_sections` | integer | no | — | — |
-| `section_title` | string | no | — | — |
-| `query` | string | no | — | — |
-| `language` | string | no | — | — |
-| `required_evidence` | array<requirement &#124; implementation &#124; decision &#124; source &#124; constraint &#124; invariant &#124; test &#124; risk &#124; current_state &#124; dependency &#124; contradiction> | no | — | — |
-| `preferred_evidence` | array<requirement &#124; implementation &#124; decision &#124; source &#124; constraint &#124; invariant &#124; test &#124; risk &#124; current_state &#124; dependency &#124; contradiction> | no | — | — |
-| `page_paths` | array<string> | no | — | — |
-| `page_types` | array<string> | no | — | — |
-| `max_pages` | integer | no | `8` | — |
-| `max_chars_per_page` | integer | no | `6000` | — |
-| `max_total_chars` | integer | no | `30000` | — |
-| `max_output_chars` | integer | no | — | — |
-| `heuristic_token_budget` | integer | no | — | — |
-| `retrieval_profile` | `precision` &#124; `balanced` &#124; `coverage` | no | `"coverage"` | — |
+| Parameter | Type / values | Required | Default | Constraints | Description |
+|---|---|---:|---|---|---|
+| `action` | `plan` &#124; `section` | yes | — | — | plan=design outline; section=collect evidence. |
+| `document_type` | string | yes | — | length ≥ 1; length ≤ 128; pattern "^[^\\r\\n]+$" | — |
+| `required_sections` | array<string> | no | — | items ≤ 30 | — |
+| `diagram_mode` | `none` &#124; `mermaid` &#124; `external_asset` | no | — | — | — |
+| `project_name` | string | no | — | — | — |
+| `objective` | string | no | — | length ≤ 4096 | — |
+| `audience` | string | no | — | — | — |
+| `max_sections` | integer | no | — | ≥ 1; ≤ 30 | — |
+| `section_title` | string | no | — | — | — |
+| `query` | string | no | — | length ≤ 4096 | — |
+| `language` | string | no | — | — | — |
+| `required_evidence` | array<requirement &#124; implementation &#124; decision &#124; source &#124; constraint &#124; invariant &#124; test &#124; risk &#124; current_state &#124; dependency &#124; contradiction> | no | — | — | — |
+| `preferred_evidence` | array<requirement &#124; implementation &#124; decision &#124; source &#124; constraint &#124; invariant &#124; test &#124; risk &#124; current_state &#124; dependency &#124; contradiction> | no | — | — | — |
+| `page_paths` | array<string> | no | — | — | — |
+| `page_types` | array<string> | no | — | — | — |
+| `max_pages` | integer | no | `8` | ≥ 1; ≤ 20 | — |
+| `max_chars_per_page` | integer | no | `6000` | ≥ 1; ≤ 50000 | — |
+| `max_total_chars` | integer | no | `30000` | ≥ 1; ≤ 1000000 | — |
+| `max_output_chars` | integer | no | — | ≥ 1; ≤ 1000000 | — |
+| `heuristic_token_budget` | integer | no | — | ≥ 256; ≤ 12000 | — |
+| `retrieval_profile` | `precision` &#124; `balanced` &#124; `coverage` | no | `"coverage"` | — | — |
 
 ## `knowledge_files`
 
-Source files: list, read, or normalize.
+List, read, or normalize sources.
 
 Actions/modes: `list`, `read`, `normalize`.
 
-| Parameter | Type / values | Required | Default | Description |
-|---|---|---:|---|---|
-| `action` | `list` &#124; `read` &#124; `normalize` | no | `"list"` | list=sources; read=open; normalize=Markdown. |
-| `category` | `client` &#124; `transcripts` &#124; `reports` &#124; `changelogs` &#124; `normalized` &#124; `deliverables` &#124; `assets` | no | — | — |
-| `pattern` | string | no | `"**/*"` | — |
-| `path` | string | no | — | — |
-| `max_chars` | integer | no | — | — |
-| `overwrite` | boolean | no | `false` | — |
+| Parameter | Type / values | Required | Default | Constraints | Description |
+|---|---|---:|---|---|---|
+| `action` | `list` &#124; `read` &#124; `normalize` | no | `"list"` | — | list=sources; read=open; normalize=Markdown. |
+| `category` | `client` &#124; `transcripts` &#124; `reports` &#124; `changelogs` &#124; `normalized` &#124; `deliverables` &#124; `assets` | no | — | — | — |
+| `pattern` | string | no | `"**/*"` | — | — |
+| `path` | string | no | — | — | — |
+| `max_chars` | integer | no | — | ≥ 1; ≤ 50000 | — |
+| `overwrite` | boolean | no | `false` | — | — |
 
 ## `knowledge_ingest`
 
-Ingest sources, claims, coverage, and recovery.
+Source ingestion, claims, coverage, recovery.
 
 Actions/modes: `start`, `next`, `apply_claims`, `record_segment`, `source_status`, `evidence_status`, `finalize`, `report`, `record_recovery`, `resolve_recovery`.
 
-| Parameter | Type / values | Required | Default | Description |
-|---|---|---:|---|---|
-| `action` | `start` &#124; `next` &#124; `apply_claims` &#124; `record_segment` &#124; `source_status` &#124; `evidence_status` &#124; `finalize` &#124; `report` &#124; `record_recovery` &#124; `resolve_recovery` | yes | — | start=begin; next=segment; apply_claims=integrate claims; record_segment=classify; source_status=coverage; evidence_status=debt; finalize=close; report=drafts; record_recovery=track; resolve_recovery=resolve. |
-| `normalized_filename` | string | no | — | Normalized path. |
-| `max_chars` | integer | no | `12000` | Output limit. |
-| `segment_max_chars` | integer | no | — | Segment size. |
-| `segment_id` | string | no | — | Next ID. |
-| `claims` | array<object> | no | — | Claims; target/relations optional. |
-| `segment_status` | `irrelevant` &#124; `unresolved` &#124; `legacy_unverified` | no | — | Segment class. |
-| `evidence_refs` | array<string> | no | — | — |
-| `page_refs` | array<string> | no | — | — |
-| `reason` | string | no | — | Reason. |
-| `report_filename` | string | no | — | Report path. |
-| `claim_ids` | array<string> | no | — | Claim filter. |
-| `include_resolved` | boolean | no | `false` | With resolved. |
-| `total_evidence_used` | integer | no | — | — |
-| `recovery_events` | array<object> | no | — | Recovery events; pages optional. |
-| `recovery_event_id` | string | no | — | Recovery ID. |
-| `recovery_resolution` | `page_updated` &#124; `new_page` &#124; `ledger_updated` &#124; `intentionally_ignored` | no | — | Resolution. |
-| `recovery_page_refs` | array<string> | no | — | Page refs. |
-| `recovery_reason` | string | no | — | Reason. |
+| Parameter | Type / values | Required | Default | Constraints | Description |
+|---|---|---:|---|---|---|
+| `action` | `start` &#124; `next` &#124; `apply_claims` &#124; `record_segment` &#124; `source_status` &#124; `evidence_status` &#124; `finalize` &#124; `report` &#124; `record_recovery` &#124; `resolve_recovery` | yes | — | — | start=begin;next=segment;apply_claims=integrate claims;record_segment=classify;source_status=coverage;evidence_status=debt;finalize=close;report=drafts;record_recovery=track;resolve_recovery=resolve. |
+| `normalized_filename` | string | no | — | — | — |
+| `max_chars` | integer | no | `12000` | ≥ 1; ≤ 50000 | — |
+| `segment_max_chars` | integer | no | — | ≥ 256; ≤ 50000 | — |
+| `segment_id` | string | no | — | — | — |
+| `claims` | array<object> | no | — | items ≥ 1 | Claims; target/relations optional. |
+| `segment_status` | `irrelevant` &#124; `unresolved` &#124; `legacy_unverified` | no | — | — | — |
+| `evidence_refs` | array<string> | no | — | — | — |
+| `page_refs` | array<string> | no | — | — | — |
+| `reason` | string | no | — | — | — |
+| `report_filename` | string | no | — | — | — |
+| `claim_ids` | array<string> | no | — | — | — |
+| `include_resolved` | boolean | no | `false` | — | — |
+| `total_evidence_used` | integer | no | — | ≥ 0; ≤ 1000000 | — |
+| `recovery_events` | array<object> | no | — | items ≤ 100 | Recovery events; pages optional. |
+| `recovery_event_id` | string | no | — | — | — |
+| `recovery_resolution` | `page_updated` &#124; `new_page` &#124; `ledger_updated` &#124; `intentionally_ignored` | no | — | — | — |
+| `recovery_page_refs` | array<string> | no | — | items ≤ 50 | — |
+| `recovery_reason` | string | no | — | length ≥ 1; length ≤ 1024 | — |
 
 ## `knowledge_page`
 
-Canonical page CRUD and durable log.
+Page CRUD and durable log.
 
 Actions/modes: `read`, `write`, `edit`, `move`, `delete`, `append_log`.
 
-| Parameter | Type / values | Required | Default | Description |
-|---|---|---:|---|---|
-| `action` | `read` &#124; `write` &#124; `edit` &#124; `move` &#124; `delete` &#124; `append_log` | yes | — | read=open; write=create; edit=replace; move=rename; delete=remove; append_log=event. |
-| `path` | string | no | — | — |
-| `resource_uri` | string | no | — | — |
-| `max_chars` | integer | no | `6000` | — |
-| `content` | string | no | — | — |
-| `old_string` | string | no | — | — |
-| `new_string` | string | no | — | — |
-| `replace_all` | boolean | no | `false` | — |
-| `old_path` | string | no | — | — |
-| `new_path` | string | no | — | — |
-| `dry_run` | boolean | no | `false` | — |
-| `entry` | string | no | — | — |
-| `level` | `INFO` &#124; `WARN` &#124; `ACTION` &#124; `DECISION` | no | `"ACTION"` | — |
+| Parameter | Type / values | Required | Default | Constraints | Description |
+|---|---|---:|---|---|---|
+| `action` | `read` &#124; `write` &#124; `edit` &#124; `move` &#124; `delete` &#124; `append_log` | yes | — | — | read=open; write=create; edit=replace; move=rename; delete=remove; append_log=event. |
+| `path` | string | no | — | — | — |
+| `resource_uri` | string | no | — | pattern "^knowledge-rail:\\/\\/page\\/.*" | — |
+| `max_chars` | integer | no | `6000` | ≥ 1; ≤ 50000 | — |
+| `content` | string | no | — | — | — |
+| `old_string` | string | no | — | — | — |
+| `new_string` | string | no | — | — | — |
+| `replace_all` | boolean | no | `false` | — | — |
+| `old_path` | string | no | — | — | — |
+| `new_path` | string | no | — | — | — |
+| `dry_run` | boolean | no | `false` | — | — |
+| `entry` | string | no | — | — | — |
+| `level` | `INFO` &#124; `WARN` &#124; `ACTION` &#124; `DECISION` | no | `"ACTION"` | — | — |

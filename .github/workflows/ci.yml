@@ -100,6 +100,43 @@ jobs:
       - name: Deterministic quality gates
         run: npm run eval:gates
 
+  restart-and-startup:
+    name: restart-startup-${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        run: npm run build
+
+      - name: Verified warm-start direction gate
+        run: npm run bench:warm-start:gate
+
+      - name: Protocol-ready desktop recovery gate
+        env:
+          STARTUP_BENCH_ITERATIONS: 3
+          STARTUP_BENCH_SCENARIOS: direct-stdio,desktop-cold,desktop-existing,desktop-stale
+          STARTUP_BENCH_GATE: 1
+        run: npm run bench:startup
+
   benchmark-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 10

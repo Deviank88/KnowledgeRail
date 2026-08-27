@@ -3,9 +3,12 @@ dist/
 coverage/
 .nyc_output/
 .cache/
+.knowledge-rail/
 *.tsbuildinfo
 npm-debug.log*
 *.tgz
+*.mcpb
+artifacts/
 
 # Local configuration and secrets
 .env
@@ -34,9 +37,11 @@ wiki/
 !/docs/reference/tool-actions.md
 !/docs/guides/
 !/docs/guides/claude-code-hooks.md
+!/docs/milestones/
+!/docs/milestones/client-integrations-2-7-0.md
 .docx-analysis/
 benchmarks/results/
 .puppeteer-cache/
 
-# Local implementation plans (never publish internal milestone specifications)
-milestones/
+# Local implementation plans (public milestones belong under docs/milestones)
+/milestones/

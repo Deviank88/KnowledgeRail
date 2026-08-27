@@ -52,6 +52,22 @@ test("CLI keeps desktop selection separate from automatic IDE binding", () => {
     kind: "setup-cursor",
     path: "fixture",
   });
+  assert.deepEqual(parseCli(["setup", "clients"]), {
+    kind: "setup-clients",
+    clients: ["claude", "codex", "cursor"],
+    apply: false,
+  });
+  assert.deepEqual(parseCli(["setup", "clients", "fixture", "--client", "codex", "--apply"]), {
+    kind: "setup-clients",
+    path: "fixture",
+    clients: ["codex"],
+    apply: true,
+  });
+  assert.deepEqual(parseCli(["hook", "--client", "cursor", "--event", "post-edit"]), {
+    kind: "hook",
+    client: "cursor",
+    event: "post-edit",
+  });
 });
 
 test("CLI accepts an explicit absolute stdio override", () => {

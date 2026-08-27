@@ -556,7 +556,7 @@ export function registerWikiTools(
 
   server.registerTool(toolName("search", era), { description: "Internal lexical diagnostic used by knowledge_context mode=search.", inputSchema: z.object({
               query: z.string().max(4_096).optional(),
-              max_results: z.number().int().positive().optional().default(10),
+              max_results: z.number().int().min(1).max(100).optional().default(10),
               page_types: z.array(z.string()).optional(),
               retrieval_profile: z.enum(["precision", "balanced", "coverage"]).optional().default("balanced"),
             }), annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true } }, async ({ query, max_results, page_types, retrieval_profile }) => {
@@ -574,7 +574,7 @@ export function registerWikiTools(
               const lines = top.map(
                 (r, i) =>
                   query
-                    ? `${i + 1}. **${r.title}** (${r.path}) [${r.type}]\n   Score: ${r.score.toFixed(4)} | Section: ${r.heading}\n   > ${r.excerpt}`
+                    ? `${i + 1}. **${r.title}** (${r.path}) [${r.type}]\n   Relative score: ${r.score.toFixed(4)} | Section: ${r.heading}\n   > ${r.excerpt}`
                     : `${i + 1}. ${r.path} | ${r.title} [${r.type}]${r.record.updated ? ` (${r.record.updated})` : ""}`
               );
               return textResult(lines.join("\n\n"));

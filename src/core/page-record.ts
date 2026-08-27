@@ -103,28 +103,41 @@ export function parseWikiPageRecord(
 export async function readWikiPageRecord(
   wikiRoot: string,
   relPath: string,
-  knownStat?: { mtimeMs: number; size: number }
+  knownStat?: { mtimeMs: number; size: number },
+  options: { strict?: boolean } = {}
 ): Promise<WikiPageRecord | null> {
   const absPath = await resolveRealWithin(wikiRoot, relPath);
-  const raw = await readFileSafe(absPath);
+  const raw = options.strict
+    ? await fs.readFile(absPath, "utf8")
+    : await readFileSafe(absPath);
   if (raw === null) return null;
   const stat = knownStat ?? await fs.stat(absPath);
   return parseWikiPageRecord(relPath, raw, stat);
 }
 
-export async function listWikiPagePaths(wikiRoot: string): Promise<string[]> {
+export async function listWikiPagePaths(
+  wikiRoot: string,
+  options: { strict?: boolean } = {}
+): Promise<string[]> {
   const safeWikiRoot = await resolveRealWithin(
     nodePath.dirname(wikiRoot),
     nodePath.basename(wikiRoot)
   );
-  const files = await fg("**/*.md", {
-    cwd: safeWikiRoot,
-    absolute: false,
-    dot: false,
-    onlyFiles: true,
-    followSymbolicLinks: false,
-    ignore: [".knowledge-rail/**", ".llm-wiki/**"],
-  }).catch(() => [] as string[]);
+  let files: string[];
+  try {
+    files = await fg("**/*.md", {
+      cwd: safeWikiRoot,
+      absolute: false,
+      dot: false,
+      onlyFiles: true,
+      followSymbolicLinks: false,
+      ignore: [".knowledge-rail/**", ".llm-wiki/**"],
+      suppressErrors: !options.strict,
+    });
+  } catch (error) {
+    if (options.strict) throw error;
+    files = [];
+  }
   return files
     .map((file) => file.replace(/\\/g, "/"))
     .filter((file) => !CONTROL_FILES.has(file))

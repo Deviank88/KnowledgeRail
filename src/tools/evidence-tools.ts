@@ -59,7 +59,7 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
       segment_id: z.string().optional(),
       claim_ids: z.array(z.string()).optional(),
       claims: z.array(EvidenceClaimInputSchema).optional(),
-      total_evidence_used: z.number().int().nonnegative().optional(),
+      total_evidence_used: z.number().int().min(0).max(1_000_000).optional(),
       recovery_events: z.array(RecoveryEventInputSchema).max(100).optional(),
       recovery_event_id: z.string().optional(),
       recovery_resolution: z.enum(RECOVERY_RESOLUTIONS).optional(),

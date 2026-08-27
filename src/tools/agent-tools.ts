@@ -5,26 +5,16 @@ import {
   type InputRequiredResult,
   type McpServer,
   type ServerContext,
+  type StandardSchemaWithJSON,
 } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { EDITORIAL_EVIDENCE_KINDS } from "../config/editorial-plans.js";
-import { DIAGRAM_MODES } from "../core/document-workflow.js";
-import { detectCodeDrift } from "../core/drift-detection.js";
-import { resolveEvidenceClaims } from "../core/ingestion/evidence-linker.js";
-import {
-  backfillEvidenceCodeAnchors,
-  reconcileEvidenceCoverage,
-  recordEvidenceClaims,
-} from "../core/ingestion/evidence-pipeline.js";
-import {
-  applyEvidenceSynthesis,
-  planEvidenceSynthesis,
-} from "../core/ingestion/evidence-synthesis.js";
+import { DIAGRAM_MODES } from "../config/document-options.js";
 import {
   KNOWLEDGE_RECOVERY_RESOLUTIONS,
 } from "../core/knowledge-recovery.js";
+import { FILE_CATEGORIES } from "../config/workspace-layout.js";
 import { docsCategoryFilePath, getWikiRoot, wikiDir } from "../core/paths.js";
-import { FILE_CATEGORIES } from "../core/report-workflow.js";
 import { readFileSafe } from "../core/utils.js";
 import {
   AGENT_TOOL_NAMES,
@@ -32,13 +22,12 @@ import {
   type ProtocolEra,
   type ToolKey,
 } from "../mcp/tool-names.js";
-import { errorResult, finalizePageMutation } from "./helpers.js";
+import { errorResult } from "./tool-results.js";
 import {
   CodeEvidenceInputSchema,
   EvidenceClaimInputSchema,
   RecoveryEventInputSchema,
 } from "./input-schemas.js";
-import { createOperationRegistry } from "./operation-registry.js";
 
 type OperationResult = CallToolResult | InputRequiredResult;
 
@@ -132,7 +121,7 @@ const FilesSchema = z.object({
   category: z.enum(CATEGORY_ENUM).optional(),
   pattern: z.string().default("**/*"),
   path: z.string().optional(),
-  max_chars: z.number().int().positive().optional(),
+  max_chars: z.number().int().min(1).max(50_000).optional(),
   overwrite: z.boolean().default(false),
 }).superRefine((value, context) => {
   if ((value.action === "read" || value.action === "normalize") && (!value.category || !value.path)) {
@@ -152,9 +141,9 @@ const IngestSchema = z.object({
     "report",
     "record_recovery",
     "resolve_recovery",
-  ]).describe("start=begin; next=segment; apply_claims=integrate claims; record_segment=classify; source_status=coverage; evidence_status=debt; finalize=close; report=drafts; record_recovery=track; resolve_recovery=resolve."),
+  ]).describe("start=begin;next=segment;apply_claims=integrate claims;record_segment=classify;source_status=coverage;evidence_status=debt;finalize=close;report=drafts;record_recovery=track;resolve_recovery=resolve."),
   normalized_filename: z.string().optional(),
-  max_chars: z.number().int().positive().default(12_000),
+  max_chars: z.number().int().min(1).max(50_000).default(12_000),
   segment_max_chars: z.number().int().min(256).max(50_000).optional(),
   segment_id: z.string().optional(),
   claims: z.array(z.record(z.string(), z.unknown())).min(1).optional()
@@ -166,7 +155,7 @@ const IngestSchema = z.object({
   report_filename: z.string().optional(),
   claim_ids: z.array(z.string()).optional(),
   include_resolved: z.boolean().default(false),
-  total_evidence_used: z.number().int().nonnegative().optional(),
+  total_evidence_used: z.number().int().min(0).max(1_000_000).optional(),
   recovery_events: z.array(z.record(z.string(), z.unknown())).max(100).optional()
     .describe("Recovery events; pages optional."),
   recovery_event_id: z.string().optional(),
@@ -240,7 +229,7 @@ const DocumentContextSchema = z.object({
   project_name: z.string().optional(),
   objective: z.string().max(4_096).optional(),
   audience: z.string().optional(),
-  max_sections: z.number().int().positive().optional(),
+  max_sections: z.number().int().min(1).max(30).optional(),
   section_title: z.string().optional(),
   query: z.string().max(4_096).optional(),
   language: z.string().optional(),
@@ -248,10 +237,10 @@ const DocumentContextSchema = z.object({
   preferred_evidence: z.array(z.enum(EDITORIAL_EVIDENCE_KINDS)).optional(),
   page_paths: z.array(z.string()).optional(),
   page_types: z.array(z.string()).optional(),
-  max_pages: z.number().int().positive().default(8),
-  max_chars_per_page: z.number().int().positive().default(6_000),
-  max_total_chars: z.number().int().positive().default(30_000),
-  max_output_chars: z.number().int().positive().optional(),
+  max_pages: z.number().int().min(1).max(20).default(8),
+  max_chars_per_page: z.number().int().min(1).max(50_000).default(6_000),
+  max_total_chars: z.number().int().min(1).max(1_000_000).default(30_000),
+  max_output_chars: z.number().int().min(1).max(1_000_000).optional(),
   heuristic_token_budget: z.number().int().min(256).max(12_000).optional(),
   retrieval_profile: z.enum(["precision", "balanced", "coverage"]).default("coverage"),
 }).superRefine((value, context) => {
@@ -283,9 +272,10 @@ const DocumentSchema = z.object({
 });
 
 const AdminSchema = z.object({
-  action: z.enum(["init", "status", "lint", "drift", "migrate"])
-    .describe("init=bootstrap; status=code demand; lint=broken links/orphans; drift=code anchors; migrate=data."),
+  action: z.enum(["init", "status", "checkpoint", "client_setup", "lint", "drift", "migrate"])
+    .describe("init=bootstrap;status=state;checkpoint=rebuild;client_setup=hooks;lint=validate links;drift=anchors;migrate=upgrade stored knowledge format."),
   force: z.boolean().default(false),
+  integrity_mode: z.enum(["metadata", "content"]).default("metadata"),
   include_orphans: z.boolean().default(true),
   include_missing: z.boolean().default(true),
   include_broken_links: z.boolean().default(true),
@@ -296,6 +286,8 @@ const AdminSchema = z.object({
   run_id: z.string().optional(),
   scope: z.literal("paths").optional(),
   paths: z.array(z.string()).optional(),
+  clients: z.array(z.enum(["claude", "codex", "cursor"])).min(1).max(3).optional(),
+  setup_mode: z.enum(["preview", "apply", "status"]).default("preview"),
 }).superRefine((value, context) => {
   if (value.action === "migrate" && value.migration_action === "rollback" && !value.run_id) {
     context.addIssue({ code: "custom", path: ["run_id"], message: "migration_action=rollback requires run_id." });
@@ -351,6 +343,8 @@ export const AGENT_STATES = [
   "document_reviewed",
   "document_needs_revision",
   "workspace_initialized",
+  "checkpoint_complete",
+  "client_setup_ready",
   "lint_complete",
   "drift_complete",
   "migration_plan_complete",
@@ -371,6 +365,36 @@ const AgentOutputSchema = fromJsonSchema({
   required: ["state", "nextAction"],
   additionalProperties: true,
 });
+
+function withoutRootDialect(schema: Record<string, unknown>): Record<string, unknown> {
+  const { $schema: _dialect, ...catalogSchema } = schema;
+  return catalogSchema;
+}
+
+/**
+ * Keep the original Standard Schema validator and inferred Zod types while
+ * omitting the redundant per-tool JSON Schema dialect declaration from
+ * tools/list. Constraints, defaults, transforms, and refinements are untouched.
+ */
+function compactCatalogSchema<S extends StandardSchemaWithJSON>(schema: S): S {
+  const standard = schema["~standard"];
+  const compact = Object.create(schema) as S;
+  Object.defineProperty(compact, "~standard", {
+    configurable: false,
+    enumerable: false,
+    writable: false,
+    value: {
+      ...standard,
+      jsonSchema: {
+        input: (options: Parameters<typeof standard.jsonSchema.input>[0]) =>
+          withoutRootDialect(standard.jsonSchema.input(options)),
+        output: (options: Parameters<typeof standard.jsonSchema.output>[0]) =>
+          withoutRootDialect(standard.jsonSchema.output(options)),
+      },
+    },
+  });
+  return compact;
+}
 
 function isCallToolResult(result: OperationResult): result is CallToolResult {
   return "content" in result && Array.isArray(result.content);
@@ -433,7 +457,65 @@ function sourceUri(normalizedFilename: string): string {
   return `docs/normalized/${normalizedFilename.replace(/\\/g, "/")}`;
 }
 
+async function checkpointStatus(): Promise<Record<string, unknown>> {
+  const [
+    { lstat },
+    { getRetrievalIndexDiagnostics },
+    { getWikiGraphDiagnostics },
+    { readGraphCheckpoint },
+  ] = await Promise.all([
+    import("node:fs/promises"),
+    import("../core/retrieval-index.js"),
+    import("../core/graph-index.js"),
+    import("../core/graph-checkpoint.js"),
+  ]);
+  const root = wikiDir();
+  const metadataRoot = `${root}/.knowledge-rail`;
+  const metadataStat = await lstat(metadataRoot).catch(() => null);
+  const directory = !metadataStat
+    ? { present: false, valid: true, kind: "missing" }
+    : metadataStat.isSymbolicLink()
+      ? { present: true, valid: false, kind: "symlink" }
+      : metadataStat.isDirectory()
+        ? { present: true, valid: true, kind: "directory" }
+        : { present: true, valid: false, kind: "other" };
+  const fileStatus = async (name: string): Promise<Record<string, unknown>> => {
+    if (!directory.valid) return { present: false, valid: false, kind: "unsafe_parent", bytes: 0 };
+    const value = await lstat(`${metadataRoot}/${name}`).catch(() => null);
+    if (!value) return { present: false, bytes: 0 };
+    if (value.isSymbolicLink()) return { present: true, valid: false, kind: "symlink", bytes: 0 };
+    if (!value.isFile()) return { present: true, valid: false, kind: "other", bytes: 0 };
+    return { present: true, valid: true, kind: "file", bytes: value.size, modifiedAt: value.mtime.toISOString() };
+  };
+  const [retrievalSnapshot, retrievalJournal, graphSnapshot, graphJournal, graphCheckpoint] = await Promise.all([
+    fileStatus("retrieval-index.json"),
+    fileStatus("retrieval-delta.jsonl"),
+    fileStatus("graph.json"),
+    fileStatus("graph-delta.jsonl"),
+    readGraphCheckpoint(root),
+  ]);
+  return {
+    retrieval: getRetrievalIndexDiagnostics(root),
+    graph: getWikiGraphDiagnostics(root) ?? {
+      recovery: "not_hydrated",
+      checkpoint: graphCheckpoint.kind,
+      fallbackReason: graphCheckpoint.fallbackReason,
+      ...(graphCheckpoint.kind === "v3" ? { inputCorpusRevision: graphCheckpoint.inputCorpusRevision } : {}),
+    },
+    files: { directory, retrievalSnapshot, retrievalJournal, graphSnapshot, graphJournal },
+  };
+}
+
 async function applyEvidenceSegment(args: z.output<typeof IngestSchema>): Promise<CallToolResult> {
+  const [
+    { resolveEvidenceClaims },
+    { reconcileEvidenceCoverage, recordEvidenceClaims },
+    { applyEvidenceSynthesis, planEvidenceSynthesis },
+  ] = await Promise.all([
+    import("../core/ingestion/evidence-linker.js"),
+    import("../core/ingestion/evidence-pipeline.js"),
+    import("../core/ingestion/evidence-synthesis.js"),
+  ]);
   const normalizedFilename = args.normalized_filename!;
   const segmentId = args.segment_id!;
   const content = await readFileSafe(docsCategoryFilePath("normalized", normalizedFilename));
@@ -467,7 +549,8 @@ async function applyEvidenceSegment(args: z.output<typeof IngestSchema>): Promis
   const planned = await planEvidenceSynthesis({ wikiRoot: wikiDir(), claimIds });
   const drafts = await applyEvidenceSynthesis({ wikiRoot: wikiDir(), claimIds });
   const index = drafts.length > 0
-    ? await finalizePageMutation(drafts.map((draft) => draft.pagePath))
+    ? await import("./helpers.js").then(({ finalizePageMutation }) =>
+      finalizePageMutation(drafts.map((draft) => draft.pagePath)))
     : "No pages to update.";
   const coverage = await reconcileEvidenceCoverage(wikiDir());
   return {
@@ -504,9 +587,18 @@ export function registerAgentTools(
   era: ProtocolEra = "modern",
   options: { includeWorkspaceBinding?: boolean } = {}
 ): void {
-  const operations = createOperationRegistry(era);
-  const call = (key: ToolKey, args: unknown, context: ServerContext) =>
-    operations.call(
+  let operationsReady: Promise<ReturnType<
+    (typeof import("./operation-registry.js"))["createOperationRegistry"]
+  >> | undefined;
+  const operations = async () => {
+    if (!operationsReady) {
+      operationsReady = import("./operation-registry.js")
+        .then(({ createOperationRegistry }) => createOperationRegistry(era));
+    }
+    return operationsReady;
+  };
+  const call = async (key: ToolKey, args: unknown, context: ServerContext) =>
+    (await operations()).call(
       key,
       args && typeof args === "object" && !Array.isArray(args)
         ? omit(args as Record<string, unknown>, ["workspace_binding"])
@@ -517,7 +609,7 @@ export function registerAgentTools(
     workspace_binding: z.string().min(20).optional()
       .describe("Opaque binding returned by knowledge_workspace; desktop/catalog profile only."),
   };
-  const schemas = options.includeWorkspaceBinding ? {
+  const sourceSchemas = options.includeWorkspaceBinding ? {
     context: ContextSchema.safeExtend(bindingField),
     page: PageSchema.safeExtend(bindingField),
     files: FilesSchema.safeExtend(bindingField),
@@ -535,6 +627,16 @@ export function registerAgentTools(
     documentContext: DocumentContextSchema,
     document: DocumentSchema,
     admin: AdminSchema,
+  };
+  const schemas = {
+    context: compactCatalogSchema(sourceSchemas.context),
+    page: compactCatalogSchema(sourceSchemas.page),
+    files: compactCatalogSchema(sourceSchemas.files),
+    ingest: compactCatalogSchema(sourceSchemas.ingest),
+    code: compactCatalogSchema(sourceSchemas.code),
+    documentContext: compactCatalogSchema(sourceSchemas.documentContext),
+    document: compactCatalogSchema(sourceSchemas.document),
+    admin: compactCatalogSchema(sourceSchemas.admin),
   };
 
   server.registerTool(AGENT_TOOL_NAMES.context, {
@@ -605,7 +707,7 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.page, {
-    description: "Canonical page CRUD and durable log.",
+    description: "Page CRUD and durable log.",
     inputSchema: schemas.page,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
@@ -630,7 +732,7 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.files, {
-    description: "Source files: list, read, or normalize.",
+    description: "List, read, or normalize sources.",
     inputSchema: schemas.files,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
@@ -662,7 +764,7 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.ingest, {
-    description: "Ingest sources, claims, coverage, and recovery.",
+    description: "Source ingestion, claims, coverage, recovery.",
     inputSchema: schemas.ingest,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
@@ -780,7 +882,7 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.code, {
-    description: "Code index, symbols, callers, and fallback.",
+    description: "Code index, symbols, callers, fallback.",
     inputSchema: schemas.code,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
@@ -816,7 +918,7 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.documentContext, {
-    description: "Plan documents or gather section evidence.",
+    description: "Document plans and section evidence.",
     inputSchema: schemas.documentContext,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -844,7 +946,7 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.document, {
-    description: "Write or review an evidence-backed document.",
+    description: "Write or review evidence-backed documents.",
     inputSchema: schemas.document,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
@@ -902,7 +1004,7 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.admin, {
-    description: "Initialize, status, lint, drift, or migrate.",
+    description: "Initialize/inspect/rebuild, project client setup, lint, drift, and migration.",
     inputSchema: schemas.admin,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
@@ -915,7 +1017,66 @@ export function registerAgentTools(
         });
       }
       if (args.action === "status") {
-        return withGuidance(await call("codeEvidence", { action: "status" }, context), "code_status_complete", null);
+        const [{ refreshRetrievalIndex }, codeStatus] = await Promise.all([
+          import("../core/retrieval-index.js"),
+          call("codeEvidence", { action: "status" }, context),
+        ]);
+        await refreshRetrievalIndex(wikiDir(), { persist: false, verificationMode: args.integrity_mode });
+        const knowledgeRuntime = await checkpointStatus();
+        if (!isCallToolResult(codeStatus)) return codeStatus;
+        return withGuidance({
+          ...codeStatus,
+          content: [
+            ...codeStatus.content,
+            { type: "text", text: `Knowledge checkpoint status: verification=${args.integrity_mode}; project paths are not exposed.` },
+          ],
+          structuredContent: {
+            ...(codeStatus.structuredContent && typeof codeStatus.structuredContent === "object"
+              ? codeStatus.structuredContent as Record<string, unknown>
+              : {}),
+            knowledgeRuntime,
+          },
+        }, "code_status_complete", null);
+      }
+      if (args.action === "checkpoint") {
+        const [{ refreshRetrievalIndex }, { getRuntimeWikiGraph }] = await Promise.all([
+          import("../core/retrieval-index.js"),
+          import("../core/graph-runtime.js"),
+        ]);
+        await refreshRetrievalIndex(wikiDir(), {
+          force: true,
+          persist: true,
+          verificationMode: args.integrity_mode,
+          rebuild: args.force,
+        });
+        await getRuntimeWikiGraph(wikiDir(), args.force, { persist: true });
+        const knowledgeRuntime = await checkpointStatus();
+        return withGuidance({
+          content: [{
+            type: "text",
+            text: `Checkpoint ${args.force ? "rebuilt" : "verified"} in ${args.integrity_mode} mode. Canonical Markdown remained authoritative.`,
+          }],
+          structuredContent: { action: "checkpoint", knowledgeRuntime },
+        }, "checkpoint_complete", null);
+      }
+      if (args.action === "client_setup") {
+        const { configureClientIntegrations } = await import("../core/client-integration.js");
+        const result = await configureClientIntegrations({
+          projectRoot: getWikiRoot(),
+          clients: args.clients ?? ["claude", "codex", "cursor"],
+          mode: args.setup_mode,
+        });
+        const changed = result.changes.filter((change) => change.status !== "unchanged").length;
+        const backup = result.backup
+          ? ` Recovery manifest: ${result.backup.manifest} (${result.backup.fileCount} existing file(s) backed up).`
+          : "";
+        return withGuidance({
+          content: [{
+            type: "text",
+            text: `${args.setup_mode === "apply" ? "Applied" : "Prepared"} project-scoped KnowledgeRail client integration for ${result.clients.join(", ")}; ${changed} file(s) ${args.setup_mode === "apply" ? "changed" : "would change"}. No user-level configuration was touched.${backup}${result.trustRequired.length ? ` Review/trust remains required in: ${result.trustRequired.join(", ")}.` : ""}`,
+          }],
+          structuredContent: { action: "client_setup", ...result },
+        }, "client_setup_ready", null);
       }
       if (args.action === "lint") {
         return withGuidance(await call("lint", {
@@ -925,6 +1086,7 @@ export function registerAgentTools(
         }, context), "lint_complete", null);
       }
       if (args.action === "drift") {
+        const { detectCodeDrift } = await import("../core/drift-detection.js");
         const result = await detectCodeDrift({
           repositoryRoot: getWikiRoot(),
           wikiRoot: wikiDir(),
@@ -975,6 +1137,7 @@ export function registerAgentTools(
         args.migration_action === "apply" && args.dry_run !== true &&
         isCallToolResult(result) && result.isError !== true
       ) {
+        const { backfillEvidenceCodeAnchors } = await import("../core/ingestion/evidence-pipeline.js");
         const backfill = await backfillEvidenceCodeAnchors(wikiDir());
         result = {
           ...result,

@@ -16,6 +16,22 @@ interface RuntimeMutationState {
   pageIdsByBasename: Map<string, Set<string>>;
   pageIdsByRequest: Map<string, Set<string>>;
   warningsByPath: Map<string, Set<string>>;
+  activeDelta?: MutableRuntimeGraphDelta;
+}
+
+interface MutableRuntimeGraphDelta {
+  removedNodeIds: Set<string>;
+  upsertNodes: Map<string, GraphNode>;
+  removedEdges: Map<string, GraphEdge>;
+  upsertEdges: Map<string, GraphEdge>;
+}
+
+export interface RuntimeGraphDeltaPatch {
+  removedNodeIds: string[];
+  upsertNodes: GraphNode[];
+  removedEdges: GraphEdge[];
+  upsertEdges: GraphEdge[];
+  warningPatches: Array<{ path: string; warnings: string[] }>;
 }
 
 export interface RuntimeGraphMutationStats {
@@ -26,6 +42,7 @@ export interface RuntimeGraphMutationStats {
 }
 
 const stateByRuntime = new WeakMap<RuntimeGraph, RuntimeMutationState>();
+const deltaByRuntime = new WeakMap<RuntimeGraph, RuntimeGraphDeltaPatch>();
 
 const EDGE_WEIGHTS: Readonly<Record<GraphEdgeKind, number>> = {
   implements: 1,
@@ -59,6 +76,18 @@ function typedNodeId(kind: GraphNodeKind, value: string): string {
 
 function edgeKey(edge: GraphEdge): string {
   return `${edge.from}|${edge.kind}|${edge.to}`;
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function warningPath(warning: string): string | null {
+  const unresolvedLinkMarker = ": unresolved link '";
+  const separator = warning.indexOf(unresolvedLinkMarker);
+  if (separator > 0) return warning.slice(0, separator);
+  const legacySeparator = warning.indexOf(":");
+  return legacySeparator > 0 ? warning.slice(0, legacySeparator) : null;
 }
 
 function mutableNodes(runtime: RuntimeGraph): Map<string, GraphNode> {
@@ -111,9 +140,8 @@ function buildMutationState(runtime: RuntimeGraph): RuntimeMutationState {
     if (node.requestId) addSetValue(state.pageIdsByRequest, node.requestId, node.id);
   }
   for (const warning of runtime.graph.warnings) {
-    const separator = warning.indexOf(":");
-    if (separator <= 0) continue;
-    const relPath = warning.slice(0, separator);
+    const relPath = warningPath(warning);
+    if (!relPath) continue;
     const warnings = state.warningsByPath.get(relPath) ?? new Set<string>();
     warnings.add(warning);
     state.warningsByPath.set(relPath, warnings);
@@ -180,6 +208,9 @@ function removeEdge(runtime: RuntimeGraph, state: RuntimeMutationState, edge: Gr
   }
   runtime.graph.edges.pop();
   state.edgeIndex.delete(key);
+  if (state.activeDelta) {
+    if (!state.activeDelta.upsertEdges.delete(key)) state.activeDelta.removedEdges.set(key, edge);
+  }
   return true;
 }
 
@@ -217,6 +248,10 @@ function addEdge(runtime: RuntimeGraph, state: RuntimeMutationState, edge: Graph
   const degree = mutableDegree(runtime);
   degree.set(edge.from, (degree.get(edge.from) ?? 0) + 1);
   degree.set(edge.to, (degree.get(edge.to) ?? 0) + 1);
+  if (state.activeDelta) {
+    state.activeDelta.removedEdges.delete(edgeKey(edge));
+    state.activeDelta.upsertEdges.set(edgeKey(edge), edge);
+  }
   return true;
 }
 
@@ -268,6 +303,9 @@ function removeNode(runtime: RuntimeGraph, state: RuntimeMutationState, id: stri
     runtime.graph.nodes.pop();
     state.nodeIndex.delete(id);
   }
+  if (state.activeDelta) {
+    if (!state.activeDelta.upsertNodes.delete(id)) state.activeDelta.removedNodeIds.add(id);
+  }
   return node;
 }
 
@@ -279,6 +317,10 @@ function addNode(runtime: RuntimeGraph, state: RuntimeMutationState, node: Graph
   if (node.kind === "page" && node.path) {
     mutablePageByPath(runtime).set(node.path, node.id);
     registerPageIndexes(state, node);
+  }
+  if (state.activeDelta) {
+    state.activeDelta.removedNodeIds.delete(node.id);
+    state.activeDelta.upsertNodes.set(node.id, node);
   }
 }
 
@@ -431,13 +473,30 @@ export async function patchRuntimeGraphPaths(
   wikiRoot: string,
   relPaths: readonly string[]
 ): Promise<RuntimeGraphMutationStats> {
+  const touchedPaths = [...new Set(relPaths.map((inputPath) =>
+    inputPath.replace(/\\/g, "/").normalize("NFC")
+  ))];
+  const nextRecords = new Map<string, WikiPageRecord | null>();
+  for (const relPath of touchedPaths) {
+    try {
+      nextRecords.set(relPath, await readWikiPageRecord(wikiRoot, relPath, undefined, { strict: true }));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") nextRecords.set(relPath, null);
+      else throw error;
+    }
+  }
+
   const state = mutationState(runtime);
+  state.activeDelta = {
+    removedNodeIds: new Set(),
+    upsertNodes: new Map(),
+    removedEdges: new Map(),
+    upsertEdges: new Map(),
+  };
   const affectedRequests = new Set<string>();
   const orphanCandidates = new Set<string>();
-  const touchedPaths = [...new Set(relPaths)];
 
-  for (const inputPath of touchedPaths) {
-    const relPath = inputPath.replace(/\\/g, "/");
+  for (const relPath of touchedPaths) {
     const pageId = pageNodeId(relPath);
     const existing = runtime.nodesById.get(pageId);
     for (const neighbor of [
@@ -454,7 +513,7 @@ export async function patchRuntimeGraphPaths(
     removeNode(runtime, state, pageId);
     state.warningsByPath.delete(relPath);
 
-    const record = await readWikiPageRecord(wikiRoot, relPath).catch(() => null);
+    const record = nextRecords.get(relPath) ?? null;
     if (!record) continue;
     addNode(runtime, state, pageNodeFromRecord(record));
     addMetadataEdges(runtime, state, record);
@@ -472,10 +531,32 @@ export async function patchRuntimeGraphPaths(
     0
   );
   runtime.graph.generatedAt = new Date().toISOString();
+  const delta = state.activeDelta;
+  state.activeDelta = undefined;
+  deltaByRuntime.set(runtime, {
+    removedNodeIds: [...delta.removedNodeIds].sort(compareText),
+    upsertNodes: [...delta.upsertNodes.values()].sort((left, right) => compareText(left.id, right.id)),
+    removedEdges: [...delta.removedEdges.values()].sort((left, right) =>
+      compareText(edgeKey(left), edgeKey(right))),
+    upsertEdges: [...delta.upsertEdges.values()].sort((left, right) =>
+      compareText(edgeKey(left), edgeKey(right))),
+    warningPatches: touchedPaths
+      .map((relPath) => ({
+        path: relPath,
+        warnings: [...(state.warningsByPath.get(relPath) ?? [])].sort(compareText),
+      }))
+      .sort((left, right) => compareText(left.path, right.path)),
+  });
   return {
     touchedPaths: touchedPaths.length,
     affectedRequestGroups: affectedRequests.size,
     affectedRequestPages,
     orphanCandidatesChecked: orphanCandidates.size,
   };
+}
+
+export function takeRuntimeGraphDeltaPatch(runtime: RuntimeGraph): RuntimeGraphDeltaPatch | null {
+  const delta = deltaByRuntime.get(runtime) ?? null;
+  deltaByRuntime.delete(runtime);
+  return delta;
 }
