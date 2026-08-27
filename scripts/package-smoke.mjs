@@ -386,10 +386,11 @@ try {
   const workspaceBinding = selectionText.match(/^workspace_binding: (krb[0-9]+_[A-Za-z0-9_-]+)$/m)?.[1];
   if (!workspaceBinding || workspaceBinding !== selected.structuredContent?.binding) {
     const state = typeof selected.structuredContent?.state === "string" ? selected.structuredContent.state : "missing";
+    const reason = typeof selected.structuredContent?.reason === "string" ? selected.structuredContent.reason : "missing";
     const cause = typeof selected.structuredContent?.cause === "string" ? selected.structuredContent.cause : "missing";
     throw new Error(
       "Installed desktop proxy did not expose the binding through portable text content " +
-      `(isError=${selected.isError === true}, state=${state}, cause=${cause}, ` +
+      `(isError=${selected.isError === true}, state=${state}, reason=${reason}, cause=${cause}, ` +
       `structuredBinding=${typeof selected.structuredContent?.binding === "string"}, textBinding=${Boolean(workspaceBinding)}).`
     );
   }

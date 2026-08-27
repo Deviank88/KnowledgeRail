@@ -48,6 +48,17 @@ function rejectOnAbort(signal: AbortSignal, timeoutMs: number): Promise<never> {
   });
 }
 
+function referencedTimeoutSignal(timeoutMs: number): { signal: AbortSignal; clear(): void } {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort(new DOMException("The operation timed out.", "TimeoutError"));
+  }, timeoutMs);
+  return {
+    signal: controller.signal,
+    clear: () => clearTimeout(timer),
+  };
+}
+
 /**
  * Maintains one recoverable desktop-to-gateway connection. It never replays a
  * failed domain operation: an uncertain call invalidates the transport and the
@@ -84,8 +95,8 @@ export class RecoverableDesktopClientProvider implements DesktopClientProvider {
     if (remainingBackoff > 0) {
       await delay(remainingBackoff, undefined, { signal: this.options.lifecycleSignal });
     }
-    const timeoutSignal = AbortSignal.timeout(attemptTimeoutMs);
-    const signal = AbortSignal.any([this.options.lifecycleSignal, parentSignal, timeoutSignal]);
+    const attemptTimeout = referencedTimeoutSignal(attemptTimeoutMs);
+    const signal = AbortSignal.any([this.options.lifecycleSignal, parentSignal, attemptTimeout.signal]);
     const pending = this.options.connect(signal);
     let accepted = false;
     void pending.then((connection) => {
@@ -106,29 +117,36 @@ export class RecoverableDesktopClientProvider implements DesktopClientProvider {
     } catch (error) {
       this.retryNotBeforeMs = this.now() + this.retryDelayMs;
       throw error;
+    } finally {
+      attemptTimeout.clear();
     }
   }
 
   private async connectWithRetry(): Promise<DesktopClientConnection> {
-    const budgetSignal = AbortSignal.timeout(this.connectionBudgetMs);
+    const budgetTimeout = referencedTimeoutSignal(this.connectionBudgetMs);
+    const budgetSignal = budgetTimeout.signal;
     let lastError: unknown;
-    for (let attempt = 0; attempt < this.maxAttempts; attempt++) {
-      try {
-        return await this.connectOnce(budgetSignal, this.attemptTimeoutMs);
-      } catch (error) {
-        lastError = error;
-        if (this.closed || this.options.lifecycleSignal.aborted || budgetSignal.aborted || attempt + 1 >= this.maxAttempts) {
-          throw error;
-        }
-        const backoffMs = Math.min(this.maxRetryDelayMs, this.retryDelayMs * (2 ** attempt));
-        if (backoffMs > 0) {
-          await delay(backoffMs, undefined, {
-            signal: AbortSignal.any([this.options.lifecycleSignal, budgetSignal]),
-          }).catch(() => { throw lastError; });
+    try {
+      for (let attempt = 0; attempt < this.maxAttempts; attempt++) {
+        try {
+          return await this.connectOnce(budgetSignal, this.attemptTimeoutMs);
+        } catch (error) {
+          lastError = error;
+          if (this.closed || this.options.lifecycleSignal.aborted || budgetSignal.aborted || attempt + 1 >= this.maxAttempts) {
+            throw error;
+          }
+          const backoffMs = Math.min(this.maxRetryDelayMs, this.retryDelayMs * (2 ** attempt));
+          if (backoffMs > 0) {
+            await delay(backoffMs, undefined, {
+              signal: AbortSignal.any([this.options.lifecycleSignal, budgetSignal]),
+            }).catch(() => { throw lastError; });
+          }
         }
       }
+      throw lastError ?? new Error("KnowledgeRail desktop gateway connection failed.");
+    } finally {
+      budgetTimeout.clear();
     }
-    throw lastError ?? new Error("KnowledgeRail desktop gateway connection failed.");
   }
 
   async getClient(): Promise<Client> {
