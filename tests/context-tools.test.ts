@@ -269,6 +269,7 @@ test("modern knowledge_context preserves existing derived index artifacts byte-f
       ["retrieval-index.json", "retrieval snapshot sentinel\n"],
       ["retrieval-delta.jsonl", "retrieval delta sentinel\n"],
       ["graph.json", "graph snapshot sentinel\n"],
+      ["graph-delta.jsonl", "graph delta sentinel\n"],
       ["graph-report.md", "graph report sentinel\n"],
     ]);
     for (const [filename, content] of sentinels) {

@@ -1,18 +1,36 @@
+import * as fs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { atomicWriteText } from "./fs-service.js";
+import {
+  usingDerivedCheckpointLock,
+  type DerivedCheckpointLock,
+} from "./checkpoint-lock.js";
 import { registerWorkspaceState, touchWorkspaceState } from "./workspace-state.js";
 import { markdownLinkTargets, wikiLinkTargets } from "./link-resolution.js";
 import { wikiMetaDir } from "./manifest-service.js";
 import {
+  getRetrievalCorpusRevision,
   getRetrievalIndexGeneration,
-  getWikiPageRecords,
-  refreshRetrievalIndex,
+  getRetrievalPersistenceIdentity,
+  getVerifiedWikiCorpus,
 } from "./retrieval-index.js";
 import {
   ensureDir,
-  readFileSafe,
 } from "./utils.js";
 import { normalizeSearchText, tokenizeSearchText } from "./text-analysis.js";
+import type { WikiPageRecord } from "./page-record.js";
+import {
+  GraphCheckpointBoundsError,
+  graphArtifactToken,
+  graphDeltaFile,
+  readGraphCheckpoint,
+  serializeGraphCheckpoint,
+  serializeGraphDelta,
+  type GraphDeltaInput,
+  type GraphCheckpointFallbackReason,
+  type GraphCheckpointWriteBoundsReason,
+} from "./graph-checkpoint.js";
+import { retrievalArtifactToken } from "./retrieval-checkpoint.js";
 
 export type GraphNodeKind =
   | "page"
@@ -72,12 +90,36 @@ export interface GraphQueryResult {
   seedNodeIds: string[];
 }
 
+export interface WikiGraphDiagnostics {
+  recovery: "restored" | "rebuilt";
+  fallbackReason: GraphCheckpointFallbackReason;
+  inputCorpusRevision: string;
+  persisted: boolean;
+  persistenceReason: GraphPersistenceSkipReason;
+  deltaCount: number;
+}
+
+export type GraphPersistenceSkipReason =
+  | GraphCheckpointWriteBoundsReason
+  | "retrieval_not_persisted"
+  | null;
+
 const graphCache = new Map<string, {
   graph: WikiGraph;
   builtAt: number;
   retrievalGeneration: number;
+  corpusRevision: string;
+  persistedRevision: string | null;
   persisted: boolean;
+  persistenceReason: GraphPersistenceSkipReason;
+  artifactToken: string | null;
+  deltaCount: number;
+  deltaBytes: number;
+  fallbackReason: GraphCheckpointFallbackReason;
 }>();
+
+const GRAPH_DELTA_COMPACT_COUNT = 100;
+const GRAPH_DELTA_COMPACT_BYTES = 4 * 1024 * 1024;
 
 export function graphFile(wikiRoot: string): string {
   return nodePath.join(wikiMetaDir(wikiRoot), "graph.json");
@@ -142,7 +184,8 @@ function resolveWikiTarget(
   relFrom: string,
   target: string,
   titleIndex: Map<string, string>,
-  pathSet: Set<string>
+  pathSet: Set<string>,
+  pathSuffixIndex: ReadonlyMap<string, string>
 ): string | null {
   const normalized = target.replace(/\\/g, "/");
   if (normalized.endsWith(".md")) {
@@ -155,29 +198,140 @@ function resolveWikiTarget(
     `${normalized.replace(/ /g, "_")}.md`,
     `${normalized.replace(/ /g, "-")}.md`,
   ].map((value) => value.toLowerCase());
-  for (const [title, path] of titleIndex) {
-    if (title === normalized.toLowerCase()) return path;
-  }
-  for (const path of pathSet) {
-    const lower = path.toLowerCase();
-    if (candidates.some((candidate) => lower === candidate || lower.endsWith(`/${candidate}`))) {
-      return path;
-    }
+  const titleMatch = titleIndex.get(normalized.toLowerCase());
+  if (titleMatch) return titleMatch;
+  for (const candidate of candidates) {
+    const pathMatch = pathSuffixIndex.get(candidate);
+    if (pathMatch) return pathMatch;
   }
   return null;
 }
 
-async function persistGraph(wikiRoot: string, graph: WikiGraph): Promise<void> {
-  await ensureDir(wikiMetaDir(wikiRoot));
-  await atomicWriteText(graphFile(wikiRoot), JSON.stringify(graph, null, 2) + "\n");
-  await atomicWriteText(graphReportFile(wikiRoot), formatGraphReport(graph));
+function buildPathSuffixIndex(paths: readonly string[]): Map<string, string> {
+  const index = new Map<string, string>();
+  for (const relPath of paths) {
+    const segments = relPath.toLowerCase().split("/");
+    for (let start = 0; start < segments.length; start++) {
+      const suffix = segments.slice(start).join("/");
+      // Sorted canonical paths make ambiguous basename resolution stable and
+      // preserve the legacy resolver's first-match behavior.
+      if (!index.has(suffix)) index.set(suffix, relPath);
+    }
+  }
+  return index;
+}
+
+async function persistGraph(
+  wikiRoot: string,
+  graph: WikiGraph,
+  inputCorpusRevision: string,
+  checkpointLock?: DerivedCheckpointLock
+): Promise<{ artifactToken: string; persisted: boolean; persistenceReason: GraphPersistenceSkipReason }> {
+  const retrieval = getRetrievalPersistenceIdentity(wikiRoot);
+  if (retrieval?.persistenceStatus === "skipped_oversized") {
+    return {
+      artifactToken: await graphArtifactToken(wikiRoot),
+      persisted: false,
+      persistenceReason: "retrieval_not_persisted",
+    };
+  }
+  if (!retrieval || retrieval.persistedRevision !== inputCorpusRevision || !retrieval.artifactToken) {
+    throw new Error("Graph checkpoint input revision is not durably synchronized.");
+  }
+  let serialized: string;
+  try {
+    serialized = serializeGraphCheckpoint(graph, inputCorpusRevision);
+  } catch (error) {
+    if (!(error instanceof GraphCheckpointBoundsError)) throw error;
+    return {
+      artifactToken: await graphArtifactToken(wikiRoot),
+      persisted: false,
+      persistenceReason: error.reason,
+    };
+  }
+  await usingDerivedCheckpointLock(wikiRoot, checkpointLock, async () => {
+    await ensureDir(wikiMetaDir(wikiRoot));
+    const diskToken = await retrievalArtifactToken(wikiRoot);
+    if (diskToken !== retrieval.artifactToken) {
+      throw new Error("Graph checkpoint input revision changed before persistence; rebuild from canonical records.");
+    }
+    await atomicWriteText(graphFile(wikiRoot), serialized);
+    await fs.rm(graphDeltaFile(wikiRoot), { force: true });
+    await atomicWriteText(graphReportFile(wikiRoot), formatGraphReport(graph));
+  });
+  return {
+    artifactToken: await graphArtifactToken(wikiRoot),
+    persisted: true,
+    persistenceReason: null,
+  };
+}
+
+async function persistGraphDelta(
+  wikiRoot: string,
+  baseRevision: string,
+  newRevision: string,
+  delta: GraphDeltaInput,
+  expectedGraphToken: string,
+  checkpointLock?: DerivedCheckpointLock
+): Promise<{
+  artifactToken: string;
+  bytes: number;
+  persisted: boolean;
+  persistenceReason: GraphPersistenceSkipReason;
+}> {
+  const retrieval = getRetrievalPersistenceIdentity(wikiRoot);
+  if (retrieval?.persistenceStatus === "skipped_oversized") {
+    return {
+      artifactToken: await graphArtifactToken(wikiRoot),
+      bytes: 0,
+      persisted: false,
+      persistenceReason: "retrieval_not_persisted",
+    };
+  }
+  if (!retrieval || retrieval.persistedRevision !== newRevision || !retrieval.artifactToken) {
+    throw new Error("Graph delta input revision is not durably synchronized.");
+  }
+  let serialized: string;
+  try {
+    serialized = serializeGraphDelta(baseRevision, newRevision, delta);
+  } catch (error) {
+    if (!(error instanceof GraphCheckpointBoundsError)) throw error;
+    return {
+      artifactToken: await graphArtifactToken(wikiRoot),
+      bytes: 0,
+      persisted: false,
+      persistenceReason: error.reason,
+    };
+  }
+  await usingDerivedCheckpointLock(wikiRoot, checkpointLock, async () => {
+    await ensureDir(wikiMetaDir(wikiRoot));
+    const [retrievalToken, currentGraphToken] = await Promise.all([
+      retrievalArtifactToken(wikiRoot),
+      graphArtifactToken(wikiRoot),
+    ]);
+    if (retrievalToken !== retrieval.artifactToken || currentGraphToken !== expectedGraphToken) {
+      throw new Error("Graph checkpoint changed before delta persistence; rebuild from canonical records.");
+    }
+    await fs.appendFile(graphDeltaFile(wikiRoot), serialized, "utf8");
+  });
+  return {
+    artifactToken: await graphArtifactToken(wikiRoot),
+    bytes: Buffer.byteLength(serialized),
+    persisted: true,
+    persistenceReason: null,
+  };
 }
 
 export async function buildWikiGraph(
   wikiRoot: string,
-  options: { persist?: boolean } = {}
+  options: {
+    persist?: boolean;
+    corpus?: { records: WikiPageRecord[]; corpusRevision: string; generation: number };
+    fallbackReason?: GraphCheckpointFallbackReason;
+  } = {}
 ): Promise<WikiGraph> {
-  const records = await getWikiPageRecords(wikiRoot, true, { persist: options.persist });
+  const corpus = options.corpus ?? await getVerifiedWikiCorpus(wikiRoot, true, { persist: options.persist });
+  const records = corpus.records.sort((left, right) => left.path.localeCompare(right.path));
 
   const nodes = new Map<string, GraphNode>();
   const edges = new Map<string, GraphEdge>();
@@ -186,9 +340,10 @@ export async function buildWikiGraph(
   const pageByTypeAndRequest = new Map<string, string[]>();
   const titleIndex = new Map<string, string>();
   const pathSet = new Set(records.map((record) => record.path));
+  const pathSuffixIndex = buildPathSuffixIndex([...pathSet]);
   const rawByPath = new Map<string, string>();
 
-  for (const record of records.sort((a, b) => a.path.localeCompare(b.path))) {
+  for (const record of records) {
     const relPath = record.path;
     rawByPath.set(relPath, record.raw);
     const type = record.type;
@@ -249,7 +404,7 @@ export async function buildWikiGraph(
   for (const [relPath, raw] of rawByPath) {
     const fromId = pageNodeId(relPath);
     for (const target of [...wikiLinkTargets(raw), ...markdownLinkTargets(raw)]) {
-      const resolved = resolveWikiTarget(relPath, target, titleIndex, pathSet);
+      const resolved = resolveWikiTarget(relPath, target, titleIndex, pathSet, pathSuffixIndex);
       if (resolved) {
         addEdge(edges, { from: fromId, to: pageNodeId(resolved), kind: "links_to" });
       } else {
@@ -285,14 +440,27 @@ export async function buildWikiGraph(
     warnings: [...new Set(warnings)].sort(),
   };
 
-  const persisted = options.persist !== false;
-  if (persisted) await persistGraph(wikiRoot, graph);
+  const persistenceRequested = options.persist !== false;
+  const persistence = persistenceRequested
+    ? await persistGraph(wikiRoot, graph, corpus.corpusRevision)
+    : {
+      artifactToken: await graphArtifactToken(wikiRoot),
+      persisted: false,
+      persistenceReason: null,
+    };
   const cacheRoot = nodePath.resolve(wikiRoot);
   graphCache.set(cacheRoot, {
     graph,
     builtAt: Date.now(),
-    retrievalGeneration: getRetrievalIndexGeneration(wikiRoot),
-    persisted,
+    retrievalGeneration: corpus.generation,
+    corpusRevision: corpus.corpusRevision,
+    persistedRevision: persistence.persisted ? corpus.corpusRevision : null,
+    persisted: persistence.persisted,
+    persistenceReason: persistence.persistenceReason,
+    artifactToken: persistence.artifactToken,
+    deltaCount: 0,
+    deltaBytes: 0,
+    fallbackReason: options.fallbackReason ?? "graph_missing",
   });
   registerWorkspaceState(cacheRoot, "graph-index", () => graphCache.delete(cacheRoot));
   return graph;
@@ -305,26 +473,142 @@ export async function getWikiGraph(
 ): Promise<WikiGraph> {
   const root = nodePath.resolve(wikiRoot);
   touchWorkspaceState(root);
+  const corpus = await getVerifiedWikiCorpus(wikiRoot, force, { persist: options.persist });
   const cached = graphCache.get(root);
   if (!force && cached) {
-    await refreshRetrievalIndex(wikiRoot, { persist: options.persist });
-    if (cached.retrievalGeneration === getRetrievalIndexGeneration(wikiRoot)) {
+    if (cached.retrievalGeneration === corpus.generation && cached.corpusRevision === corpus.corpusRevision) {
       if (options.persist !== false && !cached.persisted) {
-        await persistGraph(wikiRoot, cached.graph);
-        cached.persisted = true;
+        const persistence = await persistGraph(wikiRoot, cached.graph, corpus.corpusRevision);
+        cached.persisted = persistence.persisted;
+        cached.persistenceReason = persistence.persistenceReason;
+        cached.persistedRevision = persistence.persisted ? corpus.corpusRevision : cached.persistedRevision;
+        cached.artifactToken = persistence.artifactToken;
+        cached.deltaCount = 0;
+        cached.deltaBytes = 0;
       }
       return cached.graph;
     }
   }
-  return buildWikiGraph(wikiRoot, options);
+  if (!force) {
+    const checkpoint = await readGraphCheckpoint(wikiRoot);
+    if (checkpoint.kind === "v3" && checkpoint.inputCorpusRevision === corpus.corpusRevision) {
+      graphCache.set(root, {
+        graph: checkpoint.graph,
+        builtAt: Date.now(),
+        retrievalGeneration: corpus.generation,
+        corpusRevision: corpus.corpusRevision,
+        persistedRevision: checkpoint.inputCorpusRevision,
+        persisted: true,
+        persistenceReason: null,
+        artifactToken: checkpoint.artifactToken,
+        deltaCount: checkpoint.deltaCount,
+        deltaBytes: checkpoint.deltaBytes,
+        fallbackReason: "none",
+      });
+      registerWorkspaceState(root, "graph-index", () => graphCache.delete(root));
+      return checkpoint.graph;
+    }
+    const fallbackReason = checkpoint.kind === "v3"
+      ? "graph_revision_mismatch"
+      : checkpoint.fallbackReason;
+    return buildWikiGraph(wikiRoot, { ...options, corpus, fallbackReason });
+  }
+  return buildWikiGraph(wikiRoot, { ...options, corpus, fallbackReason: "force_rebuild" });
+}
+
+export function getWikiGraphDiagnostics(wikiRoot: string): WikiGraphDiagnostics | null {
+  const cached = graphCache.get(nodePath.resolve(wikiRoot));
+  if (!cached) return null;
+  return {
+    recovery: cached.fallbackReason === "none" ? "restored" : "rebuilt",
+    fallbackReason: cached.fallbackReason,
+    inputCorpusRevision: cached.corpusRevision,
+    persisted: cached.persisted,
+    persistenceReason: cached.persistenceReason,
+    deltaCount: cached.deltaCount,
+  };
 }
 
 export function markWikiGraphSynchronized(wikiRoot: string): void {
   const cached = graphCache.get(nodePath.resolve(wikiRoot));
   if (cached) {
     cached.retrievalGeneration = getRetrievalIndexGeneration(wikiRoot);
+    cached.corpusRevision = getRetrievalCorpusRevision(wikiRoot) ?? cached.corpusRevision;
     cached.persisted = false;
   }
+}
+
+export async function persistSynchronizedWikiGraph(
+  wikiRoot: string,
+  delta?: GraphDeltaInput | null,
+  options: { checkpointLock?: DerivedCheckpointLock } = {}
+): Promise<boolean> {
+  const cached = graphCache.get(nodePath.resolve(wikiRoot));
+  if (!cached || cached.persisted) return Boolean(cached);
+  if (delta && cached.persistedRevision && cached.artifactToken) {
+    const persistence = await persistGraphDelta(
+      wikiRoot,
+      cached.persistedRevision,
+      cached.corpusRevision,
+      delta,
+      cached.artifactToken,
+      options.checkpointLock
+    );
+    if (persistence.persisted) {
+      cached.artifactToken = persistence.artifactToken;
+      cached.persistedRevision = cached.corpusRevision;
+      cached.deltaCount++;
+      cached.deltaBytes += persistence.bytes;
+      cached.persistenceReason = null;
+    } else {
+      const snapshot = await persistGraph(
+        wikiRoot,
+        cached.graph,
+        cached.corpusRevision,
+        options.checkpointLock
+      );
+      if (!snapshot.persisted) {
+        cached.persistenceReason = snapshot.persistenceReason ?? persistence.persistenceReason;
+        return false;
+      }
+      cached.artifactToken = snapshot.artifactToken;
+      cached.persistedRevision = cached.corpusRevision;
+      cached.deltaCount = 0;
+      cached.deltaBytes = 0;
+      cached.persistenceReason = null;
+    }
+  } else {
+    const persistence = await persistGraph(
+      wikiRoot,
+      cached.graph,
+      cached.corpusRevision,
+      options.checkpointLock
+    );
+    if (!persistence.persisted) {
+      cached.persistenceReason = persistence.persistenceReason;
+      return false;
+    }
+    cached.artifactToken = persistence.artifactToken;
+    cached.persistedRevision = cached.corpusRevision;
+    cached.deltaCount = 0;
+    cached.deltaBytes = 0;
+    cached.persistenceReason = null;
+  }
+  cached.persisted = true;
+  if (cached.deltaCount >= GRAPH_DELTA_COMPACT_COUNT || cached.deltaBytes >= GRAPH_DELTA_COMPACT_BYTES) {
+    const compacted = await persistGraph(
+      wikiRoot,
+      cached.graph,
+      cached.corpusRevision,
+      options.checkpointLock
+    );
+    if (compacted.persisted) {
+      cached.artifactToken = compacted.artifactToken;
+      cached.deltaCount = 0;
+      cached.deltaBytes = 0;
+    }
+  }
+  return true;
 }
 
 export function invalidateWikiGraph(wikiRoot: string): void {
@@ -332,15 +616,8 @@ export function invalidateWikiGraph(wikiRoot: string): void {
 }
 
 export async function readGraph(wikiRoot: string): Promise<WikiGraph | null> {
-  const raw = await readFileSafe(graphFile(wikiRoot));
-  if (!raw) return null;
-  try {
-    const graph = JSON.parse(raw) as WikiGraph;
-    if (graph.version !== 2 || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return null;
-    return graph;
-  } catch {
-    return null;
-  }
+  const checkpoint = await readGraphCheckpoint(wikiRoot);
+  return checkpoint.kind === "empty" ? null : checkpoint.graph;
 }
 
 export function queryWikiGraph(

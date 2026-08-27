@@ -104,6 +104,19 @@ test("warm page edit patches the same runtime object and only recomputes affecte
     assert.equal(edgeExists(runtime, requirementId, "request:REQ_1", "same_request"), false);
     assert.equal(edgeExists(runtime, requirementId, "request:REQ_2", "same_request"), true);
     assert.equal(runtime.nodesById.has("request:REQ_1"), true, "REQ-1 remains referenced by the implementation");
+
+    const patched = {
+      nodes: [...runtime.graph.nodes].sort((left, right) => left.id.localeCompare(right.id)),
+      edges: [...runtime.graph.edges].sort((left, right) =>
+        left.from.localeCompare(right.from) || left.kind.localeCompare(right.kind) || left.to.localeCompare(right.to)),
+      warnings: [...runtime.graph.warnings].sort(),
+    };
+    clearRuntimeWikiGraphs();
+    invalidateWikiGraph(wikiRoot);
+    const oracle = await getRuntimeWikiGraph(wikiRoot, true, { persist: false });
+    assert.deepEqual(patched.nodes, oracle.graph.nodes, "incremental nodes must equal a full canonical rebuild");
+    assert.deepEqual(patched.edges, oracle.graph.edges, "incremental edges must equal a full canonical rebuild");
+    assert.deepEqual(patched.warnings, oracle.graph.warnings, "incremental warnings must equal a full canonical rebuild");
   } finally {
     await cleanup(root, wikiRoot);
   }
@@ -168,6 +181,29 @@ test("reconciled external edit replaces the stale warm runtime instead of servin
 
     assert.notEqual(after, before, "external canonical changes must replace the stale runtime");
     assert.equal(after.nodesById.get("page:requirements/REQ.md")?.label, "Externally edited requirement");
+  } finally {
+    await cleanup(root, wikiRoot);
+  }
+});
+
+test("a rejected multi-path mutation leaves the warm runtime untouched", async () => {
+  const { root, wikiRoot } = await fixture();
+  try {
+    const runtime = await getRuntimeWikiGraph(wikiRoot, true);
+    const before = JSON.stringify(runtime.graph);
+    await writePage(wikiRoot, "requirements/REQ.md", {
+      title: "Must not leak into runtime",
+      type: "requirement",
+      requestId: "REQ-2",
+      body: "The second invalid path must reject the complete mutation.",
+    });
+
+    await assert.rejects(
+      updateRuntimeWikiGraphPaths(wikiRoot, ["requirements/REQ.md", "../outside.md"]),
+      /escapes allowed directory/
+    );
+    assert.equal(JSON.stringify(runtime.graph), before);
+    assert.equal(peekRuntimeWikiGraph(wikiRoot), runtime);
   } finally {
     await cleanup(root, wikiRoot);
   }

@@ -21,6 +21,7 @@ import type { WikiPageRecord } from "./page-record.js";
 import { getWikiPageRecords } from "./retrieval-index.js";
 import { tokenizeSearchText, type RetrievalProfile } from "./text-analysis.js";
 import { WIKI_PAGE_TYPES, type WikiPageType } from "./wiki-validation.js";
+import { DIAGRAM_MODES, type DiagramMode } from "../config/document-options.js";
 
 export { DOCUMENT_TYPES, type DocumentType } from "../config/document-contracts.js";
 export { WIKI_PAGE_TYPES, type WikiPageType } from "./wiki-validation.js";
@@ -160,8 +161,7 @@ export interface DocumentPlanOptions {
   maxSections?: number;
 }
 
-export const DIAGRAM_MODES = ["none", "mermaid", "external_asset"] as const;
-export type DiagramMode = (typeof DIAGRAM_MODES)[number];
+export { DIAGRAM_MODES, type DiagramMode } from "../config/document-options.js";
 
 export interface DiagramEvidenceNode {
   id: string;

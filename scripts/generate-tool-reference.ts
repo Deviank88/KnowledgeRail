@@ -35,6 +35,15 @@ interface SchemaProperty {
   enum?: string[];
   default?: unknown;
   description?: string;
+  minimum?: number;
+  maximum?: number;
+  exclusiveMinimum?: number;
+  exclusiveMaximum?: number;
+  minLength?: number;
+  maxLength?: number;
+  minItems?: number;
+  maxItems?: number;
+  pattern?: string;
   items?: { type?: string; enum?: string[] };
 }
 
@@ -61,6 +70,20 @@ function escapeCell(value: string): string {
   return value.replace(/\|/g, "&#124;").replace(/\r?\n/g, " ");
 }
 
+function schemaConstraints(property: SchemaProperty): string {
+  const constraints: string[] = [];
+  if (property.minimum !== undefined) constraints.push(`≥ ${property.minimum}`);
+  if (property.exclusiveMinimum !== undefined) constraints.push(`> ${property.exclusiveMinimum}`);
+  if (property.maximum !== undefined) constraints.push(`≤ ${property.maximum}`);
+  if (property.exclusiveMaximum !== undefined) constraints.push(`< ${property.exclusiveMaximum}`);
+  if (property.minLength !== undefined) constraints.push(`length ≥ ${property.minLength}`);
+  if (property.maxLength !== undefined) constraints.push(`length ≤ ${property.maxLength}`);
+  if (property.minItems !== undefined) constraints.push(`items ≥ ${property.minItems}`);
+  if (property.maxItems !== undefined) constraints.push(`items ≤ ${property.maxItems}`);
+  if (property.pattern !== undefined) constraints.push(`pattern ${JSON.stringify(property.pattern)}`);
+  return constraints.join("; ") || "—";
+}
+
 function renderTool(tool: CatalogTool): string {
   const required = new Set(tool.inputSchema.required ?? []);
   const properties = Object.entries(tool.inputSchema.properties ?? {});
@@ -78,11 +101,11 @@ function renderTool(tool: CatalogTool): string {
     "",
     ...(coverageNote ? [coverageNote, ""] : []),
     ...(actions.length > 0 ? [`Actions/modes: ${actions.map((value) => `\`${value}\``).join(", ")}.`, ""] : []),
-    "| Parameter | Type / values | Required | Default | Description |",
-    "|---|---|---:|---|---|",
+    "| Parameter | Type / values | Required | Default | Constraints | Description |",
+    "|---|---|---:|---|---|---|",
     ...properties.map(([name, property]) =>
       `| \`${name}\` | ${escapeCell(schemaType(property))} | ${required.has(name) ? "yes" : "no"} | ` +
-      `${property.default === undefined ? "—" : `\`${JSON.stringify(property.default)}\``} | ` +
+      `${property.default === undefined ? "—" : `\`${JSON.stringify(property.default)}\``} | ${escapeCell(schemaConstraints(property))} | ` +
       `${escapeCell(property.description ?? "—")} |`
     ),
     "",

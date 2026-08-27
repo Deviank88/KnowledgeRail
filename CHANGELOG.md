@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-08-28
+
+### Added
+
+- Added revisioned lexical and graph checkpoints with validated warm restore, base-aware journals, bounded persistence, cross-process CAS protection, automatic cold rebuild on invalid state, and startup/restart performance gates.
+- Added bounded ordered-bigram reranking with identifier protection, passage selection diagnostics, a pinned held-out quality evaluation, and a production-formula regression gate.
+- Added explicit project-scoped Claude Code, Codex, and Cursor hook/rule setup through `knowledge_admin action="client_setup"` and `knowledge-rail setup clients`, including preview/apply modes, safe merges, checksummed project-local recovery transactions, bounded successful-backup retention, native hook output translation, and trust handoff.
+- Added a deferred desktop catalog and recoverable loopback connection manager so MCP protocol readiness no longer waits for gateway startup.
+
+### Changed
+
+- Desktop gateway connection attempts now use configurable bounded retries and platform-aware timeouts while keeping shared gateway ownership separate from individual MCP client sessions.
+- Internal search output labels scores as relative ranking signals, and phrase diagnostics/configuration use one canonical scoring contract.
+- MCP catalog metadata retains 100% routing accuracy while restoring explicit byte/token headroom below a stricter surface gate; redundant per-tool dialect annotations are omitted and public integer budgets expose meaningful bounds without weakening Zod validation.
+
+### Fixed
+
+- Fixed stale checkpoint CAS state failing to converge after another process persisted a generation.
+- Fixed desktop gateway leaks across abort, credential, and rendezvous failures, and prevented one adapter transport error from closing the shared owned gateway.
+- Fixed unsanitized prompt/resource connection errors and an exact-identifier phrase-score tie.
+- Fixed catalog authorization so read-scoped bindings cannot apply client configuration or persist checkpoints while retaining read-only setup preview/status.
+
 ## [2.6.2] - 2026-08-24
 
 ### Added

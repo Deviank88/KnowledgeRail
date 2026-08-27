@@ -9,6 +9,8 @@ export type CliCommand =
   | { kind: "drift"; options: DriftCliOptions }
   | { kind: "doctor"; options: DoctorCliOptions }
   | { kind: "setup-cursor"; path?: string }
+  | { kind: "setup-clients"; path?: string; clients: Array<"claude" | "codex" | "cursor">; apply: boolean }
+  | { kind: "hook"; client: "claude" | "codex" | "cursor"; event: "session" | "post-edit" | "stop" }
   | { kind: "workspace-list" }
   | { kind: "workspace-register"; path?: string }
   | { kind: "workspace-unregister"; workspaceId: string }
@@ -57,6 +59,8 @@ Usage:
   knowledge-rail workspace register [<path>]
   knowledge-rail workspace unregister <workspace-id>
   knowledge-rail setup cursor [<path>]
+  knowledge-rail setup clients [<path>] [--client claude|codex|cursor]... [--apply]
+  knowledge-rail hook --client claude|codex|cursor --event session|post-edit|stop
   knowledge-rail doctor [--root <absolute-path>]
   knowledge-rail drift [--root <absolute-path>] [--path <path>]...
                        [--format text|json] [--check] [--no-ledger]
@@ -164,7 +168,41 @@ function parseSetupCommand(args: readonly string[]): CliCommand {
     if (supplied?.startsWith("--")) throw new CliUsageError(`Unknown setup cursor argument: ${supplied}`);
     return { kind: "setup-cursor", ...(supplied ? { path: supplied } : {}) };
   }
-  throw new CliUsageError("Invalid setup command. Use setup cursor [path].");
+  if (args[1] === "clients") {
+    let path: string | undefined;
+    let apply = false;
+    const clients: Array<"claude" | "codex" | "cursor"> = [];
+    for (let index = 2; index < args.length; index++) {
+      const value = args[index]!;
+      if (value === "--apply") apply = true;
+      else if (value === "--client") {
+        const client = requireValue(args, index, value);
+        if (client !== "claude" && client !== "codex" && client !== "cursor") {
+          throw new CliUsageError("--client must be claude, codex, or cursor.");
+        }
+        clients.push(client);
+        index++;
+      } else if (!value.startsWith("--") && path === undefined) path = value;
+      else throw new CliUsageError(`Unknown setup clients argument: ${value}`);
+    }
+    return { kind: "setup-clients", ...(path ? { path } : {}), clients: clients.length ? [...new Set(clients)] : ["claude", "codex", "cursor"], apply };
+  }
+  throw new CliUsageError("Invalid setup command. Use setup cursor [path] or setup clients [path] [--client <name>] [--apply].");
+}
+
+function parseHookCommand(args: readonly string[]): CliCommand {
+  let client: "claude" | "codex" | "cursor" | undefined;
+  let event: "session" | "post-edit" | "stop" | undefined;
+  for (let index = 1; index < args.length; index++) {
+    const flag = args[index];
+    const value = requireValue(args, index, flag ?? "hook option");
+    if (flag === "--client" && ["claude", "codex", "cursor"].includes(value)) client = value as typeof client;
+    else if (flag === "--event" && ["session", "post-edit", "stop"].includes(value)) event = value as typeof event;
+    else throw new CliUsageError(`Invalid hook option: ${flag ?? ""} ${value}`);
+    index++;
+  }
+  if (!client || !event) throw new CliUsageError("hook requires --client and --event.");
+  return { kind: "hook", client, event };
 }
 
 function parseDoctorCommand(args: readonly string[]): CliCommand {
@@ -242,6 +280,7 @@ export function parseCli(args: readonly string[]): CliCommand {
   if (args.length === 1 && (args[0] === "--version" || args[0] === "-v")) return { kind: "version" };
   if (args[0] === "workspace") return parseWorkspaceCommand(args);
   if (args[0] === "setup") return parseSetupCommand(args);
+  if (args[0] === "hook") return parseHookCommand(args);
   if (args[0] === "doctor") return parseDoctorCommand(args);
   if (args[0] === "drift") return parseDriftCommand(args);
   if (args[0] === "desktop") {

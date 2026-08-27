@@ -415,23 +415,38 @@ function mergeRetrievalHits(
   groups: readonly (readonly RetrievalHit[])[],
   maxResults: number
 ): RetrievalHit[] {
-  const byPath = new Map<string, { hit: RetrievalHit; fusedScore: number; bestNormalizedScore: number }>();
+  const byPath = new Map<string, {
+    hit: RetrievalHit;
+    fusedScore: number;
+    baselineFusedScore: number;
+    bestNormalizedScore: number;
+  }>();
   for (const group of groups) {
     const maximumScore = Math.max(group[0]?.score ?? 0, 1e-9);
+    const maximumBaselineScore = Math.max(
+      ...group.map((hit) => hit.lexicalBaselineScore ?? hit.score),
+      1e-9
+    );
     for (let index = 0; index < group.length; index++) {
       const hit = group[index]!;
       const normalizedScore = Math.max(0, hit.score) / maximumScore;
       const contribution = normalizedScore + reciprocalRank(index + 1, 1, 60);
+      const normalizedBaselineScore = Math.max(0, hit.lexicalBaselineScore ?? hit.score) /
+        maximumBaselineScore;
+      const baselineContribution = normalizedBaselineScore +
+        reciprocalRank(hit.lexicalBaselineRank ?? index + 1, 1, 60);
       const current = byPath.get(hit.path);
       if (!current) {
         byPath.set(hit.path, {
           hit,
           fusedScore: contribution,
+          baselineFusedScore: baselineContribution,
           bestNormalizedScore: normalizedScore,
         });
         continue;
       }
       current.fusedScore += contribution;
+      current.baselineFusedScore += baselineContribution;
       if (normalizedScore > current.bestNormalizedScore) {
         current.hit = hit;
         current.bestNormalizedScore = normalizedScore;
@@ -439,7 +454,11 @@ function mergeRetrievalHits(
     }
   }
   return [...byPath.values()]
-    .map(({ hit, fusedScore }) => ({ ...hit, score: fusedScore }))
+    .map(({ hit, fusedScore, baselineFusedScore }) => ({
+      ...hit,
+      score: fusedScore,
+      lexicalBaselineScore: baselineFusedScore,
+    }))
     .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path))
     .slice(0, maxResults);
 }
@@ -499,8 +518,11 @@ async function retrieveAttempt(params: {
   const runtime = await getRuntimeWikiGraph(request.wikiRoot, false, {
     persist: request.persistDerivedIndexes,
   });
+  const graphLexicalHits = [...lexicalHits].sort((left, right) =>
+    (right.lexicalBaselineScore ?? right.score) - (left.lexicalBaselineScore ?? left.score) ||
+    left.path.localeCompare(right.path));
   const lexicalSeedRanks = new Map(
-    lexicalHits.map((hit, index) => [hit.path, { hit, rank: index + 1 }] as const)
+    graphLexicalHits.map((hit, index) => [hit.path, { hit, rank: index + 1 }] as const)
   );
   const semanticSeedRanks = new Map(
     semanticHits.map((hit, index) => [hit.path, { hit, rank: index + 1 }] as const)
@@ -509,9 +531,9 @@ async function retrieveAttempt(params: {
   const lexicalWeight = Math.max(0, request.lexicalWeight ?? 1);
   const semanticWeight = Math.max(0, request.semanticWeight ?? 0.7);
   const seedHits = semanticHits.length === 0
-    ? lexicalHits.slice(0, budget.maxSeedCandidates).map((hit) => ({
+    ? graphLexicalHits.slice(0, budget.maxSeedCandidates).map((hit) => ({
       pagePath: hit.path,
-      score: Math.max(0, hit.score),
+      score: Math.max(0, hit.lexicalBaselineScore ?? hit.score),
     }))
     : [...new Set([...lexicalSeedRanks.keys(), ...semanticSeedRanks.keys()])]
       .map((pagePath) => ({

@@ -20,6 +20,13 @@ export interface GatewayRendezvous {
   startedAt: string;
 }
 
+export class GatewayOwnershipError extends Error {
+  constructor(message = "A KnowledgeRail gateway process already owns the local state directory.") {
+    super(message);
+    this.name = "GatewayOwnershipError";
+  }
+}
+
 export class GatewayStateStore {
   readonly directory: string;
   readonly lockPath: string;
@@ -69,7 +76,7 @@ export class GatewayStateStore {
       return handle;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      throw new Error("A KnowledgeRail gateway already owns this local state directory.");
+      throw new GatewayOwnershipError();
     }
   }
 
@@ -113,11 +120,11 @@ export class GatewayStateStore {
     }
     try {
       process.kill(owner.pid!, 0);
-      throw new Error("A KnowledgeRail gateway process already owns the local state directory.");
+      throw new GatewayOwnershipError();
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code === "EPERM") {
-        throw new Error("A KnowledgeRail gateway process already owns the local state directory.");
+        throw new GatewayOwnershipError();
       }
       if (code !== "ESRCH") throw error;
     }

@@ -4,12 +4,14 @@ import { activateWorkspace, resolveWorkspace } from "../mcp/workspace.js";
 import { canonicalizeExistingDirectory } from "../mcp/workspace-discovery.js";
 import { WorkspaceRegistry } from "../workspaces/registry.js";
 import { logger } from "../core/logger.js";
+import { startupMark } from "./startup-timing.js";
 
 export interface StdioRuntimeHandle {
   close(): Promise<void>;
 }
 
 export async function runStdio(options: { root?: string } = {}): Promise<StdioRuntimeHandle> {
+  startupMark("stdio_workspace_resolution_started");
   const resolved = await resolveWorkspace({
     explicitRoot: options.root,
     automaticDiscovery: true,
@@ -18,6 +20,7 @@ export async function runStdio(options: { root?: string } = {}): Promise<StdioRu
     ...resolved,
     root: await canonicalizeExistingDirectory(resolved.root),
   });
+  startupMark("stdio_workspace_ready", { workspaceSource: initial.source });
 
   const handle = serveStdio(
     (context) => buildServer(context),
@@ -30,6 +33,7 @@ export async function runStdio(options: { root?: string } = {}): Promise<StdioRu
   );
 
   logger.info("stdio", "ready", { workspaceSource: initial.source });
+  startupMark("protocol_transport_ready", { transport: "stdio" });
   void new WorkspaceRegistry().register(initial.root, "automatic").catch((error: unknown) => {
     logger.warn("stdio", "workspace_catalog_refresh_failed", {}, error);
   });

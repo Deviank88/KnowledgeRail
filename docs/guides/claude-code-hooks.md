@@ -1,90 +1,93 @@
-# Claude Code hooks integration
+# Project client hooks and rules
 
-Requires `knowledge-rail` ≥ 2.5.0 (the `drift` CLI subcommand).
+Requires KnowledgeRail 2.7.0 or later.
 
-When a project is worked on with Claude Code, the recommended division of labor between the harness and the model is:
+KnowledgeRail can configure Claude Code, Codex and Cursor directly in the open project. You no longer need to copy a setup prompt into each client.
 
-- **Drift and awareness run from hooks** — deterministic, read-only, guaranteed to execute: a session-start drift summary, a per-edit path-scoped check, and a stop-time reminder. Hooks are the right home because their value is running *every time*, not when the model remembers.
-- **Retrieval stays with the model** — hooks make Claude aware the wiki exists; `CLAUDE.md` tells it *when* to call `knowledge_context`. Deliberately no auto-retrieval on every prompt: deciding whether a task needs wiki context, and which, requires the model's judgment, and indiscriminate injection wastes tokens on trivial turns.
-- **Decision relevance stays with the model** — Claude inspects returned decision metadata and materializes only a link matching the current flow/component/context, normally its selected passage. A single bounded page is the fallback only when that relevant hit has no reliable passage; no matching decision means no decision read and no gap.
-- **Writes stay gated and consolidated** — hooks never write the wiki (authoring wiki content requires editorial judgment, which a shell hook cannot supply); write-capable tools stay behind the permission prompt. After source changes, Claude updates affected knowledge in the same session. If a durable choice becomes clearly accepted, it performs one end-of-task decision-page update and one `DECISION` log write instead of interrupting the discussion with capture prompts.
+## Ask the knowledge
 
-## Setup prompt
+In a client connected to the project, ask:
 
-Paste this prompt into Claude Code inside your project to configure the flow:
+> Preview the KnowledgeRail hooks and project rules for Claude Code, Codex and Cursor. Do not change global configuration.
+
+The model calls:
 
 ```text
-Configure this repository's Claude Code harness to integrate the
-KnowledgeRail wiki. Work only in project scope (.claude/settings.json,
-CLAUDE.md); do not touch user-level settings and do not commit anything.
-Read the current Claude Code hooks documentation before writing any hook
-(event names, stdin JSON shape, context-injection semantics, matcher
-syntax) — do not work from memory. Verify `npx -y knowledge-rail@2.6.0 drift --help`
-works before wiring it into any hook.
-
-1. HOOKS in .claude/settings.json (all fail-open; each under ~5s):
-   - SessionStart: run `npx -y knowledge-rail@2.6.0 drift --no-ledger` so its
-     summary lands in context (it prints nothing when all anchors are
-     fresh), prefixed with one line stating the project has a KnowledgeRail
-     wiki and that task work should start with knowledge_context mode=task.
-   - PostToolUse with a matcher for Edit and Write: extract the edited
-     file_path from the hook's stdin JSON and run
-     `npx -y knowledge-rail@2.6.0 drift --no-ledger --path <file>` so a broken
-     anchor is reported in the same turn as the edit that broke it.
-   - Stop: deterministic check only — if git status shows modified source
-     files in this session AND no wiki content change accompanied them,
-     emit ONE short reminder that the wiki pages covering those files may
-     need updating. Never write the wiki from this hook.
-
-2. PERMISSIONS in .claude/settings.json: allowlist ONLY the KnowledgeRail
-   MCP tools that are entirely read-only, verifying each tool's actions
-   from its schema first. A tool that multiplexes read and write actions
-   (e.g. knowledge_page or knowledge_admin) must NOT be allowlisted.
-   knowledge_document and knowledge_ingest must never be allowlisted: the
-   permission prompt on write-capable tools IS the user's operational
-   consent for an end-of-task wiki update during analysis sessions.
-
-3. CLAUDE.md (create or extend, keeping existing content): add a concise
-   "Project wiki (KnowledgeRail)" section stating that (a) concrete tasks
-   start with knowledge_context mode=task and follow its nextAction;
-   (b) pages flagged stale/drift_suspected by the session drift summary
-   are untrusted until re-verified against the code; (c) after modifying
-   source files as part of a task, Claude updates the wiki pages whose
-   evidence anchors those files in the same session, without being asked;
-   (d) Claude inspects decision titles, headings, retrieval reasons and
-   change-impact relations, then materializes only an exact relevant link,
-   preferring its selected passage; it reads the single bounded page only
-   if that hit has no passage, never opens all decisions, and treats no
-   matching decision as a normal empty result rather than a gap; if the bounded
-   page is truncated it retrieves only the missing section and never blindly
-   overwrites unread content; conflicting matches are surfaced rather than silently
-   rank-selected; (e) when a durable
-   project choice is clearly accepted, Claude first rereads and reuses a matching
-   decision page for the same flow/component/context (or creates a separate
-   bounded page for a different context), updates its current decision, concise rationale and
-   dated history with what changed and why at task close, then appends one log entry at level
-   DECISION; (f) Claude never records proposals, unresolved options, raw
-   conversation, hidden chain-of-thought, secrets, or consent inferred
-   from silence; (g) if no durable decision arose, or the session has no
-   permission to write, Claude writes nothing and reports any proposed
-   update once in its final response.
-
-4. VERIFY, then report: run the drift command in both modes by hand; make
-   a throwaway edit to confirm the PostToolUse hook fires and revert it;
-   confirm the Stop reminder fires only when source changed without a wiki
-   change; confirm a read-only knowledge tool runs unprompted while a
-   knowledge_page write and knowledge_document write ask for permission.
-   Confirm that a simulated accepted decision produces one page update and
-   one DECISION log entry, while an unresolved discussion produces neither.
-   Report what was configured, measured hook latencies, and anything not
-   verifiable.
-
-Constraints: hooks are read-only reporters (never write the wiki, never
-block a tool call); every hook exits 0; keep SessionStart under ~3s and
-per-edit under ~1s; no new dependencies; commit nothing.
+knowledge_admin action="client_setup" clients=["claude","codex","cursor"] setup_mode="preview"
 ```
 
-## Notes
+After reviewing the proposed project-relative files, explicitly ask it to apply the setup. The model then calls the same action with `setup_mode="apply"`.
 
-- The drift hooks rely on the `knowledge-rail drift` subcommand being silent and exit-0 when everything is fresh, so a healthy project adds zero noise and zero blocked turns. `--path` accepts the hook's absolute `file_path` only when it is confined to the discovered project; repository-relative paths also work. For CI or pre-commit use `--check`, which exits `2` on any non-fresh anchor or timeout.
-- The permission split works because KnowledgeRail's read surfaces (`knowledge_context`, `knowledge_code`, …) are separate tools from the write surfaces (`knowledge_document`, `knowledge_ingest`). `knowledge_admin` multiplexes read-only drift with administrative mutations, so it stays behind the prompt; use the CLI subcommand where unprompted drift is needed.
+Ordinary `knowledge_admin action="init"` does not install executable hooks. Setup is always a separate, explicit operation.
+
+## Terminal equivalent
+
+Preview all clients:
+
+```bash
+npx -y knowledge-rail@2.7.0 setup clients
+```
+
+Apply all clients:
+
+```bash
+npx -y knowledge-rail@2.7.0 setup clients --apply
+```
+
+Select one or more clients with repeated `--client` flags:
+
+```bash
+npx -y knowledge-rail@2.7.0 setup clients --client claude --client codex --apply
+```
+
+An optional project path may follow `clients`. Without it, KnowledgeRail discovers the current project safely.
+
+## Project files
+
+| Client | Static rules | Hooks |
+|---|---|---|
+| Claude Code | `CLAUDE.md` | `.claude/settings.json` |
+| Codex | `AGENTS.md` | `.codex/hooks.json` |
+| Cursor | `.cursor/rules/knowledge-rail.mdc` | `.cursor/hooks.json` |
+
+The installer first checks every target. Existing `CLAUDE.md`, `AGENTS.md` and `.cursor/rules/knowledge-rail.mdc` content is preserved byte-for-byte and the marked KnowledgeRail block is appended. On reapply or upgrade, only that marked block is replaced. Existing JSON settings are merged structurally so unrelated fields, permissions and hooks survive; raw text is never appended to JSON because that would make it invalid. The installer refuses malformed JSON or managed markers, symlinks, non-regular files, oversized configuration and paths outside the project. Reapplying the same version is idempotent.
+
+Immediately before an apply that would change files, KnowledgeRail creates a project-local transaction under `.knowledge-rail/backups/client-setup/<run-id>/`. Its `manifest.json` records every target, whether it existed, its original SHA-256, byte count, mode and backup path. Exact bytes are copied only for pre-existing files. The manifest state distinguishes a prepared, successfully applied, rolled-back or incompletely rolled-back transaction. On POSIX systems the transaction directory is mode `0700` and backup files are mode `0600`. Preview, status and no-op reapply create no backup. After a successful apply, only the oldest validated `applied` transactions beyond the newest 20 are pruned; prepared, rolled-back, rollback-failed, malformed and otherwise unrecognized entries are left untouched for recovery or diagnosis. If setup is interrupted, use the manifest to restore the listed backup files and remove only entries marked `existed: false`; inspect current files first and never overwrite later user edits blindly.
+
+No file under `~/.claude`, `~/.codex` or `~/.cursor` is touched. No configuration is committed automatically.
+
+In the desktop/catalog profile, `setup_mode="apply"` requires a write-scoped workspace binding. `preview` and `status` remain available with read scope. `knowledge_admin action="checkpoint"` also requires write scope because it persists project-local derived indexes even though canonical Markdown remains unchanged.
+
+## Runtime behavior
+
+- Session start injects a short KnowledgeRail awareness message and reports non-fresh evidence anchors.
+- Post-edit hooks run a bounded, path-scoped drift check when the client provides the edited file path.
+- Hooks never write the wiki, never approve operations and fail open.
+- Retrieval and decision relevance remain model judgments through `knowledge_context`.
+- Wiki updates remain explicit write-capable tool calls subject to the client permission flow.
+
+The generated commands pin the installed KnowledgeRail release, prefer the local npm cache, and use the internal cross-client hook bridge, which translates each client's stdin and output schema. The first hook invocation may still need npm to resolve the package if it is not cached; hook failures and timeouts remain fail-open.
+
+## Trust and verification
+
+Project hooks execute commands and therefore remain subject to each client's security controls:
+
+- Claude Code: inspect project hooks with `/hooks`.
+- Codex: open `/hooks`, review the exact definitions and explicitly trust their current hashes. KnowledgeRail cannot do this for you.
+- Cursor: open the repository as a trusted workspace and inspect `.cursor/hooks.json`.
+
+Run the preview again after application. Every file should report `unchanged`. Then start a new session and make a harmless edit to a source file with an evidence anchor; the post-edit hook should report drift without blocking the edit or modifying the wiki.
+
+Cursor cloud agents load project hooks only after they receive a writable environment, and do not currently run `sessionStart`; post-tool hooks remain available there.
+
+## Reapply or remove
+
+Reapply with `setup clients --apply` after upgrading KnowledgeRail. The installer removes only older KnowledgeRail hook commands for the same client/event before adding the version-pinned replacement; unrelated handlers and settings survive.
+
+There is deliberately no automatic uninstall in 2.7.0. To remove the integration, first preview the current generated state, then delete only the marked KnowledgeRail block from `CLAUDE.md` and `AGENTS.md`, the dedicated `.cursor/rules/knowledge-rail.mdc` file, and the hook entries whose command contains `knowledge-rail@... hook --client ...`. Remove the two Claude read-only permission entries only if they were added solely for this integration. Do not delete whole configuration files when they contain unrelated settings.
+
+## What the installed rules say
+
+The concise managed block instructs the client to start concrete tasks with `knowledge_context mode=task`, distrust stale evidence until reverified, update affected anchored knowledge after source changes only through approved writes, materialize only relevant decision evidence, surface conflicts and record only clearly accepted durable decisions. It explicitly excludes proposals, unresolved options, hidden reasoning, secrets and raw conversation.
+
+The full implementation and acceptance gates are tracked in [`client-integrations-2-7-0.md`](../milestones/client-integrations-2-7-0.md).

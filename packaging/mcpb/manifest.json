@@ -1,0 +1,38 @@
+{
+  "manifest_version": "0.3",
+  "name": "knowledge-rail",
+  "display_name": "KnowledgeRail",
+  "version": "2.7.0",
+  "description": "Persistent, evidence-backed project knowledge and task context for coding agents.",
+  "long_description": "Local-first project knowledge with verified evidence retrieval, workspace isolation, and explicit user-approved bindings.",
+  "author": {
+    "name": "Deviank88",
+    "url": "https://github.com/Deviank88"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Deviank88/KnowledgeRail.git"
+  },
+  "homepage": "https://github.com/Deviank88/KnowledgeRail",
+  "documentation": "https://github.com/Deviank88/KnowledgeRail#readme",
+  "support": "https://github.com/Deviank88/KnowledgeRail/issues",
+  "icon": "assets/knowledge-rail-logo.png",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js", "desktop"]
+    }
+  },
+  "tools_generated": true,
+  "prompts_generated": true,
+  "keywords": ["knowledge", "retrieval", "project", "evidence", "coding"],
+  "license": "Apache-2.0",
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=22.12.0"
+    }
+  }
+}

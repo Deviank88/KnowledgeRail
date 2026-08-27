@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
+import { performance } from "node:perf_hooks";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
@@ -87,6 +88,7 @@ async function directoryStats(root) {
 }
 
 let gatewayProcess;
+const startupTimings = {};
 try {
   const packed = await runNpm(["pack", "--json", "--pack-destination", packDirectory], { cwd: process.cwd() });
   const packResult = JSON.parse(packed.stdout)[0];
@@ -99,6 +101,7 @@ try {
     "server.json",
     "assets/knowledge-rail-logo.png",
     "docs/guides/claude-code-hooks.md",
+    "docs/milestones/client-integrations-2-7-0.md",
   ]) {
     if (!packedPaths.has(required)) throw new Error(`Packed artifact is missing ${required}.`);
   }
@@ -107,9 +110,11 @@ try {
       throw new Error(`Packed artifact unexpectedly contains ${forbidden}.`);
     }
   }
-  const unexpectedDocs = [...packedPaths].filter((entry) =>
-    entry.startsWith("docs/") && entry !== "docs/guides/claude-code-hooks.md"
-  );
+  const publicDocs = new Set([
+    "docs/guides/claude-code-hooks.md",
+    "docs/milestones/client-integrations-2-7-0.md",
+  ]);
+  const unexpectedDocs = [...packedPaths].filter((entry) => entry.startsWith("docs/") && !publicDocs.has(entry));
   if (unexpectedDocs.length > 0) {
     throw new Error(`Packed artifact unexpectedly contains private docs: ${unexpectedDocs.join(", ")}.`);
   }
@@ -219,11 +224,94 @@ try {
     throw new Error("Installed Cursor setup rewrote an already-correct configuration.");
   }
 
+  const existingClaudeInstructions = "# Existing installed-package instructions\n";
+  await fs.writeFile(path.join(projectDirectory, "CLAUDE.md"), existingClaudeInstructions);
+  const clientPreview = await run(
+    process.execPath,
+    [installedBin, "setup", "clients"],
+    { cwd: projectDirectory }
+  );
+  const previewResult = JSON.parse(clientPreview.stdout);
+  if (previewResult.applied !== false || previewResult.changes.length !== 6) {
+    throw new Error("Installed client integration preview returned an invalid plan.");
+  }
+  try {
+    await fs.access(path.join(projectDirectory, ".claude", "settings.json"));
+    throw new Error("Installed client integration preview wrote project files.");
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("preview wrote")) throw error;
+  }
+  const clientApply = await run(
+    process.execPath,
+    [installedBin, "setup", "clients", "--apply"],
+    { cwd: projectDirectory }
+  );
+  const applyResult = JSON.parse(clientApply.stdout);
+  if (applyResult.applied !== true || applyResult.changes.filter((entry) => entry.status !== "unchanged").length !== 6) {
+    throw new Error("Installed client integration apply returned an invalid result.");
+  }
+  const backupManifestPath = applyResult.backup?.manifest;
+  if (
+    applyResult.backup?.fileCount !== 1 ||
+    typeof backupManifestPath !== "string" ||
+    path.isAbsolute(backupManifestPath) ||
+    backupManifestPath.split("/").includes("..") ||
+    !backupManifestPath.startsWith(".knowledge-rail/backups/client-setup/")
+  ) {
+    throw new Error("Installed client integration did not return a safe project-local backup manifest.");
+  }
+  const backupManifest = JSON.parse(await fs.readFile(
+    path.join(projectDirectory, ...backupManifestPath.split("/")),
+    "utf8"
+  ));
+  if (
+    backupManifest.state !== "applied" ||
+    backupManifest.files.length !== 6 ||
+    backupManifest.files.filter((entry) => entry.existed).length !== 1
+  ) {
+    throw new Error("Installed client integration wrote an invalid recovery manifest.");
+  }
+  const claudeBackup = backupManifest.files.find((entry) => entry.path === "CLAUDE.md");
+  if (
+    claudeBackup?.backupPath !== "files/CLAUDE.md" ||
+    await fs.readFile(path.join(
+      projectDirectory,
+      ...applyResult.backup.directory.split("/"),
+      ...claudeBackup.backupPath.split("/")
+    ), "utf8") !== existingClaudeInstructions
+  ) {
+    throw new Error("Installed client integration did not preserve the original project instructions.");
+  }
+  for (const relative of [
+    "CLAUDE.md",
+    ".claude/settings.json",
+    "AGENTS.md",
+    ".codex/hooks.json",
+    ".cursor/rules/knowledge-rail.mdc",
+    ".cursor/hooks.json",
+  ]) await fs.access(path.join(projectDirectory, ...relative.split("/")));
+  const codexHooks = await fs.readFile(path.join(projectDirectory, ".codex", "hooks.json"), "utf8");
+  if (!codexHooks.includes(`knowledge-rail@${installedPackage.version} hook --client codex`)) {
+    throw new Error("Installed client integration did not pin the packaged release.");
+  }
+  const repeatedClientApply = JSON.parse((await run(
+    process.execPath,
+    [installedBin, "setup", "clients", "--apply"],
+    { cwd: projectDirectory }
+  )).stdout);
+  if (!repeatedClientApply.changes.every((entry) => entry.status === "unchanged")) {
+    throw new Error("Installed client integration setup is not idempotent.");
+  }
+  if (repeatedClientApply.backup !== undefined) {
+    throw new Error("Installed idempotent client integration setup created an unnecessary backup.");
+  }
+
   const childEnvironment = { ...process.env, KNOWLEDGE_RAIL_STATE_DIR: stateDirectory };
   const stdioClient = new Client(
     { name: "package-stdio-smoke", version: "1.0.0" },
     { versionNegotiation: { mode: { pin: "2026-07-28" } } }
   );
+  const stdioStartupStartedAt = performance.now();
   await stdioClient.connect(new StdioClientTransport({
     command: process.execPath,
     args: [installedBin],
@@ -232,6 +320,7 @@ try {
     stderr: "pipe",
   }));
   if ((await stdioClient.listTools()).tools.length !== 8) throw new Error("Installed stdio catalog is not the bound eight-tool profile.");
+  startupTimings.stdioReadyMs = performance.now() - stdioStartupStartedAt;
   await stdioClient.close();
 
   const registration = await run(
@@ -268,6 +357,7 @@ try {
     { name: "package-desktop-smoke", version: "1.0.0" },
     { versionNegotiation: { mode: "legacy" } }
   );
+  const existingGatewayDesktopStartedAt = performance.now();
   await desktopClient.connect(new StdioClientTransport({
     command: process.execPath,
     args: [installedBin, "desktop"],
@@ -276,6 +366,7 @@ try {
     stderr: "pipe",
   }));
   const desktopTools = (await desktopClient.listTools()).tools;
+  startupTimings.desktopExistingGatewayReadyMs = performance.now() - existingGatewayDesktopStartedAt;
   if (desktopTools.length !== 9) throw new Error("Installed desktop proxy did not expose the catalog profile.");
   if (!desktopTools.find((tool) => tool.name === "knowledge_workspace")?.outputSchema) {
     throw new Error("Installed desktop proxy did not advertise the workspace output contract.");
@@ -294,7 +385,14 @@ try {
   const selectionText = selected.content.find((item) => item.type === "text")?.text ?? "";
   const workspaceBinding = selectionText.match(/^workspace_binding: (krb[0-9]+_[A-Za-z0-9_-]+)$/m)?.[1];
   if (!workspaceBinding || workspaceBinding !== selected.structuredContent?.binding) {
-    throw new Error("Installed desktop proxy did not expose the binding through portable text content.");
+    const state = typeof selected.structuredContent?.state === "string" ? selected.structuredContent.state : "missing";
+    const reason = typeof selected.structuredContent?.reason === "string" ? selected.structuredContent.reason : "missing";
+    const cause = typeof selected.structuredContent?.cause === "string" ? selected.structuredContent.cause : "missing";
+    throw new Error(
+      "Installed desktop proxy did not expose the binding through portable text content " +
+      `(isError=${selected.isError === true}, state=${state}, reason=${reason}, cause=${cause}, ` +
+      `structuredBinding=${typeof selected.structuredContent?.binding === "string"}, textBinding=${Boolean(workspaceBinding)}).`
+    );
   }
   const initialized = await desktopClient.callTool({
     name: "knowledge_admin",
@@ -332,6 +430,7 @@ try {
     { name: "package-desktop-autostart-smoke", version: "1.0.0" },
     { versionNegotiation: { mode: { pin: "2026-07-28" } } }
   );
+  const coldDesktopStartedAt = performance.now();
   await autoDesktopClient.connect(new StdioClientTransport({
     command: process.execPath,
     args: [installedBin, "desktop"],
@@ -346,6 +445,7 @@ try {
   if ((await autoDesktopClient.listTools()).tools.length !== 9) {
     throw new Error("Installed desktop adapter did not auto-start its catalog gateway.");
   }
+  startupTimings.desktopColdGatewayReadyMs = performance.now() - coldDesktopStartedAt;
   await autoDesktopClient.close();
 
   const runtimeStats = await directoryStats(path.join(installDirectory, "node_modules"));
@@ -353,8 +453,11 @@ try {
   const runtimePackagePaths = runtimeTree.stdout.split(/\r?\n/).filter(Boolean).length;
   process.stdout.write(
     `PACKAGE_SMOKE platform=${process.platform} tarball_bytes=${packResult.size} unpacked_bytes=${packResult.unpackedSize} ` +
-    `files=${packResult.entryCount} runtime_bytes=${runtimeStats.bytes} runtime_paths=${runtimeStats.paths} ` +
-    `runtime_package_paths=${runtimePackagePaths}\n`
+      `files=${packResult.entryCount} runtime_bytes=${runtimeStats.bytes} runtime_paths=${runtimeStats.paths} ` +
+      `runtime_package_paths=${runtimePackagePaths} ` +
+      `stdio_ready_ms=${startupTimings.stdioReadyMs.toFixed(2)} ` +
+      `desktop_existing_ready_ms=${startupTimings.desktopExistingGatewayReadyMs.toFixed(2)} ` +
+      `desktop_cold_ready_ms=${startupTimings.desktopColdGatewayReadyMs.toFixed(2)}\n`
   );
 } finally {
   if (gatewayProcess && gatewayProcess.exitCode === null) {

@@ -15,6 +15,7 @@ async function readJson(relativePath: string): Promise<Record<string, unknown>> 
 test("product, npm and MCP Registry identities remain aligned", async () => {
   const packageJson = await readJson("package.json");
   const registryJson = await readJson("server.json");
+  const mcpbManifest = await readJson("packaging/mcpb/manifest.json");
   const packages = registryJson.packages as Array<Record<string, unknown>>;
   const registryPackage = packages[0]!;
 
@@ -27,6 +28,12 @@ test("product, npm and MCP Registry identities remain aligned", async () => {
   assert.equal(registryPackage.identifier, packageJson.name);
   assert.equal(registryPackage.version, packageJson.version);
   assert.deepEqual(registryPackage.transport, { type: "stdio" });
+  assert.equal(mcpbManifest.manifest_version, "0.3");
+  assert.equal(mcpbManifest.name, packageJson.name);
+  assert.equal(mcpbManifest.version, packageJson.version);
+  assert.equal((mcpbManifest.server as Record<string, unknown>).type, "node");
+  const mcpbConfig = (mcpbManifest.server as { mcp_config: { args: string[] } }).mcp_config;
+  assert.deepEqual(mcpbConfig.args, ["${__dirname}/server/index.js", "desktop"]);
   assert.match(wikiPageUri("requirements/REQ_1.md"), /^knowledge-rail:\/\/page\//);
 });
 
@@ -90,6 +97,14 @@ test("public setup guidance binds Cursor explicitly without changing cwd-aware c
   assert.match(readme, /knowledge-rail@\d+\.\d+\.\d+ doctor/);
   assert.match(selfHosting, /Cursor project process.*explicit workspace root/);
   assert.match(security, /Cursor binds project-scoped `stdio` through an explicit/);
+});
+
+test("generated tool reference publishes the enforced public input bounds", async () => {
+  const reference = await readFile(path.join(repositoryRoot, "docs/reference/tool-actions.md"), "utf8");
+  assert.match(reference, /\| Parameter \| Type \/ values \| Required \| Default \| Constraints \| Description \|/);
+  assert.match(reference, /\| `max_pages` \| integer \| no \| `8` \| ≥ 1; ≤ 20 \|/);
+  assert.match(reference, /\| `max_chars_per_page` \| integer \| no \| `6000` \| ≥ 1; ≤ 50000 \|/);
+  assert.match(reference, /\| `max_total_chars` \| integer \| no \| `30000` \| ≥ 1; ≤ 1000000 \|/);
 });
 
 test("public attribution credits the conceptual origin without redefining the product", async () => {

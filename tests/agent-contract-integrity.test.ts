@@ -11,6 +11,11 @@ import { registerAgentTools } from "../src/tools/agent-tools.js";
 
 type Schema = {
   safeParse(value: unknown): { success: boolean };
+  "~standard": {
+    jsonSchema: {
+      input(options: { target: "draft-2020-12" }): Record<string, unknown>;
+    };
+  };
 };
 
 type OutputSchema = {
@@ -90,6 +95,17 @@ test("all public tools advertise a permissive guided output envelope and conserv
   for (const name of ["knowledge_page", "knowledge_files", "knowledge_ingest", "knowledge_code", "knowledge_document", "knowledge_admin"]) {
     assert.equal(tools.get(name)!.config.annotations?.readOnlyHint, false);
     assert.equal(tools.get(name)!.config.annotations?.destructiveHint, true);
+  }
+});
+
+test("public input schemas omit redundant dialect metadata and safe-integer boilerplate", () => {
+  const { server, tools } = capture();
+  registerAgentTools(server, "modern");
+
+  for (const [name, tool] of tools) {
+    const schema = tool.config.inputSchema["~standard"].jsonSchema.input({ target: "draft-2020-12" });
+    assert.equal(Object.hasOwn(schema, "$schema"), false, `${name} advertises a redundant root dialect`);
+    assert.doesNotMatch(JSON.stringify(schema), /9007199254740991/, `${name} advertises an unbounded safe integer`);
   }
 });
 

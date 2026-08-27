@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://cdn.jsdelivr.net/npm/knowledge-rail@2.6.2/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
+  <img src="https://cdn.jsdelivr.net/npm/knowledge-rail@2.7.0/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
 </p>
 
 <h1 align="center">KnowledgeRail</h1>
@@ -8,7 +8,7 @@ KnowledgeRail is a local-first MCP server that turns project documentation and s
 
 It is designed for agents that need to understand, change, review, or document a codebase without loading the whole repository into the model context. Retrieval is bounded, provenance is preserved, missing evidence is reported explicitly, and difficult queries widen progressively instead of silently losing relevant information.
 
-> **Current status:** stable release `2.6.2`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports explicitly bound or safely inferred local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
+> **Current status:** stable release `2.7.0`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports explicitly bound or safely inferred local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
 
 ## What it provides
 
@@ -61,7 +61,7 @@ KnowledgeRail ships no browser or document renderer. Mermaid source remains ordi
 Run this from any directory inside the project in a terminal or another client that launches stdio servers with the project as its working directory:
 
 ```bash
-npx -y knowledge-rail@2.6.2
+npx -y knowledge-rail@2.7.0
 ```
 
 No project path is needed when the MCP client guarantees a project-scoped process cwd or supplies one unambiguous legacy MCP Root. Cursor project setup is explicit because its global MCP process may be shared across windows.
@@ -91,7 +91,7 @@ node /absolute/path/to/KnowledgeRail/dist/index.js
 Run this once from the project root or any nested directory:
 
 ```bash
-npx -y knowledge-rail@2.6.2 setup cursor
+npx -y knowledge-rail@2.7.0 setup cursor
 ```
 
 The command discovers the project upward and safely creates or merges `.cursor/mcp.json`. It preserves other MCP servers and pins an explicit `${workspaceFolder}` binding. Re-running it is idempotent.
@@ -106,7 +106,7 @@ The equivalent manual project configuration is:
       "command": "npx",
       "args": [
         "-y",
-        "knowledge-rail@2.6.2",
+        "knowledge-rail@2.7.0",
         "--root",
         "${workspaceFolder}"
       ]
@@ -142,7 +142,7 @@ For a Cursor multi-root workspace, install one project configuration in every ro
 From the project, add KnowledgeRail at project scope:
 
 ```bash
-claude mcp add --transport stdio --scope project knowledge-rail -- npx -y knowledge-rail@2.6.2
+claude mcp add --transport stdio --scope project knowledge-rail -- npx -y knowledge-rail@2.7.0
 ```
 
 Claude Code writes the shared project entry to `.mcp.json` and launches the local server in project context. Use `claude mcp list` to verify the connection. The command shape and project scope follow the [official Claude Code MCP guide](https://docs.anthropic.com/en/docs/claude-code/mcp).
@@ -156,7 +156,7 @@ For a client that explicitly guarantees one stdio process per project with the p
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.6.2"]
+      "args": ["-y", "knowledge-rail@2.7.0"]
     }
   }
 }
@@ -169,22 +169,32 @@ The workspace precedence is explicit `--root`; one unambiguous legacy MCP Root; 
 Inspect the exact choice without starting MCP:
 
 ```bash
-npx -y knowledge-rail@2.6.2 doctor
-npx -y knowledge-rail@2.6.2 doctor --root /absolute/project/path
+npx -y knowledge-rail@2.7.0 doctor
+npx -y knowledge-rail@2.7.0 doctor --root /absolute/project/path
 ```
 
 The command prints the canonical root and its resolution source, or exits non-zero with corrective guidance.
 
 ## Claude Desktop and other context-free desktop chats
 
-A desktop chat does not open a filesystem folder, so it cannot safely infer a project from its process cwd. Configure the local adapter once:
+A desktop chat does not open a filesystem folder, so it cannot safely infer a project from its process cwd. The preferred installation is the self-contained MCP Bundle (`.mcpb`): it avoids npm/network resolution on every Claude launch and follows Claude Desktop's current local-extension path.
+
+For a source/release checkout, build the deterministic bundle:
+
+```bash
+npm run mcpb:build
+```
+
+Then install `artifacts/knowledge-rail-2.7.0.mcpb` from **Claude Desktop → Settings → Extensions → Advanced settings → Install Extension**. The bundle contains the compiled server and its production dependencies, starts the `desktop` adapter directly, and does not require a project path. See Anthropic's [local MCP server guide](https://support.anthropic.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop) and the [MCP Bundle specification](https://github.com/modelcontextprotocol/mcpb).
+
+The manual local-development configuration remains available for hosts that have not adopted MCP Bundles:
 
 ```json
 {
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.6.2", "desktop"]
+      "args": ["-y", "knowledge-rail@2.7.0", "desktop"]
     }
   }
 }
@@ -197,10 +207,10 @@ In a new chat, ask KnowledgeRail to list workspaces, choose one entry, and confi
 Projects opened successfully by an IDE/terminal are added to the local catalog automatically without changing their clean eight-tool workflow. Operators can also manage catalog metadata locally:
 
 ```bash
-npx -y knowledge-rail@2.6.2 workspace list
-npx -y knowledge-rail@2.6.2 workspace register
-npx -y knowledge-rail@2.6.2 workspace register /absolute/project/path
-npx -y knowledge-rail@2.6.2 workspace unregister ws_example
+npx -y knowledge-rail@2.7.0 workspace list
+npx -y knowledge-rail@2.7.0 workspace register
+npx -y knowledge-rail@2.7.0 workspace register /absolute/project/path
+npx -y knowledge-rail@2.7.0 workspace unregister ws_example
 ```
 
 Registration never copies, uploads, scans the disk, or deletes project files. `workspace register` without a path discovers only upward from cwd.
@@ -210,7 +220,7 @@ Registration never copies, uploads, scans the disk, or deletes project files. `w
 Start one gateway for many concurrent local clients and workspaces:
 
 ```bash
-npx -y knowledge-rail@2.6.2 --transport http
+npx -y knowledge-rail@2.7.0 --transport http
 ```
 
 The default endpoint is `http://127.0.0.1:3333/mcp`; liveness only is available at `/healthz`. MCP requests require the random credential stored in the OS-protected per-user KnowledgeRail state directory. The desktop adapter reads it automatically, so it never belongs in project configuration or a repository.
@@ -248,7 +258,7 @@ KnowledgeRail exposes eight stable tools. Agents choose a domain directly and us
 | `knowledge_code` | Maintain and query deterministic code evidence. |
 | `knowledge_document_context` | Plan any document profile and compile section-specific evidence. |
 | `knowledge_document` | Write and review Markdown deliverables. |
-| `knowledge_admin` | Initialize, report status and fallback demand, lint, detect code-evidence drift, and migrate KnowledgeRail data. |
+| `knowledge_admin` | Initialize, report status, verify/rebuild checkpoints, lint, detect code-evidence drift, and migrate KnowledgeRail data. |
 
 Every successful operation returns a machine-readable `state` and either one `nextAction` or `null`. `nextAction` identifies the next tool, action, required arguments, and safe suggested arguments. Optional `guidance` and `resultText` complete the shared output envelope. Clients that only render text also receive concise `Next:` and `Guidance:` lines when applicable.
 
@@ -274,6 +284,16 @@ For a normal task, the agent calls `knowledge_context mode="task"` with a concre
 Decision pages are ordinary canonical wiki knowledge and already participate in that retrieval. Each page stays bounded to one coherent flow, component, or project context. Candidate prior choices are exposed in the structured `decisions` and `changeImpact.decisions` fields, but the agent inspects their metadata and materializes only a resource link that actually matches the task—normally the selected passage, or that single bounded page when no reliable passage exists. Detailed retrieval safeguards are included in the task response only when decision candidates exist, avoiding a large fixed instruction cost for unrelated sessions. The agent never loads every decision page, and the absence of a matching decision is normal rather than a coverage gap. When the human-model discussion reaches a clearly accepted, durable project choice, the agent closes the loop at task completion: it rereads and reuses the decision page for the same context (or creates a separate page for a different one), updates the current choice and concise rationale, appends a dated history note describing what changed and why, and writes one `DECISION` log entry. Proposals, unresolved options, incidental implementation details, raw conversation, hidden chain-of-thought, and secrets are never decision memory. The page remains valid if the independent log append must be retried. No decision means no write; an analysis-only or otherwise unauthorized session reports the proposed update instead of mutating the wiki.
 
 Durable knowledge lives as Markdown under `wiki/`. Direct page operations preserve caller-owned content byte-for-byte. Larger source sets use `knowledge_ingest`: normalized sources are processed in bounded segments, claims are recorded in durable Evidence IR, coverage is reconciled, and finalization is blocked until every segment is represented or explicitly classified. Derived retrieval and graph indexes are refreshed from this canonical state rather than replacing it.
+
+### Verified warm start and phrase-aware retrieval
+
+KnowledgeRail resumes from project-local lexical and graph checkpoints, but never treats them as authority. Before a checkpoint can serve evidence, canonical Markdown is reconciled and the graph checkpoint must match the verified lexical corpus revision and its own builder version. A missing, stale, truncated, corrupt, oversized, symlinked, or incompatible artifact—or a symlinked/non-directory `.knowledge-rail` boundary—is discarded as one candidate generation; KnowledgeRail rebuilds from canonical pages and exposes a stable fallback reason through `knowledge_admin action="status"`. Read-only requests may consume valid derived files but do not rewrite them. Authorized mutations append revision-bound lexical and graph journals under one cross-process lock; either journal is compacted into its snapshot after 100 deltas or 4 MiB, preventing unbounded growth.
+
+The default integrity policy is `metadata`: path, size, modification/change timestamps, and portable file identity select which pages must be reread and hashed. `content` fingerprints every canonical page before accepting the generation and is intended for higher-assurance environments where the extra startup I/O is appropriate. Set `KNOWLEDGE_RAIL_INTEGRITY_MODE=content`, or use `integrity_mode="content"` with the admin status/checkpoint actions. To explicitly verify and persist a clean generation, run `knowledge_admin action="checkpoint"`; add `force=true` for an oracle rebuild from canonical Markdown.
+
+Ordered word bigrams positively rerank only a bounded BM25 pool and select the best canonical passage; a missing phrase never filters a unigram candidate. Compound identifiers such as `REQ-123`, `Asset__c`, `Retry-After`, and `/v2/invoices` remain single ordered tokens. Pages matching every strong identifier are protected, and queries containing three or more strong identifier tokens retain exact lexical passage selection instead of applying a phrase boost. The channel is enabled by default after its held-out quality gate; `KNOWLEDGE_RAIL_PHRASE_RERANK=off` provides an internal soak/diagnostic rollback. Trigrams and a persistent n-gram table are intentionally absent because the controlled A/B test found no additional quality gain and the bounded scorer meets the latency gate.
+
+Search scores are relative ranking signals within one result set, not probabilities or stable values to compare across queries or releases.
 
 Document production is a separate evidence-backed workflow. `knowledge_document_context` first creates a plan and a bounded evidence pack for each section. `knowledge_document` then writes and reviews the Markdown against the selected contract. A passing review is terminal and returns the SHA-256 of the exact inspected content; conversion or branded rendering belongs to the user's own LLM and tooling. This keeps generated documents traceable to project memory without treating the deliverable itself as canonical memory.
 
@@ -337,28 +357,28 @@ knowledge_admin {
 The same detector is available without an MCP server for agent hooks and CI. Hook mode reports non-fresh anchors but never blocks the calling tool; it is silent when everything checked is fresh:
 
 ```bash
-npx -y knowledge-rail@2.6.2 drift --no-ledger
-npx -y knowledge-rail@2.6.2 drift --no-ledger --path src/payments.ts --path src/invoices
+npx -y knowledge-rail@2.7.0 drift --no-ledger
+npx -y knowledge-rail@2.7.0 drift --no-ledger --path src/payments.ts --path src/invoices
 ```
 
 An absolute event path is accepted only when it is confined to the discovered project. For pre-commit or CI, `--check` exits `2` on any non-fresh anchor or timeout; operational failures exit `1`. JSON mode returns the complete shared-core result:
 
 ```bash
-npx -y knowledge-rail@2.6.2 drift --check --no-ledger
-npx -y knowledge-rail@2.6.2 drift --format json --no-ledger
+npx -y knowledge-rail@2.7.0 drift --check --no-ledger
+npx -y knowledge-rail@2.7.0 drift --format json --no-ledger
 ```
 
 Text output is capped at 20 affected anchors. Its `stale` count is the aggregate of `drift_suspected` and `anchor_unresolvable`, not a fourth detector verdict. The default timeout is three seconds: ordinary hook mode reports a timeout on stderr and exits `0`, while `--check` exits `2`. Omit `--no-ledger` only when the disposable freshness ledger should be updated for later context compilation.
 
 The action reads current code and writes only disposable state to `wiki/.knowledge-rail/drift/ledger.json`; it never edits claim text, canonical pages, or source code. A changed range, missing file, or invalidated line range becomes `drift_suspected`. An unreadable path, a non-file target, or a symlink that escapes the repository becomes `anchor_unresolvable` without aborting checks for other anchors. Trailing-whitespace-only edits and a parser-version change with identical range content stay fresh. `knowledge_context` keeps affected evidence visible for provenance, marks it `stale` with the corresponding reason, excludes it from clean evidence buckets, and returns an explicit `stale_evidence` gap even when stale evidence was retrieved but omitted from the display. Re-verification and correction remain normal Evidence IR work—there is intentionally no automatic fix.
 
-## Claude Code hooks integration
+## Project client hooks integration
 
-With Claude Code, the recommended division of labor is: **drift and wiki awareness run from harness hooks** (deterministic, read-only, guaranteed to execute — a session-start drift summary, a per-edit path-scoped check, a stop-time reminder), **retrieval and decision relevance stay with the model** (`CLAUDE.md` tells Claude when to call `knowledge_context` and when an existing decision materially applies; no auto-retrieval on every prompt), and **wiki writes stay behind the permission prompt**, so one end-of-task consolidation can be approved without interrupting the reasoning loop. Requires `knowledge-rail` ≥ 2.5.0 for the `drift` CLI subcommand the hooks invoke.
+Claude Code, Codex and Cursor can receive project-scoped KnowledgeRail rules and read-only drift hooks directly. Preview with `npx -y knowledge-rail@2.7.0 setup clients`; apply only after review with the same command plus `--apply`. From an MCP client, ask the model to call `knowledge_admin action="client_setup" setup_mode="preview"`, then explicitly request `setup_mode="apply"`. Applying through the desktop/catalog profile requires a write-scoped workspace binding; preview and status remain read-only. Ordinary initialization never installs hooks implicitly.
 
-The full guide, including a ready-to-paste prompt that makes Claude Code configure the hooks, permissions, and `CLAUDE.md` rules automatically, is in [docs/guides/claude-code-hooks.md](docs/guides/claude-code-hooks.md).
+The full guide, generated files, client trust steps and security boundaries are in [docs/guides/claude-code-hooks.md](docs/guides/claude-code-hooks.md).
 
-The CLI itself is harness-neutral: Codex, Cursor, editor tasks, Git hooks, and other agent tools can invoke the same shell commands whenever they expose a project cwd and an optional changed-file path. Only the event wiring in the linked guide is Claude Code-specific.
+The CLI hook bridge is harness-neutral and emits the native output contract for Claude Code, Codex or Cursor. All generated files and recovery manifests remain inside the selected project. Before a changed configuration is applied, exact existing bytes are copied under `.knowledge-rail/backups/client-setup/<run-id>/`; a no-op reapply creates no backup. KnowledgeRail retains the newest 20 successfully applied transactions while preserving incomplete, rolled-back, failed and unrecognized recovery evidence.
 
 ## Project data
 

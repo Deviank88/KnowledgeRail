@@ -1,11 +1,14 @@
 import * as nodePath from "node:path";
+import type { DerivedCheckpointLock } from "./checkpoint-lock.js";
 import {
   patchRuntimeGraphPaths,
   primeRuntimeGraphMutationState,
+  takeRuntimeGraphDeltaPatch,
 } from "./graph-runtime-mutation.js";
 import {
   getWikiGraph,
   markWikiGraphSynchronized,
+  persistSynchronizedWikiGraph,
   type GraphEdge,
   type GraphEdgeKind,
   type GraphNode,
@@ -163,13 +166,15 @@ export function peekRuntimeWikiGraph(wikiRoot: string): RuntimeGraph | undefined
 
 export async function updateRuntimeWikiGraphPaths(
   wikiRoot: string,
-  relPaths: readonly string[]
+  relPaths: readonly string[],
+  options: { checkpointLock?: DerivedCheckpointLock } = {}
 ): Promise<boolean> {
   const runtime = peekRuntimeWikiGraph(wikiRoot);
   if (!runtime) return false;
   await patchRuntimeGraphPaths(runtime, wikiRoot, relPaths);
+  const delta = takeRuntimeGraphDeltaPatch(runtime);
   markWikiGraphSynchronized(wikiRoot);
-  return true;
+  return persistSynchronizedWikiGraph(wikiRoot, delta, options);
 }
 
 export function invalidateRuntimeWikiGraph(wikiRoot: string): void {

@@ -8,6 +8,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import { runHttpGateway } from "../src/http/gateway.js";
 import { GatewayStateStore } from "../src/http/gateway-state.js";
+import { isMutatingDomainCall } from "../src/http/request-workspace.js";
 import { MCP_PROTOCOL_VERSION, PRODUCT_VERSION } from "../src/product.js";
 import { WorkspaceRegistry } from "../src/workspaces/registry.js";
 
@@ -26,6 +27,16 @@ function structured(result: CallToolResult): Record<string, unknown> {
   assert.ok(result.structuredContent && typeof result.structuredContent === "object");
   return result.structuredContent as Record<string, unknown>;
 }
+
+test("workspace authorization classifies every admin filesystem write", () => {
+  assert.equal(isMutatingDomainCall("knowledge_admin", { action: "status" }), false);
+  assert.equal(isMutatingDomainCall("knowledge_admin", { action: "client_setup", setup_mode: "preview" }), false);
+  assert.equal(isMutatingDomainCall("knowledge_admin", { action: "client_setup", setup_mode: "status" }), false);
+  assert.equal(isMutatingDomainCall("knowledge_admin", { action: "client_setup", setup_mode: "apply" }), true);
+  assert.equal(isMutatingDomainCall("knowledge_admin", { action: "checkpoint" }), true);
+  assert.equal(isMutatingDomainCall("knowledge_admin", { action: "migrate", migration_action: "plan" }), false);
+  assert.equal(isMutatingDomainCall("knowledge_admin", { action: "migrate", migration_action: "apply" }), true);
+});
 
 async function filesystemSnapshot(root: string): Promise<Record<string, { size: number; mtimeMs: number }>> {
   const snapshot: Record<string, { size: number; mtimeMs: number }> = {};
@@ -118,6 +129,35 @@ test("HTTP gateway serves nine-tool catalog and isolates two concurrent workspac
       arguments: { action: "select", workspace_id: workspaceA.id, scope: "read", confirmed: true },
     });
     const readOnlyBinding = structured(readOnlySelection).binding as string;
+
+    const previewSetup = await client.callTool({
+      name: "knowledge_admin",
+      arguments: {
+        action: "client_setup",
+        clients: ["claude"],
+        setup_mode: "preview",
+        workspace_binding: readOnlyBinding,
+      },
+    });
+    assert.notEqual(previewSetup.isError, true, JSON.stringify(previewSetup));
+    const deniedSetup = await client.callTool({
+      name: "knowledge_admin",
+      arguments: {
+        action: "client_setup",
+        clients: ["claude"],
+        setup_mode: "apply",
+        workspace_binding: readOnlyBinding,
+      },
+    });
+    assert.equal(deniedSetup.isError, true);
+    const deniedCheckpoint = await client.callTool({
+      name: "knowledge_admin",
+      arguments: { action: "checkpoint", workspace_binding: readOnlyBinding },
+    });
+    assert.equal(deniedCheckpoint.isError, true);
+    assert.equal(await fs.access(path.join(rootA, "CLAUDE.md")).then(() => true, () => false), false);
+    assert.equal(await fs.access(path.join(rootA, ".claude")).then(() => true, () => false), false);
+    assert.equal(await fs.access(path.join(rootA, "wiki")).then(() => true, () => false), false);
 
     const unbound = await client.callTool({
       name: "knowledge_admin",

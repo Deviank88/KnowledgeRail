@@ -100,7 +100,7 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
               category: z.enum(CATEGORY_ENUM).optional(),
               pattern: z.string().min(1).max(1024).optional().default("**/*"),
               path: z.string().optional(),
-              max_chars: z.number().int().positive().optional(),
+              max_chars: z.number().int().min(1).max(50_000).optional(),
             }) }, async ({ action, category, pattern, path, max_chars }) => {
               try {
                 if (action === "read") {
@@ -224,7 +224,7 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
   server.registerTool(toolName("prepareSourceIngestion", era), { description: `Normalized-source coverage state machine: plan, next, record, coverage, finalize.`, inputSchema: z.object({
               action: z.enum(["plan", "next", "record", "coverage", "finalize"]).optional().default("next"),
               normalized_filename: z.string().describe("Filename relative to docs/normalized"),
-              max_chars: z.number().int().positive().optional().default(12000),
+              max_chars: z.number().int().min(1).max(50_000).optional().default(12000),
               segment_max_chars: z.number().int().min(256).max(50000).optional(),
               segment_id: z.string().optional(),
               status: z.enum(["integrated", "duplicate", "irrelevant", "unresolved", "contradicted", "legacy_unverified"]).optional(),
