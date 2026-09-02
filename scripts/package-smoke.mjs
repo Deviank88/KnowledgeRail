@@ -101,18 +101,16 @@ try {
     "server.json",
     "assets/knowledge-rail-logo.png",
     "docs/guides/claude-code-hooks.md",
-    "docs/milestones/client-integrations-2-7-0.md",
   ]) {
     if (!packedPaths.has(required)) throw new Error(`Packed artifact is missing ${required}.`);
   }
-  for (const forbidden of ["milestones/", "tests/", ".env", "wiki/"]) {
+  for (const forbidden of ["milestones/", "docs/milestones/", "tests/", ".env", "wiki/"]) {
     if ([...packedPaths].some((entry) => entry === forbidden || entry.startsWith(forbidden))) {
       throw new Error(`Packed artifact unexpectedly contains ${forbidden}.`);
     }
   }
   const publicDocs = new Set([
     "docs/guides/claude-code-hooks.md",
-    "docs/milestones/client-integrations-2-7-0.md",
   ]);
   const unexpectedDocs = [...packedPaths].filter((entry) => entry.startsWith("docs/") && !publicDocs.has(entry));
   if (unexpectedDocs.length > 0) {
@@ -125,6 +123,18 @@ try {
   const installedBin = path.join(installDirectory, "node_modules", "knowledge-rail", "dist", "index.js");
   const installedPackageRoot = path.dirname(path.dirname(installedBin));
   const installedPackage = JSON.parse(await fs.readFile(path.join(installedPackageRoot, "package.json"), "utf8"));
+  const [sourceReadme, installedReadme, sourceLogo, installedLogo] = await Promise.all([
+    fs.readFile(path.join(process.cwd(), "README.md")),
+    fs.readFile(path.join(installedPackageRoot, "README.md")),
+    fs.readFile(path.join(process.cwd(), "assets", "knowledge-rail-logo.png")),
+    fs.readFile(path.join(installedPackageRoot, "assets", "knowledge-rail-logo.png")),
+  ]);
+  if (!installedReadme.equals(sourceReadme)) {
+    throw new Error("Packed README.md differs from the release source.");
+  }
+  if (!installedLogo.equals(sourceLogo)) {
+    throw new Error("Packed README logo differs from the release source.");
+  }
   if (installedPackage.dependencies?.marked !== "18.0.9") {
     throw new Error("Packed runtime must exact-pin marked@18.0.9.");
   }
