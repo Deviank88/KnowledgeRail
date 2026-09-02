@@ -21,6 +21,7 @@ import type { WikiPageRecord } from "./page-record.js";
 import { getWikiPageRecords } from "./retrieval-index.js";
 import { tokenizeSearchText, type RetrievalProfile } from "./text-analysis.js";
 import { WIKI_PAGE_TYPES, type WikiPageType } from "./wiki-validation.js";
+import { normalizeWikiPagePath } from "./wiki-page-path.js";
 import { DIAGRAM_MODES, type DiagramMode } from "../config/document-options.js";
 
 export { DOCUMENT_TYPES, type DocumentType } from "../config/document-contracts.js";
@@ -252,10 +253,6 @@ function normalizeText(input: string): string {
     .replace(/[`*_#[\](){}:.,;!?'"|/\\-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function normalizeRelPath(relPath: string): string {
-  return relPath.replace(/\\/g, "/").replace(/^\/+/, "");
 }
 
 function titleToSlug(title: string): string {
@@ -1684,7 +1681,7 @@ export function prepareKnowledgeUpdateDraft(options: KnowledgeUpdateOptions): {
   const pageType = options.pageType ?? "analysis";
   const pathPrefix: Record<WikiPageType, string> = WIKI_PAGE_DIRECTORY_BY_TYPE;
   const pagePath = options.targetPagePath?.trim()
-    ? normalizeRelPath(options.targetPagePath)
+    ? normalizeWikiPagePath(options.targetPagePath, { allowWikiRootPrefix: true })
     : `${pathPrefix[pageType]}/${titleToSlug(title)}.md`;
   const sources = uniqueStrings(options.sources ?? []);
   const decisionContextTag = titleToSlug(title).replace(/_/g, "-").toLocaleLowerCase("en-US");

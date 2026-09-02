@@ -571,6 +571,18 @@ test("prepareKnowledgeUpdateDraft produces a valid wiki page draft", async () =>
   assert.equal(hasErrors(validation.issues), false);
 });
 
+test("prepareKnowledgeUpdateDraft normalizes project-relative wiki paths", () => {
+  const draft = prepareKnowledgeUpdateDraft({
+    finding: "A transcript identifies a stakeholder.",
+    targetPagePath: "wiki/wiki/stakeholders/Jane_Doe.md",
+    pageType: "stakeholder",
+    title: "Jane Doe",
+    date: "2026-09-02",
+  });
+  assert.equal(draft.path, "stakeholders/Jane_Doe.md");
+  assert.match(draft.content, /type: stakeholder/);
+});
+
 test("prepareKnowledgeUpdateDraft produces a living decision-memory draft", async () => {
   const draft = prepareKnowledgeUpdateDraft({
     finding: "Il flusso pagamenti deve mantenere la chiave di idempotenza originale.",

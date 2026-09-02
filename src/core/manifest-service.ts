@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import fg from "fast-glob";
 import { atomicWriteText } from "./fs-service.js";
 import { resolveRealWithin } from "./paths.js";
+import { isCanonicalWikiPagePath } from "./wiki-page-path.js";
 import { withWikiFileLock } from "./lock-service.js";
 import { ensureDir, readFileSafe } from "./utils.js";
 
@@ -193,10 +194,13 @@ export async function buildManifest(wikiRoot: string): Promise<WikiManifest> {
     followSymbolicLinks: false,
     ignore: [".knowledge-rail/**", ".llm-wiki/**"],
   }).catch(() => [] as string[]);
-  const files = discovered.map((sourcePath) => ({
-    sourcePath,
-    manifestPath: normalizeManifestPath(sourcePath),
-  }));
+  const files = discovered
+    .filter((sourcePath) => ["SCHEMA.md", "index.md", "log.md"].includes(sourcePath) ||
+      isCanonicalWikiPagePath(sourcePath))
+    .map((sourcePath) => ({
+      sourcePath,
+      manifestPath: normalizeManifestPath(sourcePath),
+    }));
   validatePortablePaths(files);
   files.sort((left, right) => comparePaths(left.manifestPath, right.manifestPath));
 

@@ -1,7 +1,7 @@
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { buildServer } from "../mcp/server.js";
 import { activateWorkspace, resolveWorkspace } from "../mcp/workspace.js";
-import { canonicalizeExistingDirectory } from "../mcp/workspace-discovery.js";
+import { canonicalizeProjectRoot } from "../mcp/workspace-discovery.js";
 import { WorkspaceRegistry } from "../workspaces/registry.js";
 import { logger } from "../core/logger.js";
 import { startupMark } from "./startup-timing.js";
@@ -18,7 +18,7 @@ export async function runStdio(options: { root?: string } = {}): Promise<StdioRu
   });
   const initial = activateWorkspace({
     ...resolved,
-    root: await canonicalizeExistingDirectory(resolved.root),
+    root: await canonicalizeProjectRoot(resolved.root),
   });
   startupMark("stdio_workspace_ready", { workspaceSource: initial.source });
 

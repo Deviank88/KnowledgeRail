@@ -64,6 +64,8 @@ test("page and passage URIs round-trip Unicode paths without traversal ambiguity
 
   const pageUri = wikiPageUri(path);
   assert.deepEqual(parseWikiResourceUri(pageUri), { path });
+  assert.equal(wikiPageUri(`wiki/${path}`), pageUri);
+  assert.deepEqual(parseWikiResourceUri(`knowledge-rail://page/wiki/${path}`), { path });
 
   const passageUri = wikiPassageUri(path, passageId);
   assert.deepEqual(parseWikiResourceUri(passageUri), { path, passageId });

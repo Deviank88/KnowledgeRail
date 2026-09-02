@@ -18,6 +18,13 @@ export interface EvidenceSynthesisDraft {
   mode: "create" | "update";
 }
 
+interface StakeholderMetadata {
+  role?: string;
+  organization?: string;
+  emailDomain?: string;
+  affiliation?: "client" | "internal" | "partner";
+}
+
 function yaml(value: string): string {
   return JSON.stringify(value);
 }
@@ -62,7 +69,50 @@ function replaceManagedBlock(content: string, block: string): string {
   return `${content.slice(0, start).trimEnd()}\n\n${block}\n${content.slice(end + BLOCK_END.length).trimStart()}`.trimEnd() + "\n";
 }
 
-function mergeFrontmatterEvidence(content: string, claims: readonly EvidenceClaim[]): string {
+function latestTargetValue(
+  claims: readonly EvidenceClaim[],
+  field: "role" | "organization" | "emailDomain" | "affiliation",
+  options: { ignoreUnknown?: boolean } = {}
+): string | undefined {
+  return [...claims]
+    .filter((claim) => {
+      const value = claim.target?.[field];
+      return Boolean(value) && !(options.ignoreUnknown && value === "unknown");
+    })
+    .sort((left, right) =>
+      right.updatedAt.localeCompare(left.updatedAt) || right.id.localeCompare(left.id)
+    )[0]?.target?.[field];
+}
+
+function stakeholderMetadata(claims: readonly EvidenceClaim[]): StakeholderMetadata {
+  const role = latestTargetValue(claims, "role");
+  const organization = latestTargetValue(claims, "organization");
+  const emailDomain = latestTargetValue(claims, "emailDomain");
+  const affiliation = latestTargetValue(claims, "affiliation", { ignoreUnknown: true });
+  return {
+    ...(role ? { role } : {}),
+    ...(organization ? { organization } : {}),
+    ...(emailDomain ? { emailDomain } : {}),
+    ...(affiliation === "client" || affiliation === "internal" || affiliation === "partner"
+      ? { affiliation }
+      : {}),
+  };
+}
+
+function setFrontmatterField(header: string, key: string, value: string | undefined): string {
+  const line = new RegExp(`^${key}:.*(?:\\r?\\n|$)`, "m");
+  if (value === undefined) return header.replace(line, "");
+  const rendered = `${key}: ${yaml(value)}\n`;
+  return line.test(header)
+    ? header.replace(line, rendered)
+    : header.replace(/\r?\n---$/u, `\n${rendered}---`);
+}
+
+function mergeFrontmatterEvidence(
+  content: string,
+  claims: readonly EvidenceClaim[],
+  stakeholder?: StakeholderMetadata
+): string {
   const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!frontmatterMatch) return content;
   const metadata = parseFrontmatter(content);
@@ -71,9 +121,21 @@ function mergeFrontmatterEvidence(content: string, claims: readonly EvidenceClai
     ...claims.map((claim) => claim.sourceUri),
   ])].sort();
   const updated = [...claims.map((claim) => claim.updatedAt.slice(0, 10))].sort().at(-1)!;
-  const nextHeader = frontmatterMatch[0]
+  let nextHeader = frontmatterMatch[0]
     .replace(/^sources:.*$/m, `sources: [${sources.map(yaml).join(", ")}]`)
     .replace(/^updated:.*$/m, `updated: ${updated}`);
+  if (stakeholder) {
+    if (stakeholder.role) nextHeader = setFrontmatterField(nextHeader, "role", stakeholder.role);
+    if (stakeholder.organization) {
+      nextHeader = setFrontmatterField(nextHeader, "organization", stakeholder.organization);
+    }
+    if (stakeholder.emailDomain) {
+      nextHeader = setFrontmatterField(nextHeader, "email_domain", stakeholder.emailDomain);
+    }
+    if (stakeholder.affiliation) {
+      nextHeader = setFrontmatterField(nextHeader, "affiliation", stakeholder.affiliation);
+    }
+  }
   return nextHeader + content.slice(frontmatterMatch[0].length);
 }
 
@@ -86,15 +148,20 @@ function createPage(params: {
   const sources = [...new Set(params.claims.map((claim) => claim.sourceUri))].sort();
   const created = [...params.claims.map((claim) => claim.createdAt.slice(0, 10))].sort()[0]!;
   const updated = [...params.claims.map((claim) => claim.updatedAt.slice(0, 10))].sort().at(-1)!;
+  const stakeholder = params.type === "stakeholder" ? stakeholderMetadata(params.claims) : undefined;
   return [
     "---",
     `title: ${yaml(params.title)}`,
     `type: ${params.type}`,
-    "tags: [evidence-ir]",
+    `tags: [evidence-ir${stakeholder ? ", stakeholder" : ""}]`,
     `created: ${created}`,
     `updated: ${updated}`,
     `sources: [${sources.map(yaml).join(", ")}]`,
     "authority: evidence_ir",
+    ...(stakeholder?.role ? [`role: ${yaml(stakeholder.role)}`] : []),
+    ...(stakeholder?.organization ? [`organization: ${yaml(stakeholder.organization)}`] : []),
+    ...(stakeholder?.emailDomain ? [`email_domain: ${yaml(stakeholder.emailDomain)}`] : []),
+    ...(stakeholder ? [`affiliation: ${yaml(stakeholder.affiliation ?? "unknown")}`] : []),
     "---",
     "",
     `# ${params.title}`,
@@ -175,10 +242,11 @@ export async function planEvidenceSynthesis(params: {
     const absolute = safeResolveWithin(params.wikiRoot, pagePath);
     await assertCanonicalSynthesisPath(params.wikiRoot, absolute, pagePath);
     const existing = await readFileSafe(absolute);
+    const stakeholder = group.type === "stakeholder" ? stakeholderMetadata(group.claims) : undefined;
     const content = existing === null
       ? createPage({ path: pagePath, title: group.title, type: group.type, claims: group.claims })
       : replaceManagedBlock(
-        mergeFrontmatterEvidence(existing, group.claims),
+        mergeFrontmatterEvidence(existing, group.claims, stakeholder),
         managedBlock(group.claims)
       );
     drafts.push({

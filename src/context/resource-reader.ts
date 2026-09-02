@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { parseWikiPageRecord, type WikiPageRecord } from "../core/page-record.js";
 import { safeResolveWithin } from "../core/paths.js";
+import { normalizeWikiPagePath } from "../core/wiki-page-path.js";
 import { wikiPassageId } from "./passage-id.js";
 import {
   parseWikiResourceUri,
@@ -41,11 +42,9 @@ function truncateCharacters(text: string, maxCharacters?: number): {
 
 export async function readValidatedWikiPageRecord(
   wikiRoot: string,
-  relPath: string
+  requestedPath: string
 ): Promise<WikiPageRecord | null> {
-  if (!relPath.toLowerCase().endsWith(".md")) {
-    throw new Error(`Wiki resources must reference Markdown pages: ${relPath}`);
-  }
+  const relPath = normalizeWikiPagePath(requestedPath, { allowWikiRootPrefix: true });
 
   const lexicalTarget = safeResolveWithin(wikiRoot, relPath);
   let rootReal: string;

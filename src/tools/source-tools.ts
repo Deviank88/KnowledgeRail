@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   docsCategoryDirReal,
   docsCategoryFilePathReal,
+  getWikiRoot,
   validateGlobPattern,
   wikiDir,
 } from "../core/paths.js";
@@ -28,8 +29,10 @@ import {
 import {
   normalizeSourceFile,
   normalizedOutputPath,
+  normalizedSourceCategory,
 } from "../core/source-normalization-service.js";
 import { readFileSafe } from "../core/utils.js";
+import { currentWorkspaceUserIdentity, type WorkspaceUserIdentity } from "../core/user-identity.js";
 import { errorResult, structuredTextResult, textResult } from "./helpers.js";
 import { toolName, type ProtocolEra } from "../mcp/tool-names.js";
 
@@ -38,6 +41,33 @@ const CATEGORY_ENUM = [...FILE_CATEGORIES] as [
   ...(typeof FILE_CATEGORIES)[number][],
 ];
 const MAX_LIST_ENTRIES = 1_000;
+
+type StakeholderSyncMode = "required" | "suggested" | "off";
+
+function stakeholderSyncMode(category: string | undefined): StakeholderSyncMode {
+  if (category === "transcripts") return "required";
+  if (category === "client" || category === "reports") return "suggested";
+  return "off";
+}
+
+function stakeholderGuidance(
+  mode: Exclude<StakeholderSyncMode, "off">,
+  identity: WorkspaceUserIdentity
+): string[] {
+  const first = mode === "required"
+    ? "> Transcript stakeholder contract: extract every explicitly identified participant or affected stakeholder as a `kind=stakeholder` claim."
+    : "> Stakeholder discovery: when this source explicitly identifies a participant or affected party, emit a `kind=stakeholder` claim.";
+  return [
+    first,
+    "> Give each stakeholder claim a stable `target.page_title` or `target.entity_key`; set `target.page_type=stakeholder`.",
+    "> Use `target.page_path=stakeholders/<Stable_Name>.md` only for an unambiguous identity and reuse it across sources.",
+    `> Local user email domain: ${identity.userEmailDomain ?? "unknown"} (source: ${identity.source}).`,
+    "> If the source contains a participant email, put only its domain in `target.email_domain`; never copy the complete address or local part into a claim.",
+    "> Set `target.role` and `target.organization` only from explicit evidence. They are current observations and may change in later sources; reuse the stable stakeholder identity so the page is updated and history is retained.",
+    "> Affiliation is server-normalized: same domain=internal and different domain=client. Without a comparable domain, use client/internal only when the source explicitly declares it; otherwise use unknown. Use partner only when explicitly stated.",
+    "> Record only supported roles, responsibilities, influence, concerns, decisions, and relationships. Never invent a stakeholder or merge ambiguous identities.",
+  ];
+}
 
 async function boundedGlob(
   pattern: string,
@@ -240,6 +270,11 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
               }
               const uri = sourceUri(normalized_filename);
               const unitBudget = max_chars ?? 12000;
+              const sourceCategory = normalizedSourceCategory(content, normalized_filename);
+              const syncMode = stakeholderSyncMode(sourceCategory);
+              const stakeholderSyncRequired = syncMode === "required";
+              const stakeholderSyncEnabled = syncMode !== "off";
+              const identity = await currentWorkspaceUserIdentity(getWikiRoot());
 
               try {
                 if (action === "plan") {
@@ -256,6 +291,10 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                     `- sourceHash: ${result.ledger.sourceHash}`,
                     `- compilerVersion: ${result.ledger.compilerVersion}`,
                     `- state: ${result.ledger.state}`,
+                    `- sourceCategory: ${sourceCategory ?? "unknown"}`,
+                    `- stakeholderSyncRequired: ${stakeholderSyncRequired}`,
+                    `- stakeholderSyncMode: ${syncMode}`,
+                    `- userEmailDomain: ${identity.userEmailDomain ?? "unknown"}`,
                     `- ledger: wiki/${sourceCoverageLedgerRef(uri)}`,
                     ...coverageLines(result.metrics),
                     "",
@@ -271,6 +310,12 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                     ledgerState: result.ledger.state,
                     metrics: result.metrics,
                     queueEmpty: result.metrics.unresolvedSegmentCount === 0,
+                    sourceCategory,
+                    stakeholderSyncRequired,
+                    stakeholderSyncEnabled,
+                    stakeholderSyncMode: syncMode,
+                    userEmailDomain: identity.userEmailDomain,
+                    userEmailDomainSource: identity.source,
                   });
                 }
 
@@ -370,6 +415,12 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                     ledgerState: result.ledger.state,
                     metrics: result.metrics,
                     queueEmpty: true,
+                    sourceCategory,
+                    stakeholderSyncRequired,
+                    stakeholderSyncEnabled,
+                    stakeholderSyncMode: syncMode,
+                    userEmailDomain: identity.userEmailDomain,
+                    userEmailDomainSource: identity.source,
                   });
                 }
                 return structuredTextResult([
@@ -378,6 +429,9 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                   `> Segment: \`${unit.segment.id}\` (${unit.segment.start}-${unit.segment.end}, ${unit.segment.kind})`,
                   `> Unresolved queue: ${unit.queuedSegmentIds.length} segment(s), including the current one.`,
                   "> Extract claims with provenance and use `knowledge_ingest action=apply_claims`; record, link, validation and synthesis are orchestrated internally.",
+                  ...(stakeholderSyncEnabled
+                    ? ["", ...stakeholderGuidance(syncMode as Exclude<StakeholderSyncMode, "off">, identity)]
+                    : []),
                   "",
                   "```source",
                   unit.content,
@@ -390,6 +444,12 @@ export function registerSourceTools(server: McpServer, era: ProtocolEra = "moder
                   queuedSegmentIds: unit.queuedSegmentIds,
                   metrics: unit.metrics,
                   queueEmpty: false,
+                  sourceCategory,
+                  stakeholderSyncRequired,
+                  stakeholderSyncEnabled,
+                  stakeholderSyncMode: syncMode,
+                  userEmailDomain: identity.userEmailDomain,
+                  userEmailDomainSource: identity.source,
                 });
               } catch (error: unknown) {
                 return errorResult(error);

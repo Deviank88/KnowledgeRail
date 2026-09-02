@@ -36,10 +36,18 @@ export const EvidenceClaimInputSchema = z.object({
   origin: z.enum(CLAIM_ORIGINS),
   confidence: z.number().min(0).max(1),
   target: z.object({
-    entity_key: z.string().optional(),
-    page_path: z.string().optional(),
-    page_title: z.string().optional(),
+    entity_key: z.string().optional().describe("Stable stakeholder/entity identity reused across sources."),
+    page_path: z.string().optional().describe(
+      "Target Markdown path relative to wiki/; a leading wiki/ is accepted and removed."
+    ),
+    page_title: z.string().optional().describe("Stable canonical page title."),
     page_type: z.enum(PAGE_TYPES).optional(),
+    role: z.string().max(256).optional().describe("Latest explicitly observed stakeholder role."),
+    organization: z.string().max(256).optional().describe("Latest explicitly observed organization."),
+    email_domain: z.string().max(253).optional().describe("Normalized domain only; never a full email address."),
+    affiliation: z.enum(["client", "internal", "partner", "unknown"]).optional().describe(
+      "Source-declared affiliation. Domain comparison overrides client/internal when possible; partner must be explicit."
+    ),
     code_resource_uri: z.string().startsWith("code://repo/").max(4_096).optional(),
   }).optional(),
   relations: z.array(z.object({

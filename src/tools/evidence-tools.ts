@@ -17,7 +17,8 @@ import {
   recordKnowledgeRecoveryUsage,
   resolveKnowledgeRecoveryEvent,
 } from "../core/knowledge-recovery.js";
-import { docsCategoryFilePath, wikiDir } from "../core/paths.js";
+import { docsCategoryFilePath, getWikiRoot, wikiDir } from "../core/paths.js";
+import { currentWorkspaceUserIdentity } from "../core/user-identity.js";
 import { readFileSafe } from "../core/utils.js";
 import { errorResult, finalizePageMutation, structuredTextResult, textResult } from "./helpers.js";
 import { toolName, type ProtocolEra } from "../mcp/tool-names.js";
@@ -177,11 +178,13 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
         }
         const content = await readFileSafe(docsCategoryFilePath("normalized", normalized_filename));
         if (content === null) return errorResult(`Normalized source not found: ${normalized_filename}`);
+        const identity = await currentWorkspaceUserIdentity(getWikiRoot());
         const result = await recordEvidenceClaims({
           wikiRoot: wikiDir(),
           sourceUri: sourceUri(normalized_filename),
           sourceContent: content,
           segmentId: segment_id,
+          userEmailDomain: identity.userEmailDomain,
           claims: claims.map((claim) => ({
             text: claim.text,
             kind: claim.kind,
@@ -192,6 +195,10 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
               pagePath: claim.target.page_path,
               pageTitle: claim.target.page_title,
               pageType: claim.target.page_type,
+              role: claim.target.role,
+              organization: claim.target.organization,
+              emailDomain: claim.target.email_domain,
+              affiliation: claim.target.affiliation,
               codeResourceUri: claim.target.code_resource_uri,
             } : undefined,
             relations: claim.relations?.map((relation) => ({

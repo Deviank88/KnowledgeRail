@@ -10,6 +10,7 @@ import {
 } from "./utils.js";
 import { tokenizeSearchText } from "./text-analysis.js";
 import { resolveRealWithin } from "./paths.js";
+import { isCanonicalWikiPagePath, normalizeWikiPagePath } from "./wiki-page-path.js";
 
 export interface WikiPassage {
   id: string;
@@ -102,10 +103,11 @@ export function parseWikiPageRecord(
 
 export async function readWikiPageRecord(
   wikiRoot: string,
-  relPath: string,
+  requestedPath: string,
   knownStat?: { mtimeMs: number; size: number },
   options: { strict?: boolean } = {}
 ): Promise<WikiPageRecord | null> {
+  const relPath = normalizeWikiPagePath(requestedPath);
   const absPath = await resolveRealWithin(wikiRoot, relPath);
   const raw = options.strict
     ? await fs.readFile(absPath, "utf8")
@@ -140,6 +142,6 @@ export async function listWikiPagePaths(
   }
   return files
     .map((file) => file.replace(/\\/g, "/"))
-    .filter((file) => !CONTROL_FILES.has(file))
+    .filter((file) => !CONTROL_FILES.has(file) && isCanonicalWikiPagePath(file))
     .sort();
 }

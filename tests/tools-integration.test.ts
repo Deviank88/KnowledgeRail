@@ -217,6 +217,124 @@ test("core wiki tools: write with warnings, edit, auto-index, delete, search, li
   assert.equal(indexAfterDelete.includes("Alpha Concept"), false);
 });
 
+test("wiki writes normalize redundant root prefixes and reject nested wiki directories", async () => {
+  const { root, tools } = await setupWorkspace();
+  const page = [
+    "---",
+    'title: "Dynamic page"',
+    "type: analysis",
+    "tags: [dynamic]",
+    "created: 2026-09-02",
+    "updated: 2026-09-02",
+    "sources: []",
+    "---",
+    "",
+    "# Dynamic page",
+  ].join("\n");
+
+  const write = await tools.get("wiki_write_page")!({
+    path: "wiki/wiki/customer-specific/notes/Dynamic.md",
+    content: page,
+  });
+  assert.equal(write.isError, undefined);
+  assert.match(write.content[0].text, /Written: customer-specific\/notes\/Dynamic\.md/);
+  await fs.access(path.join(root, "wiki", "customer-specific", "notes", "Dynamic.md"));
+  await assert.rejects(fs.access(path.join(root, "wiki", "wiki")));
+
+  await assert.rejects(
+    () => tools.get("wiki_write_page")!({ path: "customer-specific/wiki/Dynamic.md", content: page }),
+    /Nested wiki directories/
+  );
+});
+
+test("wiki lint reports pre-existing nested wiki directories", async () => {
+  const { root, tools } = await setupWorkspace();
+  const nested = path.join(root, "wiki", "legacy", "wiki", "Page.md");
+  await fs.mkdir(path.dirname(nested), { recursive: true });
+  await fs.writeFile(nested, [
+    "---",
+    'title: "Legacy nested page"',
+    "type: analysis",
+    "tags: [legacy]",
+    "created: 2026-09-02",
+    "updated: 2026-09-02",
+    "sources: []",
+    "---",
+    "",
+    "# Legacy nested page",
+  ].join("\n"));
+  const referring = path.join(root, "wiki", "analysis", "Reference.md");
+  await fs.mkdir(path.dirname(referring), { recursive: true });
+  await fs.writeFile(referring, [
+    "---",
+    'title: "Legacy reference"',
+    "type: analysis",
+    "tags: [legacy]",
+    "created: 2026-09-02",
+    "updated: 2026-09-02",
+    "sources: []",
+    "---",
+    "",
+    "# Legacy reference",
+    "",
+    "[Legacy page](../legacy/wiki/Page.md)",
+  ].join("\n"));
+
+  const lint = await tools.get("wiki_lint")!({
+    include_orphans: false,
+    include_missing: false,
+    include_broken_links: false,
+  });
+  assert.equal(lint.isError, undefined);
+  assert.match(lint.content[0].text, /ERROR NESTED_WIKI_DIRECTORY/);
+
+  const preview = await tools.get("wiki_lint")!({
+    include_orphans: false,
+    include_missing: false,
+    include_broken_links: false,
+    fix_nested_wiki: true,
+    dry_run: true,
+  });
+  assert.match(preview.content[0].text, /Nested wiki path repair: DRY RUN/);
+  await fs.access(nested);
+
+  const repaired = await tools.get("wiki_lint")!({
+    include_orphans: false,
+    include_missing: false,
+    include_broken_links: true,
+    fix_nested_wiki: true,
+    dry_run: false,
+  });
+  assert.equal(repaired.isError, undefined);
+  assert.match(repaired.content[0].text, /Nested wiki path repair: APPLIED/);
+  await fs.access(path.join(root, "wiki", "legacy", "Page.md"));
+  await assert.rejects(fs.access(nested));
+  await assert.rejects(fs.access(path.join(root, "wiki", "legacy", "wiki")));
+  assert.match(await fs.readFile(referring, "utf8"), /\.\.\/legacy\/Page\.md/);
+});
+
+test("nested wiki repair blocks the whole apply when a canonical destination conflicts", async () => {
+  const { root, tools } = await setupWorkspace();
+  const canonical = path.join(root, "wiki", "legacy", "Page.md");
+  const nested = path.join(root, "wiki", "wiki", "legacy", "Page.md");
+  await fs.mkdir(path.dirname(canonical), { recursive: true });
+  await fs.mkdir(path.dirname(nested), { recursive: true });
+  await fs.writeFile(canonical, "canonical\n");
+  await fs.writeFile(nested, "legacy\n");
+
+  const result = await tools.get("wiki_lint")!({
+    include_orphans: false,
+    include_missing: false,
+    include_broken_links: false,
+    fix_nested_wiki: true,
+    dry_run: false,
+  });
+  assert.match(result.content[0].text, /Nested wiki path repair: BLOCKED/);
+  assert.match(result.content[0].text, /canonical destination already exists/);
+  assert.equal(await fs.readFile(canonical, "utf8"), "canonical\n");
+  assert.equal(await fs.readFile(nested, "utf8"), "legacy\n");
+});
+
 test("filesystem tools reject glob and symlink workspace escapes", {
   skip: process.platform === "win32" ? "symlink privileges vary on Windows" : false,
 }, async () => {
@@ -617,6 +735,7 @@ test("document tools: open profiles, section context, Markdown write, terminal r
   });
   assert.equal(documentPlan.content[0].text.includes("Document editorial plan"), true);
   assert.equal(documentPlan.structuredContent?.documentType, "safety_case");
+  assert.equal(Object.hasOwn(documentPlan.structuredContent ?? {}, "userEmailDomain"), true);
   assert.equal((documentPlan.structuredContent?.documentProfile as { builtInPreset?: boolean }).builtInPreset, false);
   assert.deepEqual(documentPlan.structuredContent?.requiredSections, ["Claim", "Evidence"]);
   const customPersona = documentPlan.structuredContent?.editorPersona;
@@ -662,6 +781,7 @@ test("document tools: open profiles, section context, Markdown write, terminal r
     max_total_chars: 100,
   });
   assert.equal(sectionContext.content[0].text.includes("Section context pack"), true);
+  assert.equal(Object.hasOwn(sectionContext.structuredContent ?? {}, "userEmailDomain"), true);
   assert.equal(sectionContext.content[0].text.includes("Alpha Concept"), true);
 
   const diagramContext = await tools.get("knowledge_section_context")!({

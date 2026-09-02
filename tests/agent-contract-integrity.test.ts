@@ -6,6 +6,7 @@ import { test } from "node:test";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { readWikiResource } from "../src/context/resource-reader.js";
 import { getWikiRoot, setWikiRoot } from "../src/core/paths.js";
+import { clearWorkspaceUserIdentityCacheForTests } from "../src/core/user-identity.js";
 import { AGENT_TOOL_NAMES } from "../src/mcp/tool-names.js";
 import { registerAgentTools } from "../src/tools/agent-tools.js";
 
@@ -252,6 +253,123 @@ test("ingest guidance derives queue and coverage transitions from structured fie
     assert.equal(coverage.structuredContent?.state, "coverage_complete");
     assert.equal(coverage.structuredContent?.readyForFinalization, true);
     assert.equal((coverage.structuredContent?.nextAction as { action?: string }).action, "finalize");
+  });
+});
+
+test("transcript ingestion creates and updates stable stakeholder pages", async () => {
+  const previousEmail = process.env.KNOWLEDGE_RAIL_USER_EMAIL;
+  process.env.KNOWLEDGE_RAIL_USER_EMAIL = "owner@internal.example";
+  clearWorkspaceUserIdentityCacheForTests();
+  try {
+    await withProject(async (projectRoot, tools) => {
+    const files = tools.get("knowledge_files")!;
+    const ingest = tools.get("knowledge_ingest")!;
+    const processTranscript = async (
+      filename: string,
+      transcript: string,
+      claimText: string,
+      role: string,
+      emailDomain?: string
+    ) => {
+      await fs.writeFile(path.join(projectRoot, "docs", "transcripts", filename), transcript, "utf8");
+      const normalized = await files.handler({
+        action: "normalize",
+        category: "transcripts",
+        path: filename,
+        overwrite: false,
+      }, {});
+      assert.equal(normalized.isError, undefined);
+      const normalizedFilename = `transcripts_${path.parse(filename).name}.md`;
+      await ingest.handler({ action: "start", normalized_filename: normalizedFilename }, {});
+      const next = await ingest.handler({ action: "next", normalized_filename: normalizedFilename }, {});
+      assert.equal(next.structuredContent?.sourceCategory, "transcripts");
+      assert.equal(next.structuredContent?.stakeholderSyncRequired, true);
+      assert.equal(next.structuredContent?.userEmailDomain, "internal.example");
+      assert.match(text(next), /Transcript stakeholder contract/);
+      assert.match(text(next), /persist no complete email address/);
+      const segment = next.structuredContent?.segment as { id?: string };
+      assert.ok(segment.id);
+      return ingest.handler({
+        action: "apply_claims",
+        normalized_filename: normalizedFilename,
+        segment_id: segment.id,
+        claims: [{
+          text: claimText,
+          kind: "stakeholder",
+          origin: "extracted",
+          confidence: 0.99,
+          target: {
+            entity_key: "jane-doe",
+            page_title: "Jane Doe",
+            role,
+            organization: "Customer Corp",
+            ...(emailDomain ? { email_domain: emailDomain } : {}),
+          },
+        }],
+      }, {});
+    };
+
+    const first = await processTranscript(
+      "kickoff.md",
+      "Jane Doe (jane.doe@customer.example): I own the payment approval workflow.",
+      "Jane Doe (jane.doe@customer.example) owns the payment approval workflow.",
+      "Product owner",
+      "customer.example"
+    );
+    assert.equal(first.isError, undefined, text(first));
+    assert.deepEqual(first.structuredContent?.stakeholderPages, ["stakeholders/Jane_Doe.md"]);
+
+    const second = await processTranscript(
+      "followup.md",
+      "Jane Doe: Finance must review exceptions before release.",
+      "Jane Doe requires Finance to review exceptions before release.",
+      "Approval lead"
+    );
+    assert.deepEqual(second.structuredContent?.stakeholderPages, ["stakeholders/Jane_Doe.md"]);
+    const stakeholderPages = second.structuredContent?.pages as Array<{ path: string; mode: string }>;
+    assert.equal(stakeholderPages[0]?.mode, "update");
+
+    const page = await fs.readFile(
+      path.join(projectRoot, "wiki", "stakeholders", "Jane_Doe.md"),
+      "utf8"
+    );
+    assert.match(page, /owns the payment approval workflow/);
+    assert.match(page, /Jane Doe requires Finance to review exceptions before release/);
+    assert.match(page, /role: "Approval lead"/);
+    assert.match(page, /organization: "Customer Corp"/);
+    assert.match(page, /email_domain: "customer\.example"/);
+    assert.match(page, /affiliation: "client"/);
+    assert.doesNotMatch(page, /jane\.doe@customer\.example/);
+    assert.match(page, /\[email-domain:customer\.example\]/);
+    await assert.rejects(fs.access(path.join(projectRoot, "wiki", "wiki")));
+    });
+  } finally {
+    if (previousEmail === undefined) delete process.env.KNOWLEDGE_RAIL_USER_EMAIL;
+    else process.env.KNOWLEDGE_RAIL_USER_EMAIL = previousEmail;
+    clearWorkspaceUserIdentityCacheForTests();
+  }
+});
+
+test("client and report sources enable lightweight stakeholder discovery", async () => {
+  await withProject(async (projectRoot, tools) => {
+    const files = tools.get("knowledge_files")!;
+    const ingest = tools.get("knowledge_ingest")!;
+    for (const category of ["client", "reports"] as const) {
+      const filename = `${category}-note.md`;
+      await fs.writeFile(
+        path.join(projectRoot, "docs", category, filename),
+        "An explicitly named owner may appear here.",
+        "utf8"
+      );
+      await files.handler({ action: "normalize", category, path: filename, overwrite: false }, {});
+      const normalizedFilename = `${category}_${path.parse(filename).name}.md`;
+      await ingest.handler({ action: "start", normalized_filename: normalizedFilename }, {});
+      const next = await ingest.handler({ action: "next", normalized_filename: normalizedFilename }, {});
+      assert.equal(next.structuredContent?.stakeholderSyncEnabled, true);
+      assert.equal(next.structuredContent?.stakeholderSyncRequired, false);
+      assert.equal(next.structuredContent?.stakeholderSyncMode, "suggested");
+      assert.match(text(next), /Stakeholder discovery/);
+    }
   });
 });
 

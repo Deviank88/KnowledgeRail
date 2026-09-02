@@ -1,6 +1,6 @@
 import type { DoctorCliOptions } from "../cli.js";
 import { resolveWorkspace } from "../mcp/workspace.js";
-import { canonicalizeExistingDirectory } from "../mcp/workspace-discovery.js";
+import { canonicalizeProjectRoot } from "../mcp/workspace-discovery.js";
 
 interface WritableText {
   write(value: string): unknown;
@@ -13,7 +13,7 @@ export interface DoctorCliIo {
 
 export interface DoctorCliDependencies {
   resolve?: typeof resolveWorkspace;
-  canonicalize?: typeof canonicalizeExistingDirectory;
+  canonicalize?: typeof canonicalizeProjectRoot;
 }
 
 const DEFAULT_IO: DoctorCliIo = {
@@ -32,7 +32,7 @@ export async function runDoctorCli(
   dependencies: DoctorCliDependencies = {}
 ): Promise<number> {
   const resolve = dependencies.resolve ?? resolveWorkspace;
-  const canonicalize = dependencies.canonicalize ?? canonicalizeExistingDirectory;
+  const canonicalize = dependencies.canonicalize ?? canonicalizeProjectRoot;
   try {
     const resolution = await resolve({
       explicitRoot: options.root,

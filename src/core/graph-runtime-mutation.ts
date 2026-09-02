@@ -1,6 +1,11 @@
 import * as nodePath from "node:path";
 import { markdownLinkTargets, wikiLinkTargets } from "./link-resolution.js";
 import { readWikiPageRecord, type WikiPageRecord } from "./page-record.js";
+import {
+  isCanonicalWikiPagePath,
+  nestedWikiPageRepairTarget,
+  normalizeWikiPagePath,
+} from "./wiki-page-path.js";
 import type {
   GraphEdge,
   GraphEdgeKind,
@@ -478,6 +483,14 @@ export async function patchRuntimeGraphPaths(
   ))];
   const nextRecords = new Map<string, WikiPageRecord | null>();
   for (const relPath of touchedPaths) {
+    if (!isCanonicalWikiPagePath(relPath)) {
+      if (nestedWikiPageRepairTarget(relPath)) {
+        nextRecords.set(relPath, null);
+        continue;
+      }
+      const normalized = normalizeWikiPagePath(relPath);
+      throw new Error(`Wiki page path must be canonical: ${relPath}; use ${normalized}`);
+    }
     try {
       nextRecords.set(relPath, await readWikiPageRecord(wikiRoot, relPath, undefined, { strict: true }));
     } catch (error) {

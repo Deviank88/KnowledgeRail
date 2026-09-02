@@ -20,6 +20,7 @@ export const DOC_OPERATIONAL_DIRECTORIES = ["evidence-ir"] as const;
 /** Single source of truth for typed canonical-memory paths. */
 export const WIKI_PAGE_DIRECTORY_BY_TYPE = {
   entity: "entities",
+  stakeholder: "stakeholders",
   concept: "concepts",
   summary: "summaries",
   comparison: "comparisons",
@@ -35,7 +36,8 @@ export const WIKI_PAGE_DIRECTORY_BY_TYPE = {
   decision: "decisions",
   release: "releases",
   risk: "risks",
-  data_model: "data-model",
+  // Historical linker spelling retained for existing workspace compatibility.
+  data_model: "data-models",
   automation: "automations",
   integration: "integrations",
   api: "api",

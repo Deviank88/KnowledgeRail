@@ -81,22 +81,25 @@ Frontmatter fields (\`title\`, \`tags\`, and so on) retain their technical forma
 │   └── <page-type>/     # Typed directories created on first use
 \`\`\`
 
-The typed wiki directories are: \`entities\`, \`concepts\`, \`summaries\`,
+The typed wiki directories are: \`entities\`, \`stakeholders\`, \`concepts\`, \`summaries\`,
 \`comparisons\`, \`overviews\`, \`analysis\`, \`meeting-notes\`, \`client-sources\`,
 \`candidate-requests\`, \`requests\`, \`requirements\`, \`implementations\`, \`tests\`,
-\`decisions\`, \`releases\`, \`risks\`, \`data-model\`, \`automations\`, \`integrations\`
+\`decisions\`, \`releases\`, \`risks\`, \`data-models\`, \`automations\`, \`integrations\`
 and \`api\`. A directory appears only when the first page of that type is written.
 
 ---
 
 ## Required Frontmatter
 
-Every wiki page MUST begin with YAML frontmatter:
+Every wiki page MUST begin with YAML frontmatter. Paths shown as \`wiki/...\` below are
+project-relative filesystem locations. For \`knowledge_page\`, pass a wiki-relative path such as
+\`concepts/RAG.md\`; a redundant leading \`wiki/\` is normalized to the canonical root. Never create
+another directory named \`wiki\` anywhere below the canonical \`wiki/\` directory.
 
 \`\`\`yaml
 ---
 title: "Human-readable page title"
-type: entity | concept | summary | comparison | overview | analysis | meeting_note | client_source | candidate_request | request | requirement | implementation | test_result | decision | release | risk | data_model | automation | integration | api
+type: entity | stakeholder | concept | summary | comparison | overview | analysis | meeting_note | client_source | candidate_request | request | requirement | implementation | test_result | decision | release | risk | data_model | automation | integration | api
 tags: [tag1, tag2, tag3]
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
@@ -129,6 +132,16 @@ A named real-world thing: person, organization, product, place.
 - File location: \`wiki/entities/Name_Of_Entity.md\`
 - Contains: description, key facts, relationships, timeline
 - Example: \`wiki/entities/OpenAI.md\`, \`wiki/entities/Sam_Altman.md\`
+
+### \`stakeholder\`
+A person, role, group, or organization that participates in or is affected by the project.
+- File location: \`wiki/stakeholders/Stable_Stakeholder_Name.md\`
+- Contains: identity, role, organization, responsibilities, influence, concerns, decisions, and transcript provenance
+- Optional frontmatter: \`role\`, \`organization\`, \`email_domain\`, and \`affiliation\` (\`client\`, \`internal\`, \`partner\`, or \`unknown\`)
+- \`email_domain\` contains only a normalized domain; never persist a complete participant email address or local part
+- Update the same page across sources when the identity is unambiguous. Current profile fields use the latest explicit observation while Evidence IR retains prior roles and affiliations with provenance
+- Keep uncertain identities separate and explicit
+- Example: \`wiki/stakeholders/Jane_Doe.md\`, \`wiki/stakeholders/Finance_Approvers.md\`
 
 ### \`concept\`
 An idea, technique, algorithm, or pattern.
@@ -173,6 +186,26 @@ Use these page types for consulting-project knowledge:
 - \`release\`: a changelog or release record.
 - \`risk\`: a risk, gap, or source conflict.
 - \`data_model\`, \`automation\`, \`integration\`, \`api\`: specialist details.
+
+### Stakeholder memory
+
+For normalized \`transcripts\`, extract every explicitly identified participant or affected
+stakeholder as evidence targeted to a \`stakeholder\` page. For \`client\` and \`reports\` sources,
+apply the same extraction when stakeholder evidence is explicitly present.
+Use one stable page per unambiguous person, role, group, or organization under \`stakeholders/\`
+and update that same page when later sources add or revise evidence. A stakeholder's role,
+organization, email domain, or affiliation can change: keep the newest explicit value as the
+current profile and preserve older observations in the Evidence IR history.
+
+Resolve the local user domain from \`KNOWLEDGE_RAIL_USER_EMAIL\`, then project-root
+\`git config user.email\`, otherwise use \`unknown\`. If an explicit participant email is present,
+persist only its domain: the same domain is \`internal\`, a different domain is \`client\`, and a
+missing comparison is \`unknown\` unless the source explicitly declares \`client\` or \`internal\`;
+use \`partner\` only when the source explicitly says so. The resolved local identity is cached for
+the server lifetime, so restart KnowledgeRail after changing the environment variable or Git email. Record
+only supported identity, role, organization, responsibilities, influence, concerns, decisions,
+and relationships. Do not infer private attributes, copy full email addresses, merge ambiguous
+identities, or invent a stakeholder when none is present.
 
 ---
 
@@ -280,6 +313,9 @@ Run \`knowledge_admin action="lint"\` periodically and fix:
 - **Broken markdown links**: Fix or remove.
 - **Stale \`updated\` fields**: If you edited a page, ensure \`updated:\` reflects today's date.
 - **Empty \`sources\`**: Every summary page must have at least one source.
+- **Nested wiki paths**: preview recovery with \`action="lint" force=true dry_run=true\`; apply it
+  with \`dry_run=false\`. Pages are moved to canonical paths, relative links are updated, and any
+  destination collision blocks the entire repair without overwriting either page.
 
 ---
 

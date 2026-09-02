@@ -2,6 +2,7 @@ import * as nodePath from "node:path";
 import * as fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { getActiveWorkspaceContext } from "./workspace-context.js";
+import { normalizeWikiPagePath } from "./wiki-page-path.js";
 
 let currentWikiRoot: string = process.cwd();
 let wikiRootReady = true;
@@ -216,5 +217,8 @@ export async function docsCategoryFilePathReal(
 }
 
 export function wikiPagePath(relPath: string): string {
-  return safeResolveWithin(wikiDir(), relPath);
+  return safeResolveWithin(
+    wikiDir(),
+    normalizeWikiPagePath(relPath, { allowWikiRootPrefix: true })
+  );
 }

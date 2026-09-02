@@ -40,6 +40,7 @@ export function isMutatingDomainCall(name: string, args: Record<string, unknown>
     return action === "init" ||
       action === "checkpoint" ||
       (action === "client_setup" && args.setup_mode === "apply") ||
+      (action === "lint" && args.force === true && args.dry_run === false) ||
       (action === "migrate" && args.migration_action !== "plan");
   }
   return true;

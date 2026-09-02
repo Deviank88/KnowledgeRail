@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
 import {
+  canonicalizeProjectRoot,
   discoverWorkspaceFromCwd,
   unsafeAutomaticRootReason,
 } from "../src/mcp/workspace-discovery.js";
@@ -18,6 +19,25 @@ test("automatic discovery prefers an existing KnowledgeRail root from a nested d
 
   const resolution = await discoverWorkspaceFromCwd(nested);
   assert.deepEqual(resolution, { root: await fs.realpath(root), source: "knowledge_rail_marker" });
+});
+
+test("canonical project roots collapse a selected canonical wiki directory or descendant", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-selected-wiki-"));
+  const nested = path.join(root, "wiki", "custom", "notes");
+  await fs.mkdir(path.join(root, "wiki", ".knowledge-rail"), { recursive: true });
+  await fs.mkdir(nested, { recursive: true });
+  await fs.writeFile(path.join(root, "wiki", "SCHEMA.md"), "# schema\n");
+
+  assert.equal(await canonicalizeProjectRoot(path.join(root, "wiki")), await fs.realpath(root));
+  assert.equal(await canonicalizeProjectRoot(nested), await fs.realpath(root));
+});
+
+test("a repository named wiki is not promoted from SCHEMA.md alone", async () => {
+  const parent = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-wiki-name-"));
+  const root = path.join(parent, "wiki");
+  await fs.mkdir(root);
+  await fs.writeFile(path.join(root, "SCHEMA.md"), "# unrelated schema\n");
+  assert.equal(await canonicalizeProjectRoot(root), await fs.realpath(root));
 });
 
 test("automatic discovery finds the nearest project marker without scanning outside ancestry", async () => {

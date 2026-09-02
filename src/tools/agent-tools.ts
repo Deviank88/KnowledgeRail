@@ -15,6 +15,8 @@ import {
 } from "../core/knowledge-recovery.js";
 import { FILE_CATEGORIES } from "../config/workspace-layout.js";
 import { docsCategoryFilePath, getWikiRoot, wikiDir } from "../core/paths.js";
+import { normalizedSourceCategory } from "../core/source-normalization-service.js";
+import { currentWorkspaceUserIdentity } from "../core/user-identity.js";
 import { readFileSafe } from "../core/utils.js";
 import {
   AGENT_TOOL_NAMES,
@@ -80,7 +82,7 @@ const ContextSchema = z.object({
 const PageSchema = z.object({
   action: z.enum(["read", "write", "edit", "move", "delete", "append_log"])
     .describe("read=open; write=create; edit=replace; move=rename; delete=remove; append_log=event."),
-  path: z.string().optional(),
+  path: z.string().optional().describe("Wiki .md path; leading wiki/ maps to root."),
   resource_uri: z.string().startsWith("knowledge-rail://page/").optional(),
   max_chars: z.number().int().min(1).max(50_000).default(6_000),
   content: z.string().optional(),
@@ -88,7 +90,7 @@ const PageSchema = z.object({
   new_string: z.string().optional(),
   replace_all: z.boolean().default(false),
   old_path: z.string().optional(),
-  new_path: z.string().optional(),
+  new_path: z.string().optional().describe("Wiki-relative .md; creates dirs."),
   dry_run: z.boolean().default(false),
   entry: z.string().optional(),
   level: z.enum(["INFO", "WARN", "ACTION", "DECISION"]).default("ACTION"),
@@ -147,7 +149,7 @@ const IngestSchema = z.object({
   segment_max_chars: z.number().int().min(256).max(50_000).optional(),
   segment_id: z.string().optional(),
   claims: z.array(z.record(z.string(), z.unknown())).min(1).optional()
-    .describe("Claims; target/relations optional."),
+    .describe("Stakeholder target: entity_key,page_path,page_title,page_type,role,organization,email_domain,affiliation."),
   segment_status: z.enum(["irrelevant", "unresolved", "legacy_unverified"]).optional(),
   evidence_refs: z.array(z.string()).optional(),
   page_refs: z.array(z.string()).optional(),
@@ -156,8 +158,7 @@ const IngestSchema = z.object({
   claim_ids: z.array(z.string()).optional(),
   include_resolved: z.boolean().default(false),
   total_evidence_used: z.number().int().min(0).max(1_000_000).optional(),
-  recovery_events: z.array(z.record(z.string(), z.unknown())).max(100).optional()
-    .describe("Recovery events; pages optional."),
+  recovery_events: z.array(z.record(z.string(), z.unknown())).max(100).optional(),
   recovery_event_id: z.string().optional(),
   recovery_resolution: z.enum(RECOVERY_RESOLUTIONS).optional(),
   recovery_page_refs: z.array(z.string().min(1)).max(50).optional(),
@@ -273,15 +274,15 @@ const DocumentSchema = z.object({
 
 const AdminSchema = z.object({
   action: z.enum(["init", "status", "checkpoint", "client_setup", "lint", "drift", "migrate"])
-    .describe("init=bootstrap;status=state;checkpoint=rebuild;client_setup=hooks;lint=validate links;drift=anchors;migrate=upgrade stored knowledge format."),
-  force: z.boolean().default(false),
+    .describe("init=bootstrap;status=state;checkpoint=rebuild;client_setup=hooks;lint=validate links/repair;drift=anchors;migrate=upgrade."),
+  force: z.boolean().default(false).describe("lint: repair nested wiki."),
   integrity_mode: z.enum(["metadata", "content"]).default("metadata"),
   include_orphans: z.boolean().default(true),
   include_missing: z.boolean().default(true),
   include_broken_links: z.boolean().default(true),
   migration_action: z.enum(["plan", "apply", "rollback"]).default("plan"),
   target_version: z.string().default("4"),
-  dry_run: z.boolean().optional(),
+  dry_run: z.boolean().optional().describe("lint: false applies repair."),
   backup: z.boolean().default(false),
   run_id: z.string().optional(),
   scope: z.literal("paths").optional(),
@@ -521,11 +522,14 @@ async function applyEvidenceSegment(args: z.output<typeof IngestSchema>): Promis
   const content = await readFileSafe(docsCategoryFilePath("normalized", normalizedFilename));
   if (content === null) return errorResult(`Normalized source not found: ${normalizedFilename}`);
   const claims = z.array(EvidenceClaimInputSchema).parse(args.claims);
+  const sourceCategory = normalizedSourceCategory(content, normalizedFilename);
+  const identity = await currentWorkspaceUserIdentity(getWikiRoot());
   const recorded = await recordEvidenceClaims({
     wikiRoot: wikiDir(),
     sourceUri: sourceUri(normalizedFilename),
     sourceContent: content,
     segmentId,
+    userEmailDomain: identity.userEmailDomain,
     claims: claims.map((claim) => ({
       text: claim.text,
       kind: claim.kind,
@@ -536,6 +540,10 @@ async function applyEvidenceSegment(args: z.output<typeof IngestSchema>): Promis
         pagePath: claim.target.page_path,
         pageTitle: claim.target.page_title,
         pageType: claim.target.page_type,
+        role: claim.target.role,
+        organization: claim.target.organization,
+        emailDomain: claim.target.email_domain,
+        affiliation: claim.target.affiliation,
         codeResourceUri: claim.target.code_resource_uri,
       } : undefined,
       relations: claim.relations?.map((relation) => ({
@@ -572,6 +580,12 @@ async function applyEvidenceSegment(args: z.output<typeof IngestSchema>): Promis
       claimIds,
       resolutions,
       pages: drafts.map((draft) => ({ path: draft.pagePath, mode: draft.mode, claimIds: draft.claimIds })),
+      sourceCategory,
+      userEmailDomain: identity.userEmailDomain,
+      userEmailDomainSource: identity.source,
+      stakeholderPages: drafts
+        .filter((draft) => draft.pagePath.startsWith("stakeholders/"))
+        .map((draft) => draft.pagePath),
       coverage,
       anchorWarnings: recorded.anchorWarnings,
     },
@@ -732,7 +746,7 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.files, {
-    description: "List, read, or normalize sources.",
+    description: "Controlled source files and PDFs: list, read, normalize to Markdown.",
     inputSchema: schemas.files,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
@@ -858,7 +872,9 @@ export function registerAgentTools(
             action: empty ? "source_status" : "apply_claims",
             normalized_filename: args.normalized_filename,
           },
-        });
+        }, structured.stakeholderSyncEnabled === true && !empty
+          ? `Stakeholder extraction is ${String(structured.stakeholderSyncMode)}. Use only explicit evidence and compare participant domains with ${String(structured.userEmailDomain ?? "unknown")}; persist no complete email address.`
+          : undefined);
       }
       if (args.action === "source_status") {
         const ready = structured.readyForFinalization === true;
@@ -1004,7 +1020,7 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.admin, {
-    description: "Initialize/inspect/rebuild, project client setup, lint, drift, and migration.",
+    description: "Initialize/inspect/rebuild, client setup, lint/repair, drift, and migration.",
     inputSchema: schemas.admin,
     outputSchema: AgentOutputSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
@@ -1079,11 +1095,19 @@ export function registerAgentTools(
         }, "client_setup_ready", null);
       }
       if (args.action === "lint") {
-        return withGuidance(await call("lint", {
+        const result = await call("lint", {
           include_orphans: args.include_orphans,
           include_missing: args.include_missing,
           include_broken_links: args.include_broken_links,
-        }, context), "lint_complete", null);
+          fix_nested_wiki: args.force,
+          dry_run: args.dry_run,
+        }, context);
+        return withGuidance(result, "lint_complete", args.force && args.dry_run !== false ? {
+          tool: "knowledge_admin",
+          action: "lint",
+          requiredArguments: ["action", "force", "dry_run"],
+          suggestedArguments: { action: "lint", force: true, dry_run: false },
+        } : null);
       }
       if (args.action === "drift") {
         const { detectCodeDrift } = await import("../core/drift-detection.js");

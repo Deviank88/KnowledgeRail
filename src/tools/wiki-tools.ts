@@ -52,6 +52,11 @@ import {
   hasErrors,
   validateWikiPageContent,
 } from "../core/wiki-validation.js";
+import {
+  isCanonicalWikiPagePath,
+  nestedWikiPageRepairTarget,
+  normalizeWikiPagePath,
+} from "../core/wiki-page-path.js";
 import { errorResult, finalizePageMutation, textResult } from "./helpers.js";
 
 const CONTROL_FILES = ["SCHEMA.md", "index.md", "log.md"];
@@ -259,6 +264,191 @@ function rewriteMarkdownLinks(options: {
   );
 }
 
+interface NestedWikiRepairMove {
+  sourcePath: string;
+  targetPath: string;
+}
+
+interface NestedWikiRepairConflict extends NestedWikiRepairMove {
+  reason: string;
+}
+
+interface NestedWikiRepairResult {
+  dryRun: boolean;
+  applied: boolean;
+  moves: NestedWikiRepairMove[];
+  conflicts: NestedWikiRepairConflict[];
+  updatedReferences: number;
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  return fs.lstat(filePath).then(() => true).catch((error: unknown) => {
+    if (isNodeError(error) && error.code === "ENOENT") return false;
+    throw error;
+  });
+}
+
+async function planNestedWikiRepairs(wikiRoot: string): Promise<{
+  moves: NestedWikiRepairMove[];
+  conflicts: NestedWikiRepairConflict[];
+  allMarkdownFiles: string[];
+}> {
+  const allMarkdownFiles = (await fg("**/*.md", {
+    cwd: wikiRoot,
+    absolute: false,
+    followSymbolicLinks: false,
+    ignore: [".knowledge-rail/**", ".llm-wiki/**"],
+  })).map(normalizeRel).sort();
+  const candidates = allMarkdownFiles.flatMap((sourcePath) => {
+    const targetPath = nestedWikiPageRepairTarget(sourcePath);
+    return targetPath ? [{ sourcePath, targetPath }] : [];
+  });
+  const targets = new Map<string, NestedWikiRepairMove[]>();
+  for (const candidate of candidates) {
+    const grouped = targets.get(candidate.targetPath) ?? [];
+    grouped.push(candidate);
+    targets.set(candidate.targetPath, grouped);
+  }
+  const conflicts: NestedWikiRepairConflict[] = [];
+  for (const candidate of candidates) {
+    if ((targets.get(candidate.targetPath)?.length ?? 0) > 1) {
+      conflicts.push({ ...candidate, reason: "multiple legacy pages map to the same canonical path" });
+      continue;
+    }
+    if (await pathExists(await resolveRealWithin(wikiRoot, candidate.targetPath))) {
+      conflicts.push({ ...candidate, reason: "canonical destination already exists" });
+    }
+  }
+  const blocked = new Set(conflicts.map((item) => item.sourcePath));
+  return {
+    moves: candidates.filter((candidate) => !blocked.has(candidate.sourcePath)),
+    conflicts,
+    allMarkdownFiles,
+  };
+}
+
+async function removeEmptyLegacyDirectories(wikiRoot: string, sourcePaths: readonly string[]): Promise<void> {
+  for (const sourcePath of [...sourcePaths].sort((left, right) => right.length - left.length)) {
+    let cursor = nodePath.dirname(await resolveRealWithin(wikiRoot, sourcePath));
+    while (cursor !== wikiRoot) {
+      try {
+        await fs.rmdir(cursor);
+      } catch {
+        break;
+      }
+      cursor = nodePath.dirname(cursor);
+    }
+  }
+}
+
+async function repairNestedWikiPages(
+  wikiRoot: string,
+  dryRun: boolean
+): Promise<NestedWikiRepairResult> {
+  const plan = await planNestedWikiRepairs(wikiRoot);
+  if (dryRun || plan.moves.length === 0 || plan.conflicts.length > 0) {
+    return {
+      dryRun,
+      applied: false,
+      moves: plan.moves,
+      conflicts: plan.conflicts,
+      updatedReferences: 0,
+    };
+  }
+
+  const canonicalWikiRoot = await resolveRealWithin(nodePath.dirname(wikiRoot), nodePath.basename(wikiRoot));
+  const moveBySource = new Map<string, { targetPath: string; targetAbs: string }>();
+  for (const move of plan.moves) {
+    moveBySource.set(await resolveRealWithin(canonicalWikiRoot, move.sourcePath), {
+      targetPath: move.targetPath,
+      targetAbs: await resolveRealWithin(canonicalWikiRoot, move.targetPath),
+    });
+  }
+
+  const changes: LinkChange[] = [];
+  const writes = new Map<string, string>();
+  for (const move of plan.moves) {
+    const sourceAbs = await resolveRealWithin(canonicalWikiRoot, move.sourcePath);
+    const raw = await fs.readFile(sourceAbs, "utf8");
+    writes.set(move.targetPath, rewriteMarkdownLinks({
+      wikiRoot: canonicalWikiRoot,
+      content: raw,
+      file: move.sourcePath,
+      fromDir: nodePath.dirname(move.sourcePath),
+      mapTarget: (resolvedAbs) => ({
+        newFromDir: nodePath.dirname(move.targetPath),
+        destAbs: moveBySource.get(resolvedAbs)?.targetAbs ?? resolvedAbs,
+      }),
+      changes,
+    }));
+  }
+
+  for (const pagePath of plan.allMarkdownFiles.filter(isCanonicalWikiPagePath)) {
+    const pageAbs = await resolveRealWithin(canonicalWikiRoot, pagePath);
+    const raw = await fs.readFile(pageAbs, "utf8");
+    const updated = rewriteMarkdownLinks({
+      wikiRoot: canonicalWikiRoot,
+      content: raw,
+      file: pagePath,
+      fromDir: nodePath.dirname(pagePath),
+      mapTarget: (resolvedAbs) => {
+        const moved = moveBySource.get(resolvedAbs);
+        return moved ? { newFromDir: nodePath.dirname(pagePath), destAbs: moved.targetAbs } : null;
+      },
+      changes,
+    });
+    if (updated !== raw) writes.set(pagePath, updated);
+  }
+
+  const journalPath = await prepareMoveJournal(canonicalWikiRoot, [
+    ...plan.moves.flatMap((move) => [move.sourcePath, move.targetPath]),
+    ...writes.keys(),
+    "index.md",
+  ]);
+  try {
+    for (const [relative, content] of writes) {
+      const destination = await resolveRealWithin(canonicalWikiRoot, relative);
+      await ensureDir(nodePath.dirname(destination));
+      await atomicWriteText(destination, content);
+    }
+    for (const move of plan.moves) {
+      await unlinkWithLock(await resolveRealWithin(canonicalWikiRoot, move.sourcePath));
+    }
+    await removeEmptyLegacyDirectories(canonicalWikiRoot, plan.moves.map((move) => move.sourcePath));
+    await finalizePageMutation([
+      ...plan.moves.flatMap((move) => [move.sourcePath, move.targetPath]),
+      ...writes.keys(),
+    ]);
+    await fs.unlink(journalPath);
+  } catch (error: unknown) {
+    await restoreMoveJournal(canonicalWikiRoot, journalPath);
+    throw error;
+  }
+  return {
+    dryRun: false,
+    applied: true,
+    moves: plan.moves,
+    conflicts: [],
+    updatedReferences: changes.filter((change) => change.valid).length,
+  };
+}
+
+function formatNestedWikiRepair(result: NestedWikiRepairResult): string {
+  const state = result.applied
+    ? "APPLIED"
+    : result.dryRun
+      ? "DRY RUN"
+      : result.conflicts.length > 0 ? "BLOCKED" : "CLEAN";
+  return [
+    `Nested wiki path repair: ${state}`,
+    ...result.moves.map((move) => `- ${move.sourcePath} -> ${move.targetPath}`),
+    ...result.conflicts.map((item) =>
+      `- CONFLICT ${item.sourcePath} -> ${item.targetPath}: ${item.reason}`
+    ),
+    `Reference updates: ${result.updatedReferences}`,
+  ].join("\n");
+}
+
 export function registerWikiTools(
   server: McpServer,
   era: ProtocolEra = "modern",
@@ -280,9 +470,10 @@ export function registerWikiTools(
             });
 
   server.registerTool(toolName("writePage", era), { description: "Create or overwrite a wiki page (path relative to wiki/, required YAML frontmatter). Validate content, report broken wikilinks and duplicate titles, and rebuild index.md.", inputSchema: z.object({
-              path: z.string().describe("Path relative to wiki/ (for example 'concepts/RAG.md')"),
+              path: z.string().describe("Markdown path relative to wiki/ (for example 'concepts/RAG.md'); a leading 'wiki/' is accepted and removed"),
               content: z.string().describe("Complete Markdown content, including frontmatter"),
-            }) }, async ({ path: relPath, content }) => withWikiMutationLock(async () => {
+            }) }, async ({ path: requestedPath, content }) => withWikiMutationLock(async () => {
+              const relPath = normalizeWikiPagePath(requestedPath, { allowWikiRootPrefix: true });
               const absPath = await resolveRealWithin(wikiDir(), relPath);
               const validation = await validateWikiPageContent(content, { checkSourceExists: true });
               if (hasErrors(validation.issues)) {
@@ -310,7 +501,7 @@ export function registerWikiTools(
             }));
 
   server.registerTool(toolName("editPage", era), { description: "Perform a targeted wiki-page edit by replacing old_string with new_string. Revalidate the resulting page and rebuild index.md.", inputSchema: z.object({
-              path: z.string().describe("Path relative to wiki/"),
+              path: z.string().describe("Markdown path relative to wiki/; a leading 'wiki/' is accepted and removed"),
               old_string: z.string().describe("Exact text to replace"),
               new_string: z.string().describe("Replacement text"),
               replace_all: z
@@ -318,7 +509,8 @@ export function registerWikiTools(
                 .optional()
                 .default(false)
                 .describe("Replace every occurrence (by default old_string must be unique)"),
-            }) }, async ({ path: relPath, old_string, new_string, replace_all }) => withWikiMutationLock(async () => {
+            }) }, async ({ path: requestedPath, old_string, new_string, replace_all }) => withWikiMutationLock(async () => {
+              const relPath = normalizeWikiPagePath(requestedPath, { allowWikiRootPrefix: true });
               const absPath = await resolveRealWithin(wikiDir(), relPath);
               const content = await readFileSafe(absPath);
               if (content === null) {
@@ -392,8 +584,9 @@ export function registerWikiTools(
             });
 
   server.registerTool(toolName("deletePage", era), { description: "Delete a wiki page and rebuild index.md.", inputSchema: z.object({
-              path: z.string().describe("Path relative to wiki/"),
-            }) }, async ({ path: relPath }) => withWikiMutationLock(async () => {
+              path: z.string().describe("Markdown path relative to wiki/; a leading 'wiki/' is accepted and removed"),
+            }) }, async ({ path: requestedPath }) => withWikiMutationLock(async () => {
+              const relPath = normalizeWikiPagePath(requestedPath, { allowWikiRootPrefix: true });
               try {
                 await unlinkWithLock(await resolveRealWithin(wikiDir(), relPath));
               } catch (err: unknown) {
@@ -407,10 +600,12 @@ export function registerWikiTools(
             }));
 
   server.registerTool(toolName("movePage", era), { description: "Move or rename a wiki page and update [[wikilinks]] and relative Markdown links across the wiki. dry_run=true returns only a preview.", inputSchema: z.object({
-              old_path: z.string().describe("Current path relative to wiki/"),
-              new_path: z.string().describe("New path relative to wiki/"),
+              old_path: z.string().describe("Current Markdown path relative to wiki/"),
+              new_path: z.string().describe("New Markdown path relative to wiki/; a leading 'wiki/' is accepted and removed"),
               dry_run: z.boolean().optional().default(false),
-            }) }, async ({ old_path: relOld, new_path: relNew, dry_run }) => withWikiMutationLock(async () => {
+            }) }, async ({ old_path: requestedOld, new_path: requestedNew, dry_run }) => withWikiMutationLock(async () => {
+              const relOld = normalizeWikiPagePath(requestedOld, { allowWikiRootPrefix: true });
+              const relNew = normalizeWikiPagePath(requestedNew, { allowWikiRootPrefix: true });
               const absOld = await resolveRealWithin(wikiDir(), relOld);
               const absNew = await resolveRealWithin(wikiDir(), relNew);
               const canonicalWikiRoot = await resolveRealWithin(
@@ -435,12 +630,12 @@ export function registerWikiTools(
 
               const changes: LinkChange[] = [];
               const updatedFiles = new Map<string, string>();
-              const allFiles = await fg("**/*.md", {
+              const allFiles = (await fg("**/*.md", {
                 cwd: wikiDir(),
                 absolute: false,
                 followSymbolicLinks: false,
                 ignore: CONTROL_FILES,
-              });
+              })).filter(isCanonicalWikiPagePath);
 
               for (const f of allFiles) {
                 if (f === relOld) continue;
@@ -664,7 +859,12 @@ export function registerWikiTools(
               include_orphans: z.boolean().optional().default(true),
               include_missing: z.boolean().optional().default(true),
               include_broken_links: z.boolean().optional().default(true),
-            }) }, async ({ include_orphans, include_missing, include_broken_links }) => {
+              fix_nested_wiki: z.boolean().optional().default(false),
+              dry_run: z.boolean().optional(),
+            }) }, async ({ include_orphans, include_missing, include_broken_links, fix_nested_wiki, dry_run }) => {
+              const repair = fix_nested_wiki
+                ? await withWikiMutationLock(() => repairNestedWikiPages(wikiDir(), dry_run ?? true))
+                : null;
               const files = await fg("**/*.md", {
                 cwd: wikiDir(),
                 absolute: false,
@@ -677,8 +877,19 @@ export function registerWikiTools(
               const contentMap = new Map<string, string>();
               const titleToPaths = new Map<string, string[]>();
               const titlesByPath = new Map<string, string>();
+              const canonicalFiles = files.filter(isCanonicalWikiPagePath);
 
               for (const f of files) {
+                if (!isCanonicalWikiPagePath(f)) {
+                  report.push({
+                    severity: "ERROR",
+                    code: f.split("/").slice(0, -1).some((part) => part.toLowerCase() === "wiki")
+                      ? "NESTED_WIKI_DIRECTORY"
+                      : "INVALID_PAGE_PATH",
+                    detail: `${f}: canonical pages must use a normalized Markdown path relative to wiki/`,
+                  });
+                  continue;
+                }
                 const content = await readFileSafe(await resolveRealWithin(wikiDir(), f));
                 if (content === null) continue;
                 if (content.trim() === "") {
@@ -697,12 +908,12 @@ export function registerWikiTools(
                 }
               }
 
-              const inboundCount = new Map<string, number>(files.map((f) => [f, 0]));
+              const inboundCount = new Map<string, number>(canonicalFiles.map((f) => [f, 0]));
               const missingPages = new Set<string>();
 
               for (const [filePath, content] of contentMap) {
                 for (const name of wikiLinkTargets(content)) {
-                  const matches = resolveWikiLinkName(name, files, titlesByPath);
+                  const matches = resolveWikiLinkName(name, canonicalFiles, titlesByPath);
                   if (matches.length === 0) {
                     missingPages.add(name);
                   } else {
@@ -757,7 +968,10 @@ export function registerWikiTools(
               }
 
               if (report.length === 0) {
-                return textResult("Wiki lint passed. No problems found.");
+                return textResult([
+                  ...(repair ? [formatNestedWikiRepair(repair), ""] : []),
+                  "Wiki lint passed. No problems found.",
+                ].join("\n"));
               }
               const order = { ERROR: 0, WARN: 1, INFO: 2 } as const;
               report.sort(
@@ -767,7 +981,8 @@ export function registerWikiTools(
                   a.detail.localeCompare(b.detail)
               );
               return textResult(
-                `Wiki lint: ${report.length} problem(s):\n\n` +
+                (repair ? `${formatNestedWikiRepair(repair)}\n\n` : "") +
+                  `Wiki lint: ${report.length} problem(s):\n\n` +
                   report.map((item) => `${item.severity} ${item.code}: ${item.detail}`).join("\n")
               );
             });

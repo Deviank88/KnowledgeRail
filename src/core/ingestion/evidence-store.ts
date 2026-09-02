@@ -5,6 +5,7 @@ import { withWikiFileLock } from "../lock-service.js";
 import { ensureDir, readFileSafe } from "../utils.js";
 import { evidenceClaimIsValid, type EvidenceClaim } from "./evidence-claim.js";
 import { WIKI_PAGE_TYPES } from "../wiki-validation.js";
+import { isCanonicalWikiPagePath } from "../wiki-page-path.js";
 
 export const EVIDENCE_IR_VERSION = "evidence-ir-v1";
 
@@ -56,13 +57,7 @@ const DISPOSITIONS = new Set<EvidenceLinkDisposition>([
 const PAGE_TYPES = new Set<string>(WIKI_PAGE_TYPES);
 
 function validPagePath(value: string): boolean {
-  const normalized = value.replace(/\\/g, "/");
-  const parts = normalized.split("/");
-  return normalized === value && path.posix.normalize(normalized) === normalized &&
-    !path.posix.isAbsolute(normalized) &&
-    normalized.toLowerCase().endsWith(".md") &&
-    !parts.includes("..") && !parts.includes(".") && !parts.some((part) => !part) && !parts[0]?.startsWith(".") &&
-    !["SCHEMA.md", "index.md", "log.md"].includes(normalized);
+  return isCanonicalWikiPagePath(value);
 }
 
 export function evidenceIrDir(wikiRoot: string): string {
