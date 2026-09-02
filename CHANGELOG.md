@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.7.2] - 2026-09-02
+
+### Changed
+
+- Removed the tracked client-integration milestone from documentation and npm packaging; milestone plans remain local-only and repository verification rejects future tracked or packaged milestone directories.
+
+### Fixed
+
+- Replaced the unavailable jsDelivr README logo with an immutable versioned GitHub Raw asset that renders on both GitHub and npm.
+- Added release checks for PNG structure, source-to-tarball byte equality, tagged GitHub README/assets, and the README/assets actually published by npm.
+
 ## [2.7.1] - 2026-09-02
 
 ### Added
@@ -290,7 +301,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Initial local-first MCP server with persistent evidence-backed knowledge, bounded retrieval, document workflows, and eight public `knowledge_*` tools.
 - Multi-workspace loopback HTTP gateway, opaque per-chat bindings, desktop adapter, and portable npm/npx distribution.
 
-[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.7.1...HEAD
+[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.7.2...HEAD
+[2.7.2]: https://github.com/Deviank88/KnowledgeRail/compare/v2.7.1...v2.7.2
 [2.7.1]: https://github.com/Deviank88/KnowledgeRail/compare/v2.7.0...v2.7.1
 [2.7.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.6.2...v2.7.0
 [2.6.2]: https://github.com/Deviank88/KnowledgeRail/compare/v2.6.1...v2.6.2

@@ -25,19 +25,19 @@ Ordinary `knowledge_admin action="init"` does not install executable hooks. Setu
 Preview all clients:
 
 ```bash
-npx -y knowledge-rail@2.7.1 setup clients
+npx -y knowledge-rail@2.7.2 setup clients
 ```
 
 Apply all clients:
 
 ```bash
-npx -y knowledge-rail@2.7.1 setup clients --apply
+npx -y knowledge-rail@2.7.2 setup clients --apply
 ```
 
 Select one or more clients with repeated `--client` flags:
 
 ```bash
-npx -y knowledge-rail@2.7.1 setup clients --client claude --client codex --apply
+npx -y knowledge-rail@2.7.2 setup clients --client claude --client codex --apply
 ```
 
 An optional project path may follow `clients`. Without it, KnowledgeRail discovers the current project safely.
@@ -89,5 +89,3 @@ There is deliberately no automatic uninstall in 2.7.0. To remove the integration
 ## What the installed rules say
 
 The concise managed block instructs the client to start concrete tasks with `knowledge_context mode=task`, distrust stale evidence until reverified, update affected anchored knowledge after source changes only through approved writes, materialize only relevant decision evidence, surface conflicts and record only clearly accepted durable decisions. It explicitly excludes proposals, unresolved options, hidden reasoning, secrets and raw conversation.
-
-The full implementation and acceptance gates are tracked in [`client-integrations-2-7-0.md`](../milestones/client-integrations-2-7-0.md).

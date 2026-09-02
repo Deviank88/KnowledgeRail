@@ -37,11 +37,10 @@ wiki/
 !/docs/reference/tool-actions.md
 !/docs/guides/
 !/docs/guides/claude-code-hooks.md
-!/docs/milestones/
-!/docs/milestones/client-integrations-2-7-0.md
+/docs/milestones/
 .docx-analysis/
 benchmarks/results/
 .puppeteer-cache/
 
-# Local implementation plans (public milestones belong under docs/milestones)
+# Local implementation plans and milestones never belong in Git
 /milestones/

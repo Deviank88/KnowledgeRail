@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 
 const root = new URL("../", import.meta.url);
 
@@ -12,6 +12,7 @@ const server = await json("server.json");
 const product = await readFile(new URL("src/product.ts", root), "utf8");
 const changelog = await readFile(new URL("CHANGELOG.md", root), "utf8");
 const readme = await readFile(new URL("README.md", root), "utf8");
+const logo = await readFile(new URL("assets/knowledge-rail-logo.png", root));
 const version = packageJson.version;
 const requestedTag = process.argv[2];
 
@@ -28,11 +29,37 @@ if (server.version !== version || server.packages?.[0]?.version !== version) {
 if (!packageJson.files?.includes("assets/knowledge-rail-logo.png")) {
   throw new Error("The public README logo is not included in the npm package.");
 }
+if (packageJson.files?.some((entry) => /(^|\/)milestones?(\/|$)/i.test(entry))) {
+  throw new Error("Private milestone files must not be included in the npm package.");
+}
+try {
+  const publicMilestones = await readdir(new URL("docs/milestones/", root));
+  if (publicMilestones.length > 0) {
+    throw new Error("Private milestone files must not be stored under docs/milestones.");
+  }
+} catch (error) {
+  if (!(error && typeof error === "object" && error.code === "ENOENT")) throw error;
+}
+const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+if (
+  logo.length < 33 ||
+  !logo.subarray(0, pngSignature.length).equals(pngSignature) ||
+  logo.readUInt32BE(8) !== 13 ||
+  logo.subarray(12, 16).toString("ascii") !== "IHDR" ||
+  logo.readUInt32BE(16) === 0 ||
+  logo.readUInt32BE(20) === 0
+) {
+  throw new Error("assets/knowledge-rail-logo.png is not a valid non-empty PNG.");
+}
 const repositoryUrl = typeof packageJson.repository === "string"
   ? packageJson.repository
   : packageJson.repository?.url;
-const repositoryOwner = repositoryUrl?.match(/github\.com[/:]([^/]+)\//i)?.[1];
-if (!repositoryOwner) throw new Error("package.json repository does not identify a GitHub owner.");
+const repositoryMatch = repositoryUrl?.match(/github\.com[/:]([^/]+)\/([^/#]+?)(?:\.git)?$/i);
+const repositoryOwner = repositoryMatch?.[1];
+const repositoryName = repositoryMatch?.[2];
+if (!repositoryOwner || !repositoryName) {
+  throw new Error("package.json repository does not identify a GitHub owner and repository.");
+}
 if (!String(packageJson.mcpName).startsWith(`io.github.${repositoryOwner}/`)) {
   throw new Error(
     `MCP namespace ${packageJson.mcpName} does not preserve the canonical GitHub owner casing ${repositoryOwner}.`
@@ -56,10 +83,10 @@ if (pinnedReadmeVersions.length === 0 || pinnedReadmeVersions.some((item) => ite
 if (!readme.includes(`stable release \`${version}\``)) {
   throw new Error(`README.md current status is not aligned with ${version}.`);
 }
-if (!readme.includes(
-  `<img src="https://cdn.jsdelivr.net/npm/knowledge-rail@${version}/assets/knowledge-rail-logo.png"`
-)) {
-  throw new Error(`README.md must use the public versioned ${version} logo URL so npm can render it.`);
+const expectedLogoUrl =
+  `https://raw.githubusercontent.com/${repositoryOwner}/${repositoryName}/v${version}/assets/knowledge-rail-logo.png`;
+if (!readme.includes(`<img src="${expectedLogoUrl}"`)) {
+  throw new Error(`README.md must use the versioned GitHub Raw logo URL ${expectedLogoUrl}.`);
 }
 
 process.stdout.write(`Release metadata is aligned for v${version}.\n`);

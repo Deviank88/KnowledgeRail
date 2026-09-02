@@ -60,11 +60,16 @@ test("README release examples and public logo remain publishable", async () => {
   assert.ok(pinnedVersions.length > 0);
   assert.deepEqual(new Set(pinnedVersions), new Set([version]));
   const publicLogo = readme.match(
-    /<img src="https:\/\/cdn\.jsdelivr\.net\/npm\/knowledge-rail@(\d+\.\d+\.\d+)\/assets\/knowledge-rail-logo\.png"/
+    /<img src="https:\/\/raw\.githubusercontent\.com\/Deviank88\/KnowledgeRail\/v(\d+\.\d+\.\d+)\/assets\/knowledge-rail-logo\.png"/
   );
   assert.equal(publicLogo?.[1], version);
   assert.ok(packageFiles.includes("assets/knowledge-rail-logo.png"));
+  assert.equal(packageFiles.some((entry) => /(^|\/)milestones?(\/|$)/i.test(entry)), false);
   assert.deepEqual([...logo.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  assert.equal(logo.readUInt32BE(8), 13);
+  assert.equal(logo.subarray(12, 16).toString("ascii"), "IHDR");
+  assert.ok(logo.readUInt32BE(16) > 0);
+  assert.ok(logo.readUInt32BE(20) > 0);
 });
 
 test("public documentation distinguishes local self-hosting from future remote service", async () => {

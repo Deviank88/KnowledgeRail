@@ -70,6 +70,9 @@ jobs:
       - name: Verify release metadata
         run: npm run release:verify -- "$GITHUB_REF_NAME"
 
+      - name: Verify tagged GitHub README assets
+        run: npm run release:verify:published -- "$GITHUB_REF_NAME" --github-only
+
       - name: Publish provenance-attested npm package
         run: |
           PACKAGE_SPEC="$(node -p 'const p = require("./package.json"); `${p.name}@${p.version}`')"
@@ -109,3 +112,6 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --title "KnowledgeRail $GITHUB_REF_NAME"
           fi
+
+      - name: Verify published GitHub and npm README assets
+        run: npm run release:verify:published -- "$GITHUB_REF_NAME"
