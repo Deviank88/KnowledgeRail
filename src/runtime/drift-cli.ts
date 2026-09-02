@@ -7,7 +7,7 @@ import {
   type DriftLedgerEntry,
 } from "../core/drift-detection.js";
 import { resolveWorkspace } from "../mcp/workspace.js";
-import { canonicalizeExistingDirectory } from "../mcp/workspace-discovery.js";
+import { canonicalizeProjectRoot } from "../mcp/workspace-discovery.js";
 
 type DriftResult = Awaited<ReturnType<typeof detectCodeDrift>>;
 
@@ -22,7 +22,7 @@ export interface DriftCliIo {
 
 export interface DriftCliDependencies {
   resolve?: typeof resolveWorkspace;
-  canonicalize?: typeof canonicalizeExistingDirectory;
+  canonicalize?: typeof canonicalizeProjectRoot;
   detect?: typeof detectCodeDrift;
 }
 
@@ -121,7 +121,7 @@ export async function runDriftCli(
   dependencies: DriftCliDependencies = {}
 ): Promise<number> {
   const resolve = dependencies.resolve ?? resolveWorkspace;
-  const canonicalize = dependencies.canonicalize ?? canonicalizeExistingDirectory;
+  const canonicalize = dependencies.canonicalize ?? canonicalizeProjectRoot;
   const detect = dependencies.detect ?? detectCodeDrift;
   try {
     const controller = new AbortController();

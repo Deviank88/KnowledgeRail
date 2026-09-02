@@ -14,6 +14,11 @@ import {
   touchWorkspaceState,
 } from "./workspace-state.js";
 import { listWikiPagePaths, readWikiPageRecord, type WikiPageRecord } from "./page-record.js";
+import {
+  isCanonicalWikiPagePath,
+  nestedWikiPageRepairTarget,
+  normalizeWikiPagePath,
+} from "./wiki-page-path.js";
 import { resolveRealWithin } from "./paths.js";
 import { wikiMetaDir } from "./manifest-service.js";
 import { ensureDir } from "./utils.js";
@@ -675,6 +680,14 @@ async function updateRetrievalPathsLocked(
     inputPath.replace(/\\/g, "/").normalize("NFC")
   ));
   for (const relPath of normalizedPaths) {
+    if (!isCanonicalWikiPagePath(relPath)) {
+      if (nestedWikiPageRepairTarget(relPath)) {
+        deltas.push({ path: relPath, record: null });
+        continue;
+      }
+      const normalized = normalizeWikiPagePath(relPath);
+      throw new Error(`Wiki page path must be canonical: ${relPath}; use ${normalized}`);
+    }
     const absPath = await resolveRealWithin(wikiRoot, relPath);
     const stat = await fs.stat(absPath).catch((error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") return null;

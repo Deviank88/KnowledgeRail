@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import { getWikiPageRecords } from "../retrieval-index.js";
 import { WIKI_PAGE_TYPES, type WikiPageType } from "../wiki-validation.js";
+import { WIKI_PAGE_DIRECTORY_BY_TYPE } from "../../config/workspace-layout.js";
 import {
   normalizedClaimText,
   type EvidenceClaim,
@@ -26,6 +27,7 @@ function slug(input: string): string {
 function pageTypeForClaim(claim: EvidenceClaim): WikiPageType {
   if (claim.target?.pageType && PAGE_TYPES.has(claim.target.pageType)) return claim.target.pageType;
   switch (claim.kind) {
+    case "stakeholder": return "stakeholder";
     case "requirement":
     case "constraint":
     case "invariant":
@@ -41,19 +43,7 @@ function pageTypeForClaim(claim: EvidenceClaim): WikiPageType {
 }
 
 function pageDir(type: WikiPageType): string {
-  const byType: Partial<Record<WikiPageType, string>> = {
-    requirement: "requirements",
-    decision: "decisions",
-    risk: "risks",
-    implementation: "implementations",
-    analysis: "analysis",
-    concept: "concepts",
-    entity: "entities",
-    test_result: "tests",
-    api: "api",
-    integration: "integrations",
-  };
-  return byType[type] ?? `${type.replace(/_/g, "-")}s`;
+  return WIKI_PAGE_DIRECTORY_BY_TYPE[type];
 }
 
 function proposedPage(claim: EvidenceClaim): { path: string; title: string; type: WikiPageType } {

@@ -1,4 +1,5 @@
 import { isWikiPassageId } from "./passage-id.js";
+import { normalizeWikiPagePath } from "../core/wiki-page-path.js";
 
 const SCHEME = "knowledge-rail:";
 const PAGE_HOST = "page";
@@ -9,15 +10,11 @@ export interface WikiResourceRef {
 }
 
 function normalizeRelativeWikiPath(input: string): string {
-  const normalized = input.replace(/\\/g, "/").replace(/^\/+/, "");
-  const segments = normalized.split("/");
-  if (
-    !normalized ||
-    segments.some((segment) => !segment || segment === "." || segment === ".." || segment.includes("\0"))
-  ) {
+  try {
+    return normalizeWikiPagePath(input, { allowWikiRootPrefix: true });
+  } catch {
     throw new Error(`Invalid wiki resource path: ${input}`);
   }
-  return segments.join("/");
 }
 
 function encodePath(path: string): string {

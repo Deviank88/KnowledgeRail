@@ -16,12 +16,39 @@ import {
   hasErrors,
   validateWikiPageContent,
 } from "../src/core/wiki-validation.js";
+import {
+  nestedWikiPageRepairTarget,
+  normalizeWikiPagePath,
+} from "../src/core/wiki-page-path.js";
 
 test("safeResolveWithin rejects traversal and absolute paths", () => {
   const root = path.join(os.tmpdir(), "knowledge-rail-path-test");
   assert.equal(safeResolveWithin(root, "a/b.md"), path.resolve(root, "a/b.md"));
   assert.throws(() => safeResolveWithin(root, "../outside.md"), /escapes/);
   assert.throws(() => safeResolveWithin(root, path.resolve(root, "x.md")), /Absolute/);
+});
+
+test("wiki page paths collapse a redundant root prefix without restricting dynamic directories", () => {
+  assert.equal(normalizeWikiPagePath("wiki/concepts/RAG.md", { allowWikiRootPrefix: true }), "concepts/RAG.md");
+  assert.equal(normalizeWikiPagePath("wiki/wiki/custom-area/Page.md", { allowWikiRootPrefix: true }), "custom-area/Page.md");
+  assert.equal(normalizeWikiPagePath("customer-specific/notes/Page.md", { allowWikiRootPrefix: true }), "customer-specific/notes/Page.md");
+  assert.throws(
+    () => normalizeWikiPagePath("customer-specific/wiki/Page.md", { allowWikiRootPrefix: true }),
+    /Nested wiki directories/
+  );
+  assert.throws(() => normalizeWikiPagePath(".knowledge-rail/Page.md"), /operational state/);
+  assert.throws(() => normalizeWikiPagePath("concepts/Page.txt"), /Markdown/);
+  assert.throws(() => normalizeWikiPagePath("index.md"), /control files/);
+});
+
+test("nested wiki repair recognizes only safe legacy Markdown paths", () => {
+  assert.equal(nestedWikiPageRepairTarget("wiki/legacy/Page.md"), "legacy/Page.md");
+  assert.equal(nestedWikiPageRepairTarget("area/wiki/archive/wiki/Page.md"), "area/archive/Page.md");
+  assert.equal(nestedWikiPageRepairTarget("area/Page.md"), null);
+  assert.equal(nestedWikiPageRepairTarget("../wiki/Page.md"), null);
+  assert.equal(nestedWikiPageRepairTarget("wiki/../Page.md"), null);
+  assert.equal(nestedWikiPageRepairTarget("/wiki/Page.md"), null);
+  assert.equal(nestedWikiPageRepairTarget("wiki/Page.txt"), null);
 });
 
 test("glob validation rejects traversal, absolute, null and POSIX backslash patterns", () => {
@@ -111,4 +138,53 @@ test("wiki page validation requires frontmatter and valid raw sources", async ()
     { checkSourceExists: true }
   );
   assert.equal(hasErrors(invalid.issues), true);
+});
+
+test("stakeholder frontmatter accepts domains but rejects complete addresses", async () => {
+  const base = [
+    "---",
+    'title: "Jane Doe"',
+    "type: stakeholder",
+    "tags: [stakeholder]",
+    "created: 2026-09-02",
+    "updated: 2026-09-02",
+    "sources: []",
+    'role: "Approval lead"',
+    'organization: "Customer Corp"',
+  ];
+  const valid = await validateWikiPageContent([
+    ...base,
+    'email_domain: "customer.example"',
+    'affiliation: "client"',
+    "---",
+  ].join("\n"));
+  assert.equal(hasErrors(valid.issues), false);
+
+  const invalid = await validateWikiPageContent([
+    ...base,
+    'email_domain: "jane.doe@customer.example"',
+    'affiliation: "client"',
+    "---",
+  ].join("\n"));
+  assert.equal(hasErrors(invalid.issues), true);
+  assert.equal(invalid.issues.some((issue) => issue.code === "STAKEHOLDER_EMAIL_DOMAIN_INVALID"), true);
+
+  const unsupported = await validateWikiPageContent([
+    ...base,
+    "affiliation: client",
+    "---",
+  ].join("\n"));
+  assert.equal(hasErrors(unsupported.issues), true);
+  assert.match(
+    unsupported.issues.find((issue) => issue.code === "STAKEHOLDER_AFFILIATION_UNSUPPORTED")?.message ?? "",
+    /email_domain.*source.*explicitly declares.*unknown/i
+  );
+
+  const sourceDeclared = await validateWikiPageContent([
+    ...base.filter((line) => !line.startsWith("sources:")),
+    'sources: ["docs/transcripts/customer-call.md"]',
+    "affiliation: client",
+    "---",
+  ].join("\n"));
+  assert.equal(hasErrors(sourceDeclared.issues), false);
 });

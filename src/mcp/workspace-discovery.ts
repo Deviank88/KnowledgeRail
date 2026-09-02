@@ -119,6 +119,27 @@ export async function canonicalizeExistingDirectory(candidate: string): Promise<
 }
 
 /**
+ * Canonicalize a selected project root and repair the common case where a
+ * client selected the canonical wiki directory (or one of its descendants)
+ * as the workspace. KnowledgeRail APIs always store a project root and append
+ * `wiki/` themselves.
+ */
+export async function canonicalizeProjectRoot(candidate: string): Promise<string> {
+  const canonical = await canonicalizeExistingDirectory(candidate);
+  let inferredProjectRoot: string | undefined;
+  for (const ancestor of ancestors(canonical)) {
+    if (nodePath.basename(ancestor).toLocaleLowerCase("en-US") !== "wiki") continue;
+    if (await isDirectory(nodePath.join(ancestor, ".knowledge-rail"))) {
+      // Keep walking so an old wiki/wiki tree resolves to the outermost
+      // canonical wiki, not to another nested wiki directory. SCHEMA.md alone
+      // is intentionally insufficient: a repository itself may be named wiki.
+      inferredProjectRoot = nodePath.dirname(ancestor);
+    }
+  }
+  return inferredProjectRoot ?? canonical;
+}
+
+/**
  * Discover only below the cwd ancestry. This deliberately never scans a disk
  * or a home directory and therefore behaves the same on Windows, Linux/macOS,
  * containers and WSL.

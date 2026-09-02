@@ -1,3 +1,5 @@
+import { normalizeWikiPagePath } from "../wiki-page-path.js";
+
 export type SourceSegmentStatus =
   | "integrated"
   | "duplicate"
@@ -30,7 +32,9 @@ export function normalizeSegmentResolution(
   reason?: string;
 } {
   const evidenceRefs = nonEmpty(resolution.evidenceRefs);
-  const pageRefs = nonEmpty(resolution.pageRefs).map((value) => value.replace(/\\/g, "/"));
+  const pageRefs = nonEmpty(resolution.pageRefs).map((value) =>
+    normalizeWikiPagePath(value, { allowWikiRootPrefix: true })
+  );
   const reason = resolution.reason?.trim() || undefined;
 
   if (resolution.status === "integrated" && (evidenceRefs.length === 0 || pageRefs.length === 0)) {

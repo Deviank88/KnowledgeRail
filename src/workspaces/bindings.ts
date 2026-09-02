@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import * as fs from "node:fs/promises";
 import { createWorkspaceContext, type WorkspaceAccessScope, type WorkspaceContext } from "../core/workspace-context.js";
+import { resolveWorkspaceUserIdentity } from "../core/user-identity.js";
 import { BINDING_FORMAT_VERSION } from "../product.js";
 import { WorkspaceRegistry, type SafeWorkspaceMetadata } from "./registry.js";
 
@@ -128,12 +129,15 @@ export class WorkspaceBindingManager {
     if (!canonicalMatches) {
       throw new WorkspaceBindingError("The workspace is unavailable or its canonical path changed.", "unavailable");
     }
+    const identity = await resolveWorkspaceUserIdentity(registration.canonicalRoot);
     return createWorkspaceContext(registration.canonicalRoot, {
       workspaceId: record.workspaceId,
       generation: record.createdAtMs,
       source: "workspace-binding",
       scope: record.scope,
       binding: token,
+      userEmailDomain: identity.userEmailDomain,
+      userEmailDomainSource: identity.source,
     });
   }
 

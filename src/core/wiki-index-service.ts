@@ -17,6 +17,7 @@ export interface WikiPageMetadata {
 
 export const WIKI_TYPE_LABELS: Record<string, string> = {
   entity: "Entities",
+  stakeholder: "Stakeholders",
   concept: "Concepts",
   summary: "Summaries",
   comparison: "Comparisons",

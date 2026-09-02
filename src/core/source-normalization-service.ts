@@ -5,7 +5,7 @@ import {
   docsCategoryFilePathReal,
 } from "./paths.js";
 import { atomicWriteText } from "./fs-service.js";
-import { ensureDir, readFileSafe } from "./utils.js";
+import { ensureDir, frontmatterString, parseFrontmatter, readFileSafe } from "./utils.js";
 import {
   extractPptxMarkdown,
   extractXlsxMarkdown,
@@ -38,6 +38,20 @@ export interface NormalizeSourceOptions {
   timeoutMs?: number;
   retries?: number;
   continueOnPageError?: boolean;
+}
+
+export function normalizedSourceCategory(
+  content: string,
+  normalizedFilename?: string
+): FileCategory | undefined {
+  const declared = frontmatterString(parseFrontmatter(content), "category");
+  if (declared && (FILE_CATEGORIES as readonly string[]).includes(declared)) {
+    return declared as FileCategory;
+  }
+  const prefix = normalizedFilename?.replace(/\\/g, "/").split("/").at(-1)?.split("_")[0];
+  return prefix && (FILE_CATEGORIES as readonly string[]).includes(prefix)
+    ? prefix as FileCategory
+    : undefined;
 }
 
 export function normalizedOutputPath(category: string, relPath: string): NormalizedOutput {

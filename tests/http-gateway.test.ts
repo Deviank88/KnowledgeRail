@@ -36,6 +36,8 @@ test("workspace authorization classifies every admin filesystem write", () => {
   assert.equal(isMutatingDomainCall("knowledge_admin", { action: "checkpoint" }), true);
   assert.equal(isMutatingDomainCall("knowledge_admin", { action: "migrate", migration_action: "plan" }), false);
   assert.equal(isMutatingDomainCall("knowledge_admin", { action: "migrate", migration_action: "apply" }), true);
+  assert.equal(isMutatingDomainCall("knowledge_admin", { action: "lint", force: true, dry_run: true }), false);
+  assert.equal(isMutatingDomainCall("knowledge_admin", { action: "lint", force: true, dry_run: false }), true);
 });
 
 async function filesystemSnapshot(root: string): Promise<Record<string, { size: number; mtimeMs: number }>> {

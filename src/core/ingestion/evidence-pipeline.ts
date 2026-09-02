@@ -64,6 +64,7 @@ export async function recordEvidenceClaims(params: {
   sourceContent: string;
   segmentId: string;
   claims: readonly EvidenceClaimInput[];
+  userEmailDomain?: string | null;
 }): Promise<{ claims: EvidenceClaim[]; created: number; reused: number; anchorWarnings: string[] }> {
   if (params.claims.length === 0) throw new Error("At least one evidence claim is required.");
   const ledger = await readSourceCoverageLedger(params.wikiRoot, params.sourceUri);
@@ -149,6 +150,9 @@ export async function recordEvidenceClaims(params: {
         input,
         codeAnchor: capturedAnchors.get(inputIndex),
         now,
+        ...(Object.prototype.hasOwnProperty.call(params, "userEmailDomain")
+          ? { userEmailDomain: params.userEmailDomain }
+          : {}),
       });
       const existing = byId.get(candidate.id);
       if (existing) {

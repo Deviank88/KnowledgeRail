@@ -4,7 +4,7 @@ import * as nodePath from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { REGISTRY_SCHEMA_VERSION } from "../product.js";
 import { atomicWriteBuffer, atomicWriteText } from "../core/fs-service.js";
-import { canonicalizeExistingDirectory } from "../mcp/workspace-discovery.js";
+import { canonicalizeProjectRoot } from "../mcp/workspace-discovery.js";
 import { resolveStateDirectory } from "./state-paths.js";
 
 export interface WorkspaceRegistration {
@@ -210,7 +210,7 @@ export class WorkspaceRegistry {
     root: string,
     source: WorkspaceRegistration["source"] = "operator"
   ): Promise<WorkspaceRegistration> {
-    const canonicalRoot = await canonicalizeExistingDirectory(root);
+    const canonicalRoot = await canonicalizeProjectRoot(root);
     return this.mutate(async (document) => {
       const now = new Date().toISOString();
       const existing = document.workspaces.find((workspace) =>

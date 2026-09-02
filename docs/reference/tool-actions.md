@@ -18,21 +18,23 @@ Every successful domain operation returns `structuredContent.state` and `structu
 
 ## `knowledge_admin`
 
-Initialize/inspect/rebuild, project client setup, lint, drift, and migration.
+Initialize/inspect/rebuild, client setup, lint/repair, drift, and migration.
+
+For `action="lint"`, `force=true` enables nested-wiki recovery. Omit `dry_run` or set it to `true` to preview; set `dry_run=false` to apply. Recovery removes nested `wiki` path segments, updates relative links, and blocks the complete operation if any destination collides.
 
 Actions/modes: `init`, `status`, `checkpoint`, `client_setup`, `lint`, `drift`, `migrate`.
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
 |---|---|---:|---|---|---|
-| `action` | `init` &#124; `status` &#124; `checkpoint` &#124; `client_setup` &#124; `lint` &#124; `drift` &#124; `migrate` | yes | — | — | init=bootstrap;status=state;checkpoint=rebuild;client_setup=hooks;lint=validate links;drift=anchors;migrate=upgrade stored knowledge format. |
-| `force` | boolean | no | `false` | — | — |
+| `action` | `init` &#124; `status` &#124; `checkpoint` &#124; `client_setup` &#124; `lint` &#124; `drift` &#124; `migrate` | yes | — | — | init=bootstrap;status=state;checkpoint=rebuild;client_setup=hooks;lint=validate links/repair;drift=anchors;migrate=upgrade. |
+| `force` | boolean | no | `false` | — | lint: repair nested wiki. |
 | `integrity_mode` | `metadata` &#124; `content` | no | `"metadata"` | — | — |
 | `include_orphans` | boolean | no | `true` | — | — |
 | `include_missing` | boolean | no | `true` | — | — |
 | `include_broken_links` | boolean | no | `true` | — | — |
 | `migration_action` | `plan` &#124; `apply` &#124; `rollback` | no | `"plan"` | — | — |
 | `target_version` | string | no | `"4"` | — | — |
-| `dry_run` | boolean | no | — | — | — |
+| `dry_run` | boolean | no | — | — | lint: false applies repair. |
 | `backup` | boolean | no | `false` | — | — |
 | `run_id` | string | no | — | — | — |
 | `scope` | string | no | — | — | — |
@@ -141,7 +143,7 @@ Actions/modes: `plan`, `section`.
 
 ## `knowledge_files`
 
-List, read, or normalize sources.
+Controlled source files and PDFs: list, read, normalize to Markdown.
 
 Actions/modes: `list`, `read`, `normalize`.
 
@@ -158,6 +160,8 @@ Actions/modes: `list`, `read`, `normalize`.
 
 Source ingestion, claims, coverage, recovery.
 
+Each claim contains `text`, `kind`, `origin`, and `confidence`, plus optional `target` and `relations`. A stakeholder target supports `entity_key`, `page_path`, `page_title`, `page_type`, `role`, `organization`, `email_domain`, `affiliation`, and `code_resource_uri`. `email_domain` is domain-only; `client`/`internal` may be source-declared when comparison is unavailable, while `partner` must be explicit.
+
 Actions/modes: `start`, `next`, `apply_claims`, `record_segment`, `source_status`, `evidence_status`, `finalize`, `report`, `record_recovery`, `resolve_recovery`.
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
@@ -167,7 +171,7 @@ Actions/modes: `start`, `next`, `apply_claims`, `record_segment`, `source_status
 | `max_chars` | integer | no | `12000` | ≥ 1; ≤ 50000 | — |
 | `segment_max_chars` | integer | no | — | ≥ 256; ≤ 50000 | — |
 | `segment_id` | string | no | — | — | — |
-| `claims` | array<object> | no | — | items ≥ 1 | Claims; target/relations optional. |
+| `claims` | array<object> | no | — | items ≥ 1 | Stakeholder target: entity_key,page_path,page_title,page_type,role,organization,email_domain,affiliation. |
 | `segment_status` | `irrelevant` &#124; `unresolved` &#124; `legacy_unverified` | no | — | — | — |
 | `evidence_refs` | array<string> | no | — | — | — |
 | `page_refs` | array<string> | no | — | — | — |
@@ -176,7 +180,7 @@ Actions/modes: `start`, `next`, `apply_claims`, `record_segment`, `source_status
 | `claim_ids` | array<string> | no | — | — | — |
 | `include_resolved` | boolean | no | `false` | — | — |
 | `total_evidence_used` | integer | no | — | ≥ 0; ≤ 1000000 | — |
-| `recovery_events` | array<object> | no | — | items ≤ 100 | Recovery events; pages optional. |
+| `recovery_events` | array<object> | no | — | items ≤ 100 | — |
 | `recovery_event_id` | string | no | — | — | — |
 | `recovery_resolution` | `page_updated` &#124; `new_page` &#124; `ledger_updated` &#124; `intentionally_ignored` | no | — | — | — |
 | `recovery_page_refs` | array<string> | no | — | items ≤ 50 | — |
@@ -191,7 +195,7 @@ Actions/modes: `read`, `write`, `edit`, `move`, `delete`, `append_log`.
 | Parameter | Type / values | Required | Default | Constraints | Description |
 |---|---|---:|---|---|---|
 | `action` | `read` &#124; `write` &#124; `edit` &#124; `move` &#124; `delete` &#124; `append_log` | yes | — | — | read=open; write=create; edit=replace; move=rename; delete=remove; append_log=event. |
-| `path` | string | no | — | — | — |
+| `path` | string | no | — | — | Wiki .md path; leading wiki/ maps to root. |
 | `resource_uri` | string | no | — | pattern "^knowledge-rail:\\/\\/page\\/.*" | — |
 | `max_chars` | integer | no | `6000` | ≥ 1; ≤ 50000 | — |
 | `content` | string | no | — | — | — |
@@ -199,7 +203,7 @@ Actions/modes: `read`, `write`, `edit`, `move`, `delete`, `append_log`.
 | `new_string` | string | no | — | — | — |
 | `replace_all` | boolean | no | `false` | — | — |
 | `old_path` | string | no | — | — | — |
-| `new_path` | string | no | — | — | — |
+| `new_path` | string | no | — | — | Wiki-relative .md; creates dirs. |
 | `dry_run` | boolean | no | `false` | — | — |
 | `entry` | string | no | — | — | — |
 | `level` | `INFO` &#124; `WARN` &#124; `ACTION` &#124; `DECISION` | no | `"ACTION"` | — | — |

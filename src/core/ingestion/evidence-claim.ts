@@ -3,9 +3,19 @@ import { createHash } from "node:crypto";
 import { canonicalCodeResourceUri } from "../code-evidence/resource-uri.js";
 import type { CodeAnchor } from "../code-evidence/types.js";
 import { WIKI_PAGE_TYPES, type WikiPageType } from "../wiki-validation.js";
+import { normalizeWikiPagePath } from "../wiki-page-path.js";
+import {
+  emailDomainsInText,
+  normalizeEmailDomain,
+  redactEmailAddresses,
+  stakeholderAffiliation,
+  STAKEHOLDER_AFFILIATIONS,
+  type StakeholderAffiliation,
+} from "../stakeholder.js";
 
 export const EVIDENCE_CLAIM_KINDS = [
   "fact",
+  "stakeholder",
   "requirement",
   "decision",
   "constraint",
@@ -54,6 +64,10 @@ export interface EvidenceTargetHint {
   pagePath?: string;
   pageTitle?: string;
   pageType?: WikiPageType;
+  role?: string;
+  organization?: string;
+  emailDomain?: string;
+  affiliation?: StakeholderAffiliation;
   codeResourceUri?: string;
 }
 
@@ -89,6 +103,7 @@ const ORIGINS = new Set<string>(EVIDENCE_CLAIM_ORIGINS);
 const STATUSES = new Set<string>(EVIDENCE_CLAIM_STATUSES);
 const RELATIONS = new Set<string>(EVIDENCE_RELATION_TYPES);
 const PAGE_TYPES = new Set<string>(WIKI_PAGE_TYPES);
+const AFFILIATIONS = new Set<string>(STAKEHOLDER_AFFILIATIONS);
 
 function normalizedIdentityText(text: string): string {
   return text.normalize("NFKC").replace(/\s+/g, " ").trim();
@@ -107,18 +122,11 @@ function normalizedSourceUri(sourceUri: string): string {
 }
 
 function normalizedPagePath(pagePath: string): string {
-  const slashPath = pagePath.replace(/\\/g, "/");
-  const normalized = path.posix.normalize(slashPath);
-  const parts = normalized.split("/");
-  if (
-    path.posix.isAbsolute(slashPath) || normalized !== slashPath ||
-    parts.includes("..") || parts.includes(".") || parts.some((part) => !part) || parts[0]?.startsWith(".") ||
-    ["SCHEMA.md", "index.md", "log.md"].includes(normalized) ||
-    !normalized.toLowerCase().endsWith(".md")
-  ) {
+  try {
+    return normalizeWikiPagePath(pagePath, { allowWikiRootPrefix: true });
+  } catch {
     throw new Error(`Evidence target page must be a relative Markdown path: ${pagePath}`);
   }
-  return normalized;
 }
 
 function normalizeTarget(target: EvidenceTargetHint | undefined): EvidenceTargetHint | undefined {
@@ -126,18 +134,40 @@ function normalizeTarget(target: EvidenceTargetHint | undefined): EvidenceTarget
   const entityKey = target.entityKey?.replace(/\s+/g, " ").trim() || undefined;
   const pagePath = target.pagePath ? normalizedPagePath(target.pagePath) : undefined;
   const pageTitle = target.pageTitle?.replace(/\s+/g, " ").trim() || undefined;
+  const role = target.role?.replace(/\s+/g, " ").trim() || undefined;
+  if (role && (role.length > 256 || /[\u0000-\u001f\u007f]/u.test(role))) {
+    throw new Error("Stakeholder role must contain at most 256 printable characters.");
+  }
+  const organization = target.organization?.replace(/\s+/g, " ").trim() || undefined;
+  if (organization && (organization.length > 256 || /[\u0000-\u001f\u007f]/u.test(organization))) {
+    throw new Error("Stakeholder organization must contain at most 256 printable characters.");
+  }
+  const emailDomain = target.emailDomain ? normalizeEmailDomain(target.emailDomain) : undefined;
+  if (target.emailDomain && !emailDomain) {
+    throw new Error("Stakeholder emailDomain must contain a domain only, never a complete address.");
+  }
+  if (target.affiliation && !AFFILIATIONS.has(target.affiliation)) {
+    throw new Error(`Unsupported stakeholder affiliation: ${target.affiliation}.`);
+  }
   const codeResourceUri = target.codeResourceUri
     ? canonicalCodeResourceUri(target.codeResourceUri)
     : undefined;
   if (target.pageType && !PAGE_TYPES.has(target.pageType)) {
     throw new Error(`Unsupported evidence target page type: ${target.pageType}.`);
   }
-  if (!entityKey && !pagePath && !pageTitle && !target.pageType && !codeResourceUri) return undefined;
+  if (
+    !entityKey && !pagePath && !pageTitle && !target.pageType && !role && !organization &&
+    !emailDomain && !target.affiliation && !codeResourceUri
+  ) return undefined;
   return {
     ...(entityKey ? { entityKey } : {}),
     ...(pagePath ? { pagePath } : {}),
     ...(pageTitle ? { pageTitle } : {}),
     ...(target.pageType ? { pageType: target.pageType } : {}),
+    ...(role ? { role } : {}),
+    ...(organization ? { organization } : {}),
+    ...(emailDomain ? { emailDomain } : {}),
+    ...(target.affiliation ? { affiliation: target.affiliation } : {}),
     ...(codeResourceUri ? { codeResourceUri } : {}),
   };
 }
@@ -202,11 +232,14 @@ export function evidenceClaimId(params: {
   kind: EvidenceClaimKind;
   origin: EvidenceClaimOrigin;
 }): string {
+  const durableText = params.kind === "stakeholder"
+    ? redactEmailAddresses(params.text)
+    : params.text;
   const identity = [
     "evidence-claim-v1",
     normalizedSourceUri(params.sourceUri),
     params.segmentId,
-    normalizedIdentityText(params.text),
+    normalizedIdentityText(durableText),
     params.kind,
     params.origin,
   ].join("\0");
@@ -219,12 +252,14 @@ export function createEvidenceClaim(params: {
   input: EvidenceClaimInput;
   codeAnchor?: CodeAnchor;
   now?: string;
+  /** `null` means identity was resolved but its domain is unknown. */
+  userEmailDomain?: string | null;
 }): EvidenceClaim {
   const sourceUri = normalizedSourceUri(params.sourceUri);
   if (!/^seg-[a-f0-9]{24}$/.test(params.segmentId)) {
     throw new Error(`Invalid source segment ID: ${params.segmentId}.`);
   }
-  const text = normalizedIdentityText(params.input.text);
+  let text = normalizedIdentityText(params.input.text);
   if (!text) throw new Error("Evidence claim text must not be empty.");
   if (!KINDS.has(params.input.kind)) throw new Error(`Unsupported evidence claim kind: ${params.input.kind}.`);
   if (!ORIGINS.has(params.input.origin)) throw new Error(`Unsupported evidence claim origin: ${params.input.origin}.`);
@@ -233,7 +268,40 @@ export function createEvidenceClaim(params: {
   }
   const status = params.input.status ?? "active";
   if (!STATUSES.has(status)) throw new Error(`Unsupported evidence claim status: ${status}.`);
-  const target = normalizeTarget(params.input.target);
+  let target = normalizeTarget(params.input.target);
+  if (params.input.kind === "stakeholder") {
+    if (target?.pageType && target.pageType !== "stakeholder") {
+      throw new Error("Stakeholder evidence must target a stakeholder page.");
+    }
+    if (!target?.entityKey && !target?.pageTitle && !target?.pagePath) {
+      throw new Error("Stakeholder evidence requires a stable entity key, page title, or page path.");
+    }
+    const detectedDomains = emailDomainsInText(text);
+    if (target?.emailDomain && detectedDomains.length > 0 && !detectedDomains.includes(target.emailDomain)) {
+      throw new Error(
+        `Stakeholder target emailDomain ${target.emailDomain} contradicts the email domain(s) in the claim text.`
+      );
+    }
+    const emailDomain = target?.emailDomain ?? (detectedDomains.length === 1 ? detectedDomains[0] : undefined);
+    const classifyAffiliation = Object.prototype.hasOwnProperty.call(params, "userEmailDomain");
+    target = normalizeTarget({
+      ...(target ?? {}),
+      ...(emailDomain ? { emailDomain } : {}),
+      ...(classifyAffiliation ? {
+        affiliation: stakeholderAffiliation({
+          stakeholderEmailDomain: emailDomain,
+          userEmailDomain: params.userEmailDomain,
+          explicitAffiliation: target?.affiliation,
+        }),
+      } : {}),
+      pageType: "stakeholder",
+    });
+    text = normalizedIdentityText(redactEmailAddresses(text));
+  } else if (
+    target?.role || target?.organization || target?.emailDomain || target?.affiliation
+  ) {
+    throw new Error("Stakeholder profile fields are valid only for kind=stakeholder claims.");
+  }
   const codeAnchor = normalizeCodeAnchor(params.codeAnchor);
   if (codeAnchor && !target?.codeResourceUri) {
     throw new Error("Evidence code anchors require a codeResourceUri target.");

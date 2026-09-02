@@ -1,4 +1,3 @@
-import * as path from "node:path";
 import { staleClaimsByPage } from "../core/drift-detection.js";
 import type { GraphEdge, GraphEdgeKind, GraphNode } from "../core/graph-index.js";
 import { getRuntimeWikiGraph, type RuntimeGraph } from "../core/graph-runtime.js";
@@ -10,6 +9,7 @@ import {
   type RetrievalWideningLevel,
 } from "../core/hybrid-retrieval.js";
 import type { RetrievalProfile } from "../core/text-analysis.js";
+import { normalizeWikiPagePath } from "../core/wiki-page-path.js";
 import {
   estimateContextSize,
   evidenceFromRetrievalHit,
@@ -296,21 +296,11 @@ function boundedText(value: string, label: string, maximum = 4_096): string {
 }
 
 function normalizedPagePath(value: string): string {
-  if (value.length === 0 || value.length > 1_024 || /[\u0000-\u001f\u007f]/.test(value)) {
+  try {
+    return normalizeWikiPagePath(value, { allowWikiRootPrefix: true });
+  } catch {
     throw new Error(`Changed path must be a normalized relative wiki Markdown path: ${value}`);
   }
-  const slashes = value.replace(/\\/g, "/");
-  const normalized = path.posix.normalize(slashes);
-  const parts = normalized.split("/");
-  if (
-    path.posix.isAbsolute(slashes) || /^[A-Za-z]:/.test(slashes) || slashes.startsWith("//") ||
-    normalized !== slashes || !normalized.toLowerCase().endsWith(".md") ||
-    parts.some((part) => !part || part === "." || part === ".." || part.includes("\0")) ||
-    parts[0]?.startsWith(".") || ["SCHEMA.md", "index.md", "log.md"].includes(normalized)
-  ) {
-    throw new Error(`Changed path must be a normalized relative wiki Markdown path: ${value}`);
-  }
-  return normalized;
 }
 
 function uniqueSorted(values: readonly string[]): string[] {

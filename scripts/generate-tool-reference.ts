@@ -94,12 +94,18 @@ function renderTool(tool: CatalogTool): string {
       "evidence excluded from display is `budget_limited`, not `missing_evidence`. Configured embedding " +
       "provider failures degrade to lexical mode without failing the tool call."
     : undefined;
+  const contractNote = tool.name === "knowledge_admin"
+    ? "For `action=\"lint\"`, `force=true` enables nested-wiki recovery. Omit `dry_run` or set it to `true` to preview; set `dry_run=false` to apply. Recovery removes nested `wiki` path segments, updates relative links, and blocks the complete operation if any destination collides."
+    : tool.name === "knowledge_ingest"
+      ? "Each claim contains `text`, `kind`, `origin`, and `confidence`, plus optional `target` and `relations`. A stakeholder target supports `entity_key`, `page_path`, `page_title`, `page_type`, `role`, `organization`, `email_domain`, `affiliation`, and `code_resource_uri`. `email_domain` is domain-only; `client`/`internal` may be source-declared when comparison is unavailable, while `partner` must be explicit."
+      : undefined;
   return [
     `## \`${tool.name}\``,
     "",
     tool.description ?? "",
     "",
     ...(coverageNote ? [coverageNote, ""] : []),
+    ...(contractNote ? [contractNote, ""] : []),
     ...(actions.length > 0 ? [`Actions/modes: ${actions.map((value) => `\`${value}\``).join(", ")}.`, ""] : []),
     "| Parameter | Type / values | Required | Default | Constraints | Description |",
     "|---|---|---:|---|---|---|",

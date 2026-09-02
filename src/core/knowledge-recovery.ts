@@ -7,6 +7,7 @@ import { withWikiFileLock } from "./lock-service.js";
 import { safeResolveWithin } from "./paths.js";
 import { ensureDir, readFileSafe } from "./utils.js";
 import { hasErrors, validateWikiPageContent } from "./wiki-validation.js";
+import { normalizeWikiPagePath } from "./wiki-page-path.js";
 import { readSourceCoverageLedger } from "./ingestion/coverage-ledger.js";
 import { reconcileEvidenceCoverage } from "./ingestion/evidence-pipeline.js";
 import { evidenceIrDir, readEvidenceIrStore } from "./ingestion/evidence-store.js";
@@ -172,17 +173,11 @@ function normalizeEvidenceRef(value: string, sourceUri: string): string {
 }
 
 function normalizePagePath(value: string): string {
-  const slashes = value.replace(/\\/g, "/");
-  const normalized = path.posix.normalize(slashes);
-  const parts = normalized.split("/");
-  if (
-    normalized !== slashes || path.posix.isAbsolute(slashes) || !normalized.toLowerCase().endsWith(".md") ||
-    parts.some((part) => !part || part === "." || part === ".." || part.includes("\0")) ||
-    parts[0]?.startsWith(".") || ["SCHEMA.md", "index.md", "log.md"].includes(normalized)
-  ) {
+  try {
+    return normalizeWikiPagePath(value, { allowWikiRootPrefix: true });
+  } catch {
     throw new Error(`Recovery page ref must be a relative wiki Markdown path: ${value}`);
   }
-  return normalized;
 }
 
 function uniqueSorted(values: readonly string[], normalize: (value: string) => string): string[] {

@@ -20,6 +20,9 @@ export interface WorkspaceContext {
   binding?: string;
   source: string;
   scope: WorkspaceAccessScope;
+  /** Privacy-preserving runtime identity used for stakeholder affiliation. */
+  userEmailDomain: string | null;
+  userEmailDomainSource: "environment" | "git" | "unknown";
   paths: WorkspacePaths;
 }
 
@@ -33,6 +36,8 @@ export function createWorkspaceContext(
     source?: string;
     scope?: WorkspaceAccessScope;
     binding?: string;
+    userEmailDomain?: string | null;
+    userEmailDomainSource?: "environment" | "git" | "unknown";
   } = {}
 ): WorkspaceContext {
   const root = nodePath.resolve(projectRoot);
@@ -42,6 +47,8 @@ export function createWorkspaceContext(
     authorized: true,
     source: options.source ?? "local",
     scope: options.scope ?? "write",
+    userEmailDomain: options.userEmailDomain ?? null,
+    userEmailDomainSource: options.userEmailDomainSource ?? "unknown",
     ...(options.binding ? { binding: options.binding } : {}),
     paths: Object.freeze({
       projectRoot: root,
@@ -58,6 +65,8 @@ export function createUnauthorizedWorkspaceContext(reason = "A valid workspace b
     authorizationError: reason,
     source: "catalog-unbound",
     scope: "read",
+    userEmailDomain: null,
+    userEmailDomainSource: "unknown",
     paths: Object.freeze({ projectRoot: "", wikiRoot: "", docsRoot: "" }),
   });
 }

@@ -6,9 +6,11 @@ import {
   parseFrontmatter,
   type Frontmatter,
 } from "./utils.js";
+import { normalizeEmailDomain, STAKEHOLDER_AFFILIATIONS } from "./stakeholder.js";
 
 export const WIKI_PAGE_TYPES = [
   "entity",
+  "stakeholder",
   "concept",
   "summary",
   "comparison",
@@ -139,6 +141,49 @@ export async function validateWikiPageContent(
     issues.push(
       issue("WARN", "SUMMARY_WITHOUT_SOURCE", "Summary pages should reference at least one source.")
     );
+  }
+
+  if (type === "stakeholder") {
+    const role = frontmatterString(frontmatter, "role");
+    if (frontmatter.role !== undefined && role === undefined) {
+      issues.push(issue("ERROR", "STAKEHOLDER_ROLE_INVALID", "Field role must be a string."));
+    }
+    const organization = frontmatterString(frontmatter, "organization");
+    if (frontmatter.organization !== undefined && organization === undefined) {
+      issues.push(issue("ERROR", "STAKEHOLDER_ORGANIZATION_INVALID", "Field organization must be a string."));
+    }
+    const emailDomain = frontmatterString(frontmatter, "email_domain");
+    if (frontmatter.email_domain !== undefined && (
+      !emailDomain || normalizeEmailDomain(emailDomain) !== emailDomain
+    )) {
+      issues.push(issue(
+        "ERROR",
+        "STAKEHOLDER_EMAIL_DOMAIN_INVALID",
+        "Field email_domain must contain one normalized domain, never a complete email address."
+      ));
+    }
+    const affiliation = frontmatterString(frontmatter, "affiliation");
+    if (frontmatter.affiliation !== undefined && (
+      !affiliation || !(STAKEHOLDER_AFFILIATIONS as readonly string[]).includes(affiliation)
+    )) {
+      issues.push(issue(
+        "ERROR",
+        "STAKEHOLDER_AFFILIATION_INVALID",
+        `Field affiliation must be one of: ${STAKEHOLDER_AFFILIATIONS.join(", ")}.`
+      ));
+    }
+    if (
+      (affiliation === "client" || affiliation === "internal") &&
+      !emailDomain &&
+      (sources?.length ?? 0) === 0
+    ) {
+      issues.push(issue(
+        "ERROR",
+        "STAKEHOLDER_AFFILIATION_UNSUPPORTED",
+        `Affiliation ${affiliation} requires either an evidence-backed email_domain or a source ` +
+          "that explicitly declares the affiliation; otherwise use affiliation: unknown."
+      ));
+    }
   }
 
   return { frontmatter, issues };

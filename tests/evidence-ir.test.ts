@@ -149,6 +149,36 @@ test("Evidence IR preserves provenance, epistemic origin, contradictions and reb
   }
 });
 
+test("data-model evidence keeps the historical plural directory", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-data-model-path-"));
+  const wikiRoot = path.join(root, "wiki");
+  const sourceUri = "docs/normalized/model.md";
+  const content = "# Model\n\nThe invoice has a stable identifier.";
+  try {
+    const segmentId = await plannedSource({ wikiRoot, sourceUri, content });
+    const recorded = await recordEvidenceClaims({
+      wikiRoot,
+      sourceUri,
+      sourceContent: content,
+      segmentId,
+      claims: [{
+        text: "The invoice has a stable identifier.",
+        kind: "fact",
+        origin: "explicit",
+        confidence: 1,
+        target: { pageTitle: "Invoice model", pageType: "data_model" },
+      }],
+    });
+    const resolution = await resolveEvidenceClaims({
+      wikiRoot,
+      claimIds: recorded.claims.map((claim) => claim.id),
+    });
+    assert.equal(resolution[0]?.targetPagePath, "data-models/Invoice_model.md");
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
 test("the linker deterministically collapses exact duplicates and records supersession", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-evidence-linker-"));
   const wikiRoot = path.join(root, "wiki");

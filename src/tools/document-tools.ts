@@ -26,9 +26,11 @@ import { atomicWriteText } from "../core/fs-service.js";
 import {
   docsCategoryDirReal,
   docsCategoryFilePathReal,
+  getWikiRoot,
   resolveRealWithin,
   wikiDir,
 } from "../core/paths.js";
+import { currentWorkspaceUserIdentity } from "../core/user-identity.js";
 import { ensureDir, readFileSafe } from "../core/utils.js";
 import { errorResult } from "./helpers.js";
 import { toolName, type ProtocolEra } from "../mcp/tool-names.js";
@@ -164,6 +166,7 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
     required_sections,
     diagram_mode,
   }) => {
+    const identity = await currentWorkspaceUserIdentity(getWikiRoot());
     const contract = documentContract(document_type);
     const template = templateFor(document_type, project_name, required_sections);
     const sections = template ? parseTemplateSections(template, max_sections) : [];
@@ -205,7 +208,8 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
             ? "A diagram may help in: " + opportunities.join(", ") + ". Ask the user only if useful; omitting diagram_mode applies no enforcement."
             : "No section currently creates a strong diagram opportunity; the EN/IT heading heuristic is advisory only and omitting diagram_mode applies no enforcement.") +
           "\nSelected mode: " + (diagram_mode ?? "not selected") + ". Propagate an explicit choice to section, write, and review calls to enforce it." +
-          "\nexternal_asset requires an existing local SVG/PNG and filesystem access; chat-only clients should offer none or mermaid.",
+          "\nexternal_asset requires an existing local SVG/PNG and filesystem access; chat-only clients should offer none or mermaid." +
+          `\n\n## Stakeholder identity context\n\nLocal user email domain: ${identity.userEmailDomain ?? "unknown"} (${identity.source}). Compare domains only when explicit stakeholder evidence requires affiliation; never persist a complete email address.`,
       }],
       structuredContent: {
         documentType: document_type,
@@ -219,6 +223,8 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
         editorPersona: documentPersona(document_type),
         requiredSections: sections.map((section) => section.title),
         diagramChoice,
+        userEmailDomain: identity.userEmailDomain,
+        userEmailDomainSource: identity.source,
       },
     };
   });
@@ -259,6 +265,7 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
     heuristic_token_budget,
     retrieval_profile,
   }) => {
+    const identity = await currentWorkspaceUserIdentity(getWikiRoot());
     const result = await createSectionContext({
       wikiRoot: wikiDir(),
       sectionTitle: section_title,
@@ -280,7 +287,11 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
       useGraph: true,
     });
     return {
-      content: [{ type: "text" as const, text: formatSectionContext(result, section_title, max_output_chars) }],
+      content: [{
+        type: "text" as const,
+        text: formatSectionContext(result, section_title, max_output_chars) +
+          `\n\n> Stakeholder identity context: local user email domain ${identity.userEmailDomain ?? "unknown"} (${identity.source}). Persist domains only, never complete addresses.`,
+      }],
       structuredContent: {
         documentType: result.documentType,
         diagramRelevant: result.diagramRelevant,
@@ -289,6 +300,8 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
         coverage: result.coverage,
         compiler: result.compiler,
         omittedPaths: result.omittedPaths ?? [],
+        userEmailDomain: identity.userEmailDomain,
+        userEmailDomainSource: identity.source,
       },
     };
   });

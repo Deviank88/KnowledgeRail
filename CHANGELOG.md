@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.7.1] - 2026-09-02
+
+### Added
+
+- Added source-aware stakeholder evidence: transcripts require extraction, client/report sources suggest it when explicit evidence exists, and Evidence IR creates or updates stable temporal `stakeholders/` pages without merging ambiguous identities.
+- Added privacy-preserving user-domain resolution from `KNOWLEDGE_RAIL_USER_EMAIL` or project-root Git configuration, deterministic stakeholder affiliation, full-address redaction, and domain context in document/source plans.
+
+### Changed
+
+- Added the canonical `stakeholder` page type with temporal role/organization/domain/affiliation fields and kept wiki page directories open-ended and lazily created.
+- Preserve source-declared client/internal affiliations when no domain comparison is available; deterministic domain comparison still wins when available, while identity changes require a server restart.
+- Retained the historical `data-models/` linker path for existing workspace compatibility.
+
+### Fixed
+
+- Fixed caller-supplied `wiki/...` page paths creating `wiki/wiki/...`: redundant leading wiki-root markers are canonicalized, nested `wiki` directories and hidden page paths are rejected, derived indexes exclude malformed legacy paths, and lint reports existing nested wiki trees.
+- Added collision-safe lint preview/apply repair for legacy nested wiki pages, including link rewrites, journaling, rollback, and derived-index cleanup.
+- Fixed explicit, legacy, and registered workspaces that point at an existing canonical `wiki/` directory or its descendants by resolving them back to the project root only when `.knowledge-rail/` proves it is a managed wiki.
+- Aligned page URI parsing with direct page paths by accepting and removing a redundant leading `wiki/`.
+- Fixed stakeholder email detection and redaction for internationalized domains ending in a non-ASCII TLD.
+
 ## [2.7.0] - 2026-08-28
 
 ### Added
@@ -269,7 +290,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Initial local-first MCP server with persistent evidence-backed knowledge, bounded retrieval, document workflows, and eight public `knowledge_*` tools.
 - Multi-workspace loopback HTTP gateway, opaque per-chat bindings, desktop adapter, and portable npm/npx distribution.
 
-[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.6.0...HEAD
+[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.7.1...HEAD
+[2.7.1]: https://github.com/Deviank88/KnowledgeRail/compare/v2.7.0...v2.7.1
+[2.7.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.6.2...v2.7.0
+[2.6.2]: https://github.com/Deviank88/KnowledgeRail/compare/v2.6.1...v2.6.2
+[2.6.1]: https://github.com/Deviank88/KnowledgeRail/compare/v2.6.0...v2.6.1
 [2.6.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.5.0...v2.6.0
 [2.5.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.3.0...v2.4.0

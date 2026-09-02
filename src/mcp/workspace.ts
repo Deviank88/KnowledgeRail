@@ -1,6 +1,10 @@
 import * as nodePath from "node:path";
 import { setWikiRoot, uriToPath } from "../core/paths.js";
-import { discoverWorkspaceFromCwd } from "./workspace-discovery.js";
+import {
+  canonicalizeExistingDirectory,
+  canonicalizeProjectRoot,
+  discoverWorkspaceFromCwd,
+} from "./workspace-discovery.js";
 
 export type WorkspaceSource =
   | "explicit"
@@ -94,7 +98,7 @@ export async function resolveLegacyMcpWorkspace(
   server: LegacyRootsCapableServer,
   options: Omit<WorkspaceResolverOptions, "legacyRootProvider"> = {}
 ): Promise<WorkspaceResolution> {
-  return resolveAndActivateWorkspace({
+  const resolution = await resolveWorkspace({
     ...options,
     legacyRootProvider: async () => {
       const { roots } = await server.server.listRoots();
@@ -105,4 +109,10 @@ export async function resolveLegacyMcpWorkspace(
       return null;
     },
   });
+  const root = await Promise.all([
+    canonicalizeExistingDirectory(resolution.root),
+    canonicalizeProjectRoot(resolution.root),
+  ]).then(([selected, project]) => selected === project ? resolution.root : project)
+    .catch(() => resolution.root);
+  return activateWorkspace({ ...resolution, root });
 }
