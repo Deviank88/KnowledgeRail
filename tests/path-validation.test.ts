@@ -101,43 +101,107 @@ test("tool errors redact the active workspace root", () => {
   assert.match(result.content[0].text, /<workspace>/);
 });
 
-test("wiki page validation requires frontmatter and valid raw sources", async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-validation-"));
-  setWikiRoot(dir);
-  await fs.mkdir(rawDir(), { recursive: true });
-  await fs.writeFile(path.join(rawDir(), "source.md"), "source", "utf-8");
+test("wiki page validation accepts only existing document files under docs/", async () => {
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-validation-"));
+  const project = path.join(base, "project");
+  setWikiRoot(project);
+  await fs.mkdir(path.join(project, "docs", "reference"), { recursive: true });
+  await fs.mkdir(path.join(project, "src", "core"), { recursive: true });
+  await fs.writeFile(path.join(project, "docs", "source.md"), "source", "utf-8");
+  await fs.writeFile(path.join(project, "docs", "reference", "caf\u00e9.md"), "source", "utf-8");
+  await fs.writeFile(path.join(project, "src", "core", "paths.ts"), "source", "utf-8");
+  await fs.writeFile(path.join(base, "outside.md"), "outside", "utf-8");
 
-  const valid = await validateWikiPageContent(
+  const validateSource = (source: string, checkSourceExists = true) => validateWikiPageContent(
     [
       "---",
-      'title: "Valid Page"',
+      'title: "Source Page"',
       "type: summary",
       "tags: [valid]",
       "created: 2026-05-07",
       "updated: 2026-05-07",
-      'sources: ["docs/source.md"]',
+      `sources: ["${source}"]`,
       "---",
       "",
-      "# Valid",
+      "# Source Page",
     ].join("\n"),
-    { checkSourceExists: true }
+    { checkSourceExists }
   );
-  assert.equal(hasErrors(valid.issues), false);
 
-  const invalid = await validateWikiPageContent(
-    [
-      "---",
-      'title: "Invalid Page"',
-      "type: invalid",
-      "tags: []",
-      "created: yesterday",
-      "updated: 2026-05-07",
-      'sources: ["../outside.md"]',
-      "---",
-    ].join("\n"),
-    { checkSourceExists: true }
-  );
-  assert.equal(hasErrors(invalid.issues), true);
+  try {
+    for (const source of [
+      "docs/source.md",
+      "source.md",
+      "docs\\reference\\caf\u00e9.md",
+      "docs/reference/cafe\u0301.md",
+    ]) {
+      const result = await validateSource(source);
+      assert.equal(hasErrors(result.issues), false, `${source} should be accepted`);
+    }
+
+    for (const source of [
+      "docs/reference",
+      "docs/missing.md",
+      "src/core/paths.ts",
+      "docs/../src/core/paths.ts",
+      "../outside.md",
+      path.join(project, "src", "core", "paths.ts"),
+      "C:\\Windows\\system.ini",
+      "src/\0invalid.ts",
+    ]) {
+      const result = await validateSource(source);
+      assert.equal(hasErrors(result.issues), true, `${source} should be rejected`);
+      assert.equal(
+        result.issues.some((item) => item.code === "SOURCE_INVALID"),
+        true,
+        `${source} should produce SOURCE_INVALID`
+      );
+    }
+
+    const uncheckedMissing = await validateSource("docs/missing.md", false);
+    assert.equal(hasErrors(uncheckedMissing.issues), false);
+    const codeSource = await validateSource("src/core/paths.ts");
+    assert.match(
+      codeSource.issues.find((item) => item.code === "SOURCE_INVALID")?.message ?? "",
+      /under docs\/.*code:\/\/.*normalize/
+    );
+    const codeMessage = codeSource.issues.find((item) => item.code === "SOURCE_INVALID")?.message ?? "";
+    assert.equal(codeMessage.includes(project), false, "validation messages must not disclose the project root");
+    assert.match(codeMessage, /Source file does not exist\./);
+  } finally {
+    await fs.rm(base, { recursive: true, force: true });
+  }
+});
+
+test("wiki page validation rejects source symlink escapes", {
+  skip: process.platform === "win32" ? "symlink privileges vary on Windows" : false,
+}, async () => {
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-source-symlink-"));
+  const project = path.join(base, "project");
+  setWikiRoot(project);
+  await fs.mkdir(path.join(project, "docs"), { recursive: true });
+  await fs.writeFile(path.join(base, "outside.md"), "outside", "utf-8");
+  await fs.symlink(path.join(base, "outside.md"), path.join(project, "docs", "escape.md"), "file");
+
+  try {
+    const result = await validateWikiPageContent(
+      [
+        "---",
+        'title: "Escaped Source"',
+        "type: summary",
+        "tags: [valid]",
+        "created: 2026-05-07",
+        "updated: 2026-05-07",
+        'sources: ["docs/escape.md"]',
+        "---",
+      ].join("\n"),
+      { checkSourceExists: true }
+    );
+    assert.equal(hasErrors(result.issues), true);
+    assert.equal(result.issues.some((item) => item.code === "SOURCE_INVALID"), true);
+  } finally {
+    await fs.rm(base, { recursive: true, force: true });
+  }
 });
 
 test("stakeholder frontmatter accepts domains but rejects complete addresses", async () => {

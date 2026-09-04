@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.7.3] - 2026-09-05
+
+### Fixed
+
+- Wiki frontmatter `sources` validation now confines document paths under `docs/` with realpath containment, rejecting directories, missing files, traversal segments, and symlink escapes when existence checks are enabled.
+- Source paths now normalize path separators and Unicode NFC while rejecting null bytes and cross-platform absolute paths; the `SOURCE_INVALID` message explains that sources are `docs/` documents, that code is cited through Evidence IR `code://` targets, and that external documents are imported with `knowledge_files action="normalize"`.
+- Source validation reasons no longer embed filesystem paths, and `knowledge_admin action="lint"` output redacts the workspace root like other tool errors.
+
 ## [2.7.2] - 2026-09-02
 
 ### Changed
@@ -301,7 +309,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Initial local-first MCP server with persistent evidence-backed knowledge, bounded retrieval, document workflows, and eight public `knowledge_*` tools.
 - Multi-workspace loopback HTTP gateway, opaque per-chat bindings, desktop adapter, and portable npm/npx distribution.
 
-[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.7.2...HEAD
+[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.7.3...HEAD
+[2.7.3]: https://github.com/Deviank88/KnowledgeRail/compare/v2.7.2...v2.7.3
 [2.7.2]: https://github.com/Deviank88/KnowledgeRail/compare/v2.7.1...v2.7.2
 [2.7.1]: https://github.com/Deviank88/KnowledgeRail/compare/v2.7.0...v2.7.1
 [2.7.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.6.2...v2.7.0

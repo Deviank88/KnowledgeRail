@@ -121,7 +121,7 @@ authority: context | client_input | validated_report | test_evidence | deliverab
 | \`tags\`    | yes      | At least one tag; lowercase with hyphens                    |
 | \`created\` | yes      | ISO date of first creation                                  |
 | \`updated\` | yes      | ISO date of last modification — update on every edit        |
-| \`sources\` | yes      | List of docs/ files this page draws from; empty list \`[]\` if none |
+| \`sources\` | yes      | Document files under \`docs/\` this page draws from; empty list \`[]\` if none. Cite code through Evidence IR code targets (\`code://\`), never in \`sources\`; import external documents with \`knowledge_files action="normalize"\` |
 
 ---
 

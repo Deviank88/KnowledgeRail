@@ -57,7 +57,7 @@ import {
   nestedWikiPageRepairTarget,
   normalizeWikiPagePath,
 } from "../core/wiki-page-path.js";
-import { errorResult, finalizePageMutation, textResult } from "./helpers.js";
+import { errorResult, finalizePageMutation, redactWorkspacePaths, textResult } from "./helpers.js";
 
 const CONTROL_FILES = ["SCHEMA.md", "index.md", "log.md"];
 
@@ -980,11 +980,11 @@ export function registerWikiTools(
                   a.code.localeCompare(b.code) ||
                   a.detail.localeCompare(b.detail)
               );
-              return textResult(
+              return textResult(redactWorkspacePaths(
                 (repair ? `${formatNestedWikiRepair(repair)}\n\n` : "") +
                   `Wiki lint: ${report.length} problem(s):\n\n` +
                   report.map((item) => `${item.severity} ${item.code}: ${item.detail}`).join("\n")
-              );
+              ));
             });
 
 }

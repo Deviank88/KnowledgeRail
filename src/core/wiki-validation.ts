@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import { rawDir, rawFilePath } from "./paths.js";
+import { rawDir, resolveRealWithin } from "./paths.js";
 import {
   frontmatterArray,
   frontmatterString,
@@ -57,8 +57,37 @@ function issue(
   return { severity, code, message };
 }
 
-function normalizeSourcePath(source: string): string {
-  return source.replace(/^docs[\\/]/, "");
+const DOCS_PREFIX_RE = /^docs\//u;
+
+/**
+ * Sources are document files under docs/. A leading `docs/` is optional and
+ * removed so `docs/x.md` and `x.md` identify the same document.
+ */
+function documentSourcePath(source: string): string {
+  if (source.includes("\0")) {
+    throw new Error("Source paths must not contain null bytes.");
+  }
+  const normalized = source.normalize("NFC").replace(/\\/g, "/");
+  if (/^[A-Za-z]:\//u.test(normalized)) {
+    throw new Error(`Absolute paths are not allowed: ${source}`);
+  }
+  if (normalized.split("/").some((part) => part === "." || part === "..")) {
+    throw new Error(`Relative traversal segments are not allowed: ${source}`);
+  }
+  return normalized.replace(DOCS_PREFIX_RE, "");
+}
+
+/**
+ * Filesystem errors carry absolute paths; keep only a portable reason so lint
+ * and validation output never disclose the workspace location.
+ */
+function sourceFailureReason(err: unknown): string {
+  const code = (err as NodeJS.ErrnoException | undefined)?.code;
+  if (code === "ENOENT" || code === "ENOTDIR") return "Source file does not exist.";
+  if (code === "EACCES" || code === "EPERM") return "Source file is not readable.";
+  if (code === "ELOOP") return "Source path contains a symbolic link loop.";
+  if (typeof code === "string") return `Source path could not be inspected (${code}).`;
+  return err instanceof Error ? err.message : String(err);
 }
 
 export async function validateWikiPageContent(
@@ -118,19 +147,24 @@ export async function validateWikiPageContent(
   const sources = frontmatterArray(frontmatter, "sources");
   if (sources !== undefined) {
     for (const source of sources) {
-      const sourceRelPath = normalizeSourcePath(source);
       try {
-        const abs = rawFilePath(sourceRelPath);
+        const abs = await resolveRealWithin(rawDir(), documentSourcePath(source));
         if (opts.checkSourceExists) {
-          await fs.access(abs);
+          const sourceStat = await fs.stat(abs);
+          if (!sourceStat.isFile()) {
+            throw new Error("Source path does not identify a file.");
+          }
         }
       } catch (err: unknown) {
-        const reason = err instanceof Error ? err.message : String(err);
+        const reason = sourceFailureReason(err);
+        const existenceRule = opts.checkSourceExists ? " that exist" : "";
         issues.push(
           issue(
             "ERROR",
             "SOURCE_INVALID",
-            `Invalid source '${source}'. Sources must stay inside ${rawDir()} and exist. ${reason}`
+            `Invalid source '${source}'. Sources must be document files under docs/${existenceRule}; ` +
+              "cite code through Evidence IR code targets (code://) and import external documents with " +
+              `knowledge_files action="normalize". ${reason}`
           )
         );
       }
