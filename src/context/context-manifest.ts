@@ -50,6 +50,8 @@ export interface KnowledgeGap {
   reason?: EvidenceStaleReason;
   paths?: string[];
   claimIds?: string[];
+  /** False for fixed expansion limits that a larger token budget cannot close. */
+  widenable?: boolean;
 }
 
 export interface ContextManifest {

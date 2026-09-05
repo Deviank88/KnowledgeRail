@@ -1,3 +1,5 @@
+import { createJavaScriptImportResolver } from "./import-resolution/javascript.js";
+import { JAVASCRIPT_PROJECT_MANIFESTS } from "./import-resolution/javascript-config.js";
 import { createHash } from "node:crypto";
 import {
   TYPESCRIPT_ADAPTER_VERSION,
@@ -91,11 +93,15 @@ function commentsIn(content: string): CommentSpan[] {
   return spans;
 }
 
-/** Masks strings and comments while preserving byte offsets and newlines. */
+const REGEX_PREFIX_WORDS = new Set(["return", "throw", "case", "delete", "void", "typeof", "instanceof", "in", "of", "yield", "await", "else", "do"]);
+
+/** Masks strings, expression-position regexes and comments, preserving UTF-16 offsets. */
 function maskNonCode(content: string): string {
-  const chars = [...content];
-  let mode: "code" | "single" | "double" | "template" | "line-comment" | "block-comment" = "code";
+  const chars = content.split("");
+  let mode: "code" | "single" | "double" | "template" | "regex" | "line-comment" | "block-comment" = "code";
   let escaped = false;
+  let regexClass = false;
+  let previousToken = "";
   for (let index = 0; index < chars.length; index++) {
     const char = chars[index]!;
     const next = chars[index + 1];
@@ -108,20 +114,35 @@ function maskNonCode(content: string): string {
         chars[index] = chars[index + 1] = " ";
         index++;
         mode = "block-comment";
+      } else if (char === "/" && (!previousToken || REGEX_PREFIX_WORDS.has(previousToken) || /^[([{=,:;!&|?+*%~^<>-]$/u.test(previousToken))) {
+        chars[index] = " ";
+        mode = "regex";
+        regexClass = false;
+        previousToken = "literal";
       } else if (char === "'") {
         chars[index] = " ";
         mode = "single";
+        previousToken = "literal";
       } else if (char === "\"") {
         chars[index] = " ";
         mode = "double";
+        previousToken = "literal";
       } else if (char === "`") {
         chars[index] = " ";
         mode = "template";
+        previousToken = "literal";
+      } else if (/[A-Za-z_$]/u.test(char)) {
+        const start = index;
+        while (index + 1 < chars.length && /[\w$]/u.test(chars[index + 1]!)) index++;
+        previousToken = previousToken === "." ? "literal" : content.slice(start, index + 1);
+      } else if (!/\s/u.test(char)) {
+        if ((char === "+" || char === "-") && next === char) { index++; previousToken = "literal"; }
+        else previousToken = char;
       }
       continue;
     }
     if (char === "\n") {
-      if (mode === "line-comment") mode = "code";
+      if (mode === "line-comment" || mode === "regex") mode = "code";
       escaped = false;
       continue;
     }
@@ -138,6 +159,15 @@ function maskNonCode(content: string): string {
     }
     if (char === "\\" && mode !== "line-comment" && mode !== "block-comment") {
       escaped = true;
+      continue;
+    }
+    if (mode === "regex") {
+      if (char === "[") regexClass = true;
+      else if (char === "]") regexClass = false;
+      else if (char === "/" && !regexClass) {
+        mode = "code";
+        while (index + 1 < chars.length && /[dgimsuvy]/u.test(chars[index + 1]!)) chars[++index] = " ";
+      }
       continue;
     }
     if (
@@ -292,14 +322,58 @@ function testPath(path: string): boolean {
   return /(?:^|\/)(?:test|tests|__tests__)(?:\/|$)|\.(?:test|spec)\.[^.]+$/i.test(path);
 }
 
+/** Parameter/type braces are not the function body. Input has strings/comments masked. */
+function functionBodyOpen(masked: string, start: number): number {
+  let genericDepth = 0;
+  let parameters = -1;
+  for (let index = start; index < masked.length; index++) {
+    const char = masked[index];
+    if (char === "<") genericDepth++;
+    else if (char === ">" && genericDepth && masked[index - 1] !== "=") genericDepth--;
+    else if (char === "(" && !genericDepth) { parameters = index; break; }
+    else if (char === ";" && !genericDepth) break;
+  }
+  if (parameters < 0) return -1;
+  let depth = 1;
+  let cursor = parameters + 1;
+  for (; cursor < masked.length && depth > 0; cursor++) {
+    if (masked[cursor] === "(") depth++;
+    else if (masked[cursor] === ")") depth--;
+  }
+  if (depth) return -1;
+  let angles = 0;
+  let parentheses = 0;
+  let brackets = 0;
+  let previous = ")";
+  for (; cursor < masked.length; cursor++) {
+    const char = masked[cursor]!;
+    if (/\s/u.test(char)) continue;
+    if (char === ";" && !angles && !parentheses && !brackets) return -1;
+    if (char === "{") {
+      const typeBrace = angles || parentheses || brackets || [":", "|", "&", "=", "=>"].includes(previous);
+      if (!typeBrace) return cursor;
+      cursor = matchingBrace(masked, cursor) - 1;
+    } else if (char === "<") angles++;
+    else if (char === ">" && angles && masked[cursor - 1] !== "=") angles--;
+    else if (char === "(") parentheses++;
+    else if (char === ")") parentheses--;
+    else if (char === "[") brackets++;
+    else if (char === "]") brackets--;
+    previous = char === ">" && masked[cursor - 1] === "=" ? "=>" : char;
+  }
+  return -1;
+}
+
 function addDefinitionCandidates(content: string, masked: string, candidates: Candidate[]): void {
-  const declaration = /(?:^|\n)[ \t]*(?:export[ \t]+(?:default[ \t]+)?)?(?:declare[ \t]+)?(?:abstract[ \t]+)?(?:async[ \t]+)?(class|function)[ \t]+([A-Za-z_$][\w$]*)\b[^;\n{]*(?:\{|;)/g;
+  const declaration = /(?:^|\n)[ \t]*(?:export[ \t]+(?:default[ \t]+)?)?(?:declare[ \t]+)?(?:abstract[ \t]+)?(?:async[ \t]+)?(class|function)[ \t]+([A-Za-z_$][\w$]*)\b/g;
   for (const match of masked.matchAll(declaration)) {
     const prefix = match[0].startsWith("\n") ? 1 : 0;
     const start = (match.index ?? 0) + prefix;
-    const open = masked.indexOf("{", start);
+    const open = match[1] === "function"
+      ? functionBodyOpen(masked, (match.index ?? 0) + match[0].length)
+      : masked.indexOf("{", start);
     const sameLineEnd = lineEnd(masked, start);
-    const end = open >= 0 && open <= sameLineEnd ? matchingBrace(masked, open) : sameLineEnd;
+    const end = open >= 0 && (match[1] === "function" || open <= sameLineEnd) ? matchingBrace(masked, open) : sameLineEnd;
     candidates.push({
       kind: match[1] === "class" ? "class" : "function",
       symbol: match[2]!,
@@ -380,6 +454,8 @@ function addTestCandidates(content: string, masked: string, path: string, candid
 }
 
 export class TypeScriptKnowledgeAdapter implements KnowledgeAdapter {
+  readonly createImportResolver = createJavaScriptImportResolver;
+  readonly projectManifests = JAVASCRIPT_PROJECT_MANIFESTS;
   readonly parserVersion = TYPESCRIPT_ADAPTER_VERSION;
   readonly extensionClaims = TYPESCRIPT_EXTENSION_CLAIMS;
 

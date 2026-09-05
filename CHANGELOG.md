@@ -6,6 +6,58 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Stop legacy basename import collisions from creating several definite edges. Preserve explicit namespace/package groups and custom resolver arrays; surface ambiguous choices separately.
+- Preserve TypeScript/JavaScript declarations and function bodies after expression-position regex literals containing quotes, backticks or braces. Keep division operators visible and preserve UTF-16 offsets for supplementary Unicode characters. The TypeScript adapter advances to v4; refresh existing code indexes and revalidate affected anchors.
+- Keep superseded anchor drift in the audit ledger while excluding it from page staleness using current claim status, including supersession after the last drift check. Active, ambiguous and contradicted claims still flag drift.
+
+### Added
+
+- Expose bounded `unresolvedImports` in code reference responses, with matched names, reasons and candidate paths. Sample twelve issues per indexed generation and four candidates per issue; mark truncation and snapshot scope explicitly. Task context warns about incomplete import resolution without inventing an indexing GAP. Keep per-language-family inventory counts internal and reuse adapter callbacks, memoization and cache admission; ordinary reference callers avoid copying diagnostics.
+- Add an import edge/diagnostic gate covering thirteen source/manifest fixtures, including partially resolvable groups, known ambiguities and negative edges; retain all existing quality thresholds.
+- Let adapters declare bounded project-manifest readers. Go now uses `go.mod` module identities and nested module boundaries where manifests are available; external imports with matching directory suffixes no longer create local edges in those projects. Invalid manifests return bounded reference diagnostics.
+- Refresh known manifests on reference queries without reparsing sources. Discover new nested manifests on index rebuild or `knowledge_code action="update"` for the manifest path. Parsed manifest retention participates in the existing per-project cache admission budget.
+- Resolve declared JS/TS `paths` and `baseUrl` from JSONC configs, with exact-pattern and longest-prefix precedence, ordered targets and one local `extends` level. Reuse the common confined reader for dependencies, refreshing changed references and pruning removed dependencies. Preserve relative option origins and child-map replacement.
+- Add bounded code impact to `knowledge_context`: repository source paths, paths named in the task and selected active anchored claims yield code roots, incoming candidates and related wiki links. Reuse the existing runtime through a read-only API; absent or invalid indexes yield a GAP without automatic rebuild. Full and compact responses expose the same resources.
+
+### Changed
+
+- Reuse stable bounded result selection for incoming references, preserving relation priority, path filters, test preference and ties.
+- Add manifest freshness, isolation and memory-admission regressions and a dedicated structure benchmark. Repair the project-precision fixture's obsolete source pointer without changing its questions, document bodies or expected results.
+- Make the project knowledge maintenance script explicitly supersede its own prior source revisions and verify every current claim link, while preserving and reporting older anchors that still show drift.
+- Batch whole-file reference targets through the existing postings and bounded selection. Share claim/page associations and one evidence-store read with drift; fit code disclosure using bounded prefix searches. Preserve query, source paths and page-type scope when suggesting a larger context budget, and avoid futile widening for fixed expansion limits.
+
+### Known limitations
+
+- Manifest support covers `go.mod`, `tsconfig.json` and `jsconfig.json`. JS/TS uses nearest-config boundaries; project references, include/exclude ownership, package/bundler resolution, remote/multiple/deeper inheritance remain outside the contract. `rootDir` does not create import identities. Manifest-free Go projects retain the previous suffix heuristic; `go.work`, `replace`, vendor and build tags are not resolved. Code impact inherits adapter limitations and uses the indexed generation, not a live call graph. Import diagnostics describe recognized ambiguity; unresolved imports do not distinguish all external, unsupported and unindexed cases. Custom resolvers remain responsible for their returned groups; single-match Ruby path guesses and C/C++ quote/angle handling remain limited.
+
+## [2.7.4] - 2026-09-05
+
+### Fixed
+
+- Include function bodies in TypeScript/JavaScript code resources with destructured parameters, inline object types and multiline signatures. The TypeScript adapter advances to v3 so existing files receive corrected ranges on refresh; the snapshot schema stays unchanged.
+- Preserve Markdown comments and headings inside backtick/tilde code fences, including unclosed fences and passage splits; invalidate older retrieval builders so unchanged pages restore corrected passages.
+- Resolve unambiguous relative JS/TS imports with explicit source extensions, runtime extension substitutions and directory indexes. Recognize uppercase extensions such as `.TS` while preserving exact path casing. Remove basename-only matching for JS/TS sources; package specifiers, aliases and ambiguous JS/TS modules remain unresolved.
+- Preserve Python module import references with unambiguous dotted/relative paths, `.py` or package `__init__.py` targets and `.pyi` fallback. Absolute imports search the repository root, importer directory and source root attested by a regular-package chain. This fixes the pre-release regressions that dropped non-JS/TS edges and then still missed Python `src/` imports.
+- Resolve realistic Java/Kotlin/PHP declarations, C# namespaces, Go package files regardless of filename, Rust crate/module paths and literal C/C++ header includes. These close gaps inherited from 2.7.3; includes do not manufacture edges to implementation twins.
+- Resolve supported LWC imports to Apex methods, schema declarations and local component bundles, preserving existing Apex/metadata reference and drift checks.
+- Include direct code-resource links and captured line ranges in synthesized knowledge pages when a claim has a verified code anchor. Claims without anchored code evidence remain free of fabricated references.
+- Preserve external-change notifications during reconciliation and targeted updates, and make workspace LRU ordering independent of clock ties and rollback.
+- Stop snapshot retries as soon as deletion is observed, reload recreated snapshots, and propagate filesystem failures instead of treating them as corrupt derived data.
+
+### Changed
+
+- Reuse validated code-query generations and lazy symbol/reference maps with independent per-project admission budgets. Document the 32 MiB estimate, workspace LRU cap, absence of TTL and distinction from measured heap/RSS.
+- Remove only a changed page's posting terms, bound file reconciliation to 64 concurrent checks, and use stable bounded result selection for code and lexical queries. Hoist query-invariant IDF while preserving scores, filters, tie order and the complete phrase-reranking pool.
+- Retain the bounded 2 MiB phrase cache and make its passage alignment guard explicit.
+- Let adapters build their own disposable import resolvers from indexed declarations and paths. Use one incoming import index, preserve custom-adapter fallback, and isolate cached rules by registry. The import refactor changes neither snapshot schema nor extraction versions.
+- Add reproducible update, reconciliation, query profiling, parity, project precision and stability workloads. Local evaluation reports both retrieved and displayed evidence, including false GAPs and heuristic adapter limits, without weakening existing quality gates.
+
+### Known limitations
+
+- Static import evidence is bounded by the indexed inventory. Go directory suffix matching does not verify `go.mod` or build tags; Rust conventions do not implement arbitrary `path`/`cfg`/re-export rules. Compiler include paths, dynamic imports, unindexed declarations and ambiguous targets remain unresolved. Ruby retains its legacy stem heuristic. Passing realistic fixtures is not universal language coverage.
+
 ## [2.7.3] - 2026-09-05
 
 ### Fixed

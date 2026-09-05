@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { atomicWriteText } from "./fs-service.js";
-import { readEvidenceIrStore } from "./ingestion/evidence-store.js";
+import { pagePathsByClaim, readEvidenceIrStore } from "./ingestion/evidence-store.js";
 import { withWikiFileLock } from "./lock-service.js";
 import { wikiMetaDir } from "./manifest-service.js";
 import { readFileSafe } from "./utils.js";
@@ -240,21 +240,6 @@ async function readCurrentCode(
   }
 }
 
-function pagePathsByClaim(store: Awaited<ReturnType<typeof readEvidenceIrStore>>): Map<string, string[]> {
-  const pages = new Map<string, Set<string>>();
-  const add = (claimId: string, pagePath: string | undefined): void => {
-    if (!pagePath) return;
-    const values = pages.get(claimId) ?? new Set<string>();
-    values.add(pagePath);
-    pages.set(claimId, values);
-  };
-  for (const synthesis of store.syntheses) {
-    for (const claimId of synthesis.claimIds) add(claimId, synthesis.pagePath);
-  }
-  for (const resolution of store.resolutions) add(resolution.claimId, resolution.targetPagePath);
-  return new Map([...pages].map(([claimId, values]) => [claimId, [...values].sort()]));
-}
-
 export async function detectCodeDrift(params: {
   repositoryRoot: string;
   wikiRoot: string;
@@ -383,10 +368,23 @@ export async function detectCodeDrift(params: {
   return { summary, entries };
 }
 
-export async function staleClaimsByPage(wikiRoot: string): Promise<Map<string, StaleClaimsForPage>> {
+export async function staleClaimsByPage(
+  wikiRoot: string,
+  readStore: () => ReturnType<typeof readEvidenceIrStore> = () => readEvidenceIrStore(wikiRoot)
+): Promise<Map<string, StaleClaimsForPage>> {
   const ledger = await readDriftLedger(wikiRoot);
-  const byPage = new Map<string, { claimIds: Set<string>; reason: Exclude<DriftVerdict, "fresh"> }>();
+  // Keep historical drift in the ledger, but reconcile its effect with current
+  // claim status: supersession may have happened after the last drift check.
+  // The common empty/fresh-ledger path does not read or retain the evidence IR.
+  const candidates = new Map<string, DriftLedgerEntry>();
   for (const entry of ledger.entries) {
+    if (entry.verdict !== "fresh" && entry.pagePaths.length > 0) candidates.set(entry.claimId, entry);
+  }
+  if (candidates.size === 0) return new Map();
+  const store = await readStore();
+  for (const claim of store.claims) if (claim.status === "superseded") candidates.delete(claim.id);
+  const byPage = new Map<string, { claimIds: Set<string>; reason: Exclude<DriftVerdict, "fresh"> }>();
+  for (const entry of candidates.values()) {
     if (entry.verdict === "fresh") continue;
     for (const pagePath of entry.pagePaths) {
       const state = byPage.get(pagePath) ?? { claimIds: new Set<string>(), reason: entry.verdict };

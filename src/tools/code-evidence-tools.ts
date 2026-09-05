@@ -134,18 +134,24 @@ export function registerCodeEvidenceTools(
         }
         if (action === "references") {
           if (!symbol_id) throw new Error("action=references requires symbol_id.");
-          const references = await index.references(symbol_id, options);
-          const summary = references.length === 0
+          const { references, manifestWarnings: warnings, importDiagnostics } = await index.referencesWithDiagnostics(symbol_id, options);
+          const manifestDiagnostics = warnings.length ? { manifestWarnings: warnings.slice(0, 12), manifestWarningCount: warnings.length } : {};
+          let summary = references.length === 0
             ? "No indexed incoming references matched."
             : references.map((reference) =>
                 `${reference.relation} | ${reference.source.qualifiedName} | ` +
                 `${reference.source.path}:${reference.source.range.startLine} | resource=${reference.resourceUri}`
               ).join("\n");
+          if (warnings.length) summary += `\nProject manifest warning(s): ${warnings.length}; ${warnings.slice(0, 12).map((warning) => `${warning.path}: ${warning.reason}`).join(", ")}.`;
+          if (importDiagnostics.unresolvedImports.length) summary +=
+            `\nImport diagnostics (indexed snapshot, not target-specific): ${importDiagnostics.unresolvedImports.length} examples` +
+            `${importDiagnostics.unresolvedImportsTruncated ? ", truncated" : ""}. Ambiguity requires a choice; unresolved may mean external, unsupported or absent from the index. Rebuilding alone may not resolve it.`;
           return {
             content: modern
               ? [{ type: "text" as const, text: summary }, ...references.map(linkForReference)]
               : [{ type: "text" as const, text: summary }],
-            structuredContent: { action, symbolId: symbol_id, references },
+            structuredContent: { action, symbolId: symbol_id, references, ...manifestDiagnostics,
+              ...(importDiagnostics.unresolvedImports.length ? importDiagnostics : {}) },
           };
         }
         if (action === "read") {

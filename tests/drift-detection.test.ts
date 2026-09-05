@@ -9,6 +9,7 @@ import { canonicalFixtureSha256 } from "../benchmarks/fixture-integrity.js";
 import { compactStructuredContext } from "../src/tools/context-tools.js";
 import { compileTaskContext } from "../src/context/task-context-compiler.js";
 import { codeResourceUri, PersistentCodeEvidenceIndex } from "../src/core/code-evidence/index.js";
+import { readCodeResource } from "../src/core/code-evidence/resource-reader.js";
 import { clearRuntimeWikiGraphs } from "../src/core/graph-runtime.js";
 import { invalidateWikiGraph } from "../src/core/graph-index.js";
 import {
@@ -17,6 +18,7 @@ import {
   evaluateCodeAnchor,
   normalizeRepositoryPath,
   readDriftLedger,
+  staleClaimsByPage,
 } from "../src/core/drift-detection.js";
 import { getWikiRoot, setWikiRoot } from "../src/core/paths.js";
 import { resolveEvidenceClaims } from "../src/core/ingestion/evidence-linker.js";
@@ -183,6 +185,37 @@ async function cleanupFixture(fixture: DriftFixture): Promise<void> {
   await fs.rm(fixture.root, { recursive: true, force: true });
 }
 
+test("retrieved knowledge pages expose anchored code resources only for claims with code evidence", async () => {
+  const fixture = await createFixture();
+  try {
+    // Direct core synthesis callers must invalidate derived state, as the tool finalizer does.
+    clearRetrievalIndexes();
+    clearRuntimeWikiGraphs();
+    invalidateWikiGraph(fixture.wikiRoot);
+    const context = await compileTaskContext({
+      wikiRoot: fixture.wikiRoot, intent: "understand",
+      objective: "Find the invoice retry limit implementation", query: "invoiceRetryLimit retry limit",
+      maxEvidence: 8, heuristicTokenBudget: 4_000,
+    });
+    assert.ok(context.evidence.some((evidence) => evidence.path === fixture.servicePage));
+    const page = await fs.readFile(path.join(fixture.wikiRoot, fixture.servicePage), "utf8");
+    const uri = /Code evidence: \[[^\n]*\]\(<(code:\/\/[^>]+)>\)/u.exec(page)?.[1];
+    assert.ok(uri, "the retrieved page must contain a directly readable code resource");
+    const code = await readCodeResource({ repositoryRoot: fixture.root, wikiRoot: fixture.wikiRoot, resourceUri: uri });
+    assert.equal(code.symbol, "invoiceRetryLimit");
+    assert.match(code.text, /return 3/u);
+    assert.ok(page.includes(`src/service.ts:${code.startLine}-${code.endLine}`));
+    const plain = await fs.readFile(path.join(fixture.wikiRoot, "concepts/InvoiceOperations.md"), "utf8");
+    const unresolved = await fs.readFile(path.join(fixture.wikiRoot, "implementations/FutureInvoice.md"), "utf8");
+    assert.equal(plain.includes("Code evidence:"), false);
+    assert.equal(unresolved.includes("Code evidence:"), false);
+    await applyEvidenceSynthesis({ wikiRoot: fixture.wikiRoot });
+    assert.equal(await fs.readFile(path.join(fixture.wikiRoot, fixture.servicePage), "utf8"), page);
+  } finally {
+    await cleanupFixture(fixture);
+  }
+});
+
 type AgentResult = {
   structuredContent?: Record<string, unknown>;
 };
@@ -335,7 +368,7 @@ test("code anchors detect substantive drift without formatting false positives",
     const parserOnly = evaluateCodeAnchor({
       anchor: fixture.anchor,
       content: fixture.serviceContent,
-      parserVersion: "typescript-javascript-deterministic-v3",
+      parserVersion: `${fixture.anchor.parserVersion}-next`,
     });
     assert.deepEqual(parserOnly, {
       verdict: "fresh",
@@ -347,6 +380,63 @@ test("code anchors detect substantive drift without formatting false positives",
   } finally {
     await cleanupFixture(fixture);
   }
+});
+
+test("superseded anchors remain auditable without making updated knowledge stale", async () => {
+  const fixture = await createFixture();
+  try {
+    await fs.writeFile(fixture.servicePath, fixture.serviceContent.replace("return 3", "return 5"));
+    await detectCodeDrift({ repositoryRoot: fixture.root, wikiRoot: fixture.wikiRoot });
+    assert.deepEqual((await staleClaimsByPage(fixture.wikiRoot)).get(fixture.servicePage)?.claimIds, [fixture.serviceClaimId]);
+    const oldLedger = await fs.readFile(driftLedgerFile(fixture.wikiRoot), "utf8");
+    const index = new PersistentCodeEvidenceIndex({ repositoryRoot: fixture.root, wikiRoot: fixture.wikiRoot });
+    await index.updateFile("src/service.ts");
+    const hit = (await index.symbol("invoiceRetryLimit"))[0]!;
+    const sourceUri = "docs/normalized/invoice-revision.md";
+    const sourceContent = "The invoice retry limit is now five, implemented by invoiceRetryLimit.";
+    const plan = await sourceCompilePlan({ wikiRoot: fixture.wikiRoot, sourceUri, content: sourceContent });
+    const recorded = await recordEvidenceClaims({
+      wikiRoot: fixture.wikiRoot, sourceUri, sourceContent, segmentId: plan.ledger.segments[0]!.id,
+      claims: [{
+        text: sourceContent, kind: "behavior", origin: "explicit", confidence: 1,
+        target: { pagePath: fixture.servicePage, pageTitle: "Invoice retry implementation", pageType: "implementation", codeResourceUri: codeResourceUri(hit.fragment) },
+        relations: [{ type: "supersedes", targetClaimId: fixture.serviceClaimId }],
+      }],
+    });
+    await resolveEvidenceClaims({ wikiRoot: fixture.wikiRoot });
+    await applyEvidenceSynthesis({ wikiRoot: fixture.wikiRoot });
+    assert.equal((await readEvidenceIrStore(fixture.wikiRoot)).claims.find((claim) => claim.id === fixture.serviceClaimId)?.status, "superseded");
+    // Supersession takes effect even before the next drift check, with no ledger rewrite.
+    assert.equal((await staleClaimsByPage(fixture.wikiRoot)).has(fixture.servicePage), false);
+    assert.equal(await fs.readFile(driftLedgerFile(fixture.wikiRoot), "utf8"), oldLedger);
+    const checked = await detectCodeDrift({ repositoryRoot: fixture.root, wikiRoot: fixture.wikiRoot });
+    assert.equal(checked.entries.find((entry) => entry.claimId === fixture.serviceClaimId)?.verdict, "drift_suspected");
+    assert.deepEqual(checked.entries.find((entry) => entry.claimId === fixture.serviceClaimId)?.pagePaths, [fixture.servicePage]);
+    assert.equal(checked.entries.find((entry) => entry.claimId === recorded.claims[0]!.id)?.verdict, "fresh");
+    clearRetrievalIndexes();
+    clearRuntimeWikiGraphs();
+    invalidateWikiGraph(fixture.wikiRoot);
+    const context = await compileTaskContext({
+      wikiRoot: fixture.wikiRoot, intent: "understand", objective: "Find the invoice retry limit implementation",
+      query: "invoiceRetryLimit retry limit", maxEvidence: 8, heuristicTokenBudget: 4_000,
+    });
+    const evidence = context.evidence.find((entry) => entry.path === fixture.servicePage);
+    assert.ok(evidence);
+    assert.notEqual(evidence.stale, true);
+    assert.equal(context.gaps.some((gap) => gap.kind === "stale_evidence"), false);
+    // Current claims still cause stale evidence when their implementation changes.
+    await fs.writeFile(fixture.servicePath, fixture.serviceContent.replace("return 3", "return 8"));
+    await detectCodeDrift({ repositoryRoot: fixture.root, wikiRoot: fixture.wikiRoot });
+    assert.deepEqual((await staleClaimsByPage(fixture.wikiRoot)).get(fixture.servicePage)?.claimIds, [recorded.claims[0]!.id]);
+    // Contradicted, ambiguous or reactivated history is not silently suppressed.
+    for (const status of ["contradicted", "ambiguous", "active"] as const) {
+      await mutateEvidenceIrStore(fixture.wikiRoot, async (store) => {
+        store.claims.find((claim) => claim.id === fixture.serviceClaimId)!.status = status;
+      });
+      assert.deepEqual((await staleClaimsByPage(fixture.wikiRoot)).get(fixture.servicePage)?.claimIds,
+        [fixture.serviceClaimId, recorded.claims[0]!.id].sort());
+    }
+  } finally { await cleanupFixture(fixture); }
 });
 
 test("path-scoped drift checks replace only their slice of the derived ledger", async () => {

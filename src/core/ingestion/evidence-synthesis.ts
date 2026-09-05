@@ -7,6 +7,7 @@ import { frontmatterArray, parseFrontmatter, readFileSafe } from "../utils.js";
 import { hasErrors, validateWikiPageContent } from "../wiki-validation.js";
 import { readEvidenceIrStore, mutateEvidenceIrStore } from "./evidence-store.js";
 import type { EvidenceClaim } from "./evidence-claim.js";
+import { canonicalCodeResourceUri, parseCodeResourceUri } from "../code-evidence/resource-uri.js";
 
 const BLOCK_START = "<!-- knowledge-rail:evidence-ir:start -->";
 const BLOCK_END = "<!-- knowledge-rail:evidence-ir:end -->";
@@ -38,6 +39,15 @@ function renderClaim(claim: EvidenceClaim): string[] {
     claim.kind === "inference" || claim.kind === "hypothesis"
     ? `> Epistemic state: **${claim.origin}** — this is not an explicit source fact.`
     : `> Epistemic state: **${claim.origin}**.`;
+  const code: string[] = [];
+  if (claim.codeAnchor && claim.target?.codeResourceUri) {
+    const uri = canonicalCodeResourceUri(claim.target.codeResourceUri);
+    const anchor = claim.codeAnchor;
+    if (parseCodeResourceUri(uri).path === anchor.path) {
+      const label = `${anchor.path}:${anchor.startLine}-${anchor.endLine}`.replace(/[\\[\]]/gu, "\\$&").replace(/[\r\n]/gu, " ");
+      code.push(`> Code evidence: [${label}](<${uri}>)`);
+    }
+  }
   return [
     `### ${claim.kind}: ${claim.id}`,
     "",
@@ -45,6 +55,7 @@ function renderClaim(claim: EvidenceClaim): string[] {
     "",
     epistemic,
     `> Provenance: \`${claim.sourceUri}#${claim.segmentId}\` · confidence ${claim.confidence.toFixed(3)} · status ${claim.status}`,
+    ...code,
   ];
 }
 

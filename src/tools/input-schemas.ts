@@ -48,7 +48,9 @@ export const EvidenceClaimInputSchema = z.object({
     affiliation: z.enum(["client", "internal", "partner", "unknown"]).optional().describe(
       "Source-declared affiliation. Domain comparison overrides client/internal when possible; partner must be explicit."
     ),
-    code_resource_uri: z.string().startsWith("code://repo/").max(4_096).optional(),
+    code_resource_uri: z.string().startsWith("code://repo/").max(4_096).optional().describe(
+      "For claims about implemented behavior, use an indexed knowledge_code resource URI. A verified anchor produces a direct code link on the knowledge page; omit for claims without code evidence."
+    ),
   }).optional(),
   relations: z.array(z.object({
     type: z.enum(RELATION_TYPES),

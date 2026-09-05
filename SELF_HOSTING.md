@@ -87,3 +87,37 @@ Official background:
 - [MCP 2026-07-28 Streamable HTTP](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http)
 - [MCP 2026-07-28 authorization](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization)
 - [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
+
+
+## First start after upgrading to 2.7.4
+
+The first wiki query after upgrading rebuilds the lexical retrieval index from
+canonical Markdown because the passage builder changed. In the local synthetic
+100,000-page benchmark this took about 14 seconds; allow for that one-time delay
+before treating the first request as stalled. Subsequent starts reuse the new
+checkpoint when persistence is enabled. Read-only operation without persisting
+the replacement checkpoint repeats the rebuild in later processes. Canonical
+Markdown and code-evidence snapshots do not require migration.
+
+The TypeScript/JavaScript adapter also advances to v3 to correct function ranges
+with destructured or object-typed parameters. The next code-index refresh reparses
+files owned by that adapter, including its LWC metadata companions; other language
+files remain reusable. Existing code anchors retain their recorded parser version
+and may need recapture after a drift check. The import resolver refactor itself
+does not invalidate persisted files.
+
+## Memory and workspace lifetime
+
+Code-query caches have an independent estimated admission budget of 32 MiB per
+project. The process retains up to 32 workspace states by default; set
+`KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP` to a positive integer to change that LRU cap.
+At the default cap, estimated admissions can sum to 1,024 MiB. This is not reserved
+memory or a limit on measured heap/RSS: uncached large snapshots, in-flight work,
+result copies and other indexes consume additional memory. Multiple server
+processes each have their own state.
+
+There is no idle TTL. Internal writes invalidate the affected generation;
+external changes are checked on the next query. Workspace release and automatic
+LRU eviction discard its disposable state. An idle workspace does not notice an
+external edit until another query. See the [cache measurements and lifecycle](benchmarks/README.md#code-evidence-queries)
+for the distinction between admission estimates, heap and RSS.

@@ -1,5 +1,5 @@
 export const CODE_EVIDENCE_INDEX_VERSION = 2 as const;
-export const TYPESCRIPT_ADAPTER_VERSION = "typescript-javascript-deterministic-v2";
+export const TYPESCRIPT_ADAPTER_VERSION = "typescript-javascript-deterministic-v4";
 export const JAVA_ADAPTER_VERSION = "java-deterministic-v1";
 export const APEX_ADAPTER_VERSION = "apex-deterministic-v1";
 export const CSHARP_ADAPTER_VERSION = "csharp-deterministic-v1";
@@ -70,7 +70,91 @@ export interface KnowledgeAdapter {
   readonly parserVersion: string;
   supports(source: Pick<CodeSource, "path">): boolean;
   extract(source: CodeSource): Promise<KnowledgeFragment[]>;
+  /** Build disposable language-specific lookup structures once per query generation. */
+  createImportResolver?(context: CodeImportContext): CodeImportResolver;
+  /** Declarative manifests needed by this adapter; read as bounded text, never executed. */
+  readonly projectManifests?: readonly ProjectManifestSpec[];
 }
+
+export interface ProjectManifestSpec {
+  readonly fileName: string;
+  /** Return compact parsed data. Throw for unsupported or malformed declarations. */
+  parse(content: string): unknown;
+  /** Optional direct dependencies, parsed with this spec. Repository-relative
+   * paths only; the shared reader follows one level, never a recursive graph. */
+  references?(value: unknown, manifestPath: string): readonly string[];
+}
+
+export interface ProjectManifest {
+  readonly path: string;
+  readonly fileName: string;
+  readonly value?: unknown;
+  readonly warning?: string;
+  readonly references?: readonly string[];
+}
+
+export interface ProjectStructure {
+  readonly identity: string;
+  readonly manifests: ReadonlyMap<string, ProjectManifest>;
+  readonly warnings: readonly { path: string; reason: string }[];
+}
+
+export interface CodeImportContext {
+  readonly paths: ReadonlySet<string>;
+  readonly fragmentsByPath: ReadonlyMap<string, readonly KnowledgeFragment[]>;
+  readonly structure?: ProjectStructure;
+  /** Synchronous, generation-local diagnostics. Optional for custom adapters;
+   * report individual failed members of a group without dropping valid siblings. */
+  readonly reportIssue?: (issue: CodeImportIssue) => void;
+}
+
+export interface CodeImportIssue {
+  status: "ambiguous" | "unresolved";
+  matchedName: string;
+  candidates?: ReadonlySet<string> | readonly string[];
+  reason?: "multiple_matches" | "competing_patterns" | "not_indexed_or_unsupported";
+}
+export interface UnresolvedCodeImport {
+  sourcePath: string;
+  specifier: string;
+  matchedName: string;
+  status: CodeImportIssue["status"];
+  reason: NonNullable<CodeImportIssue["reason"]>;
+  candidates: string[];
+  candidateCount: number;
+  textTruncated?: boolean;
+}
+export interface CodeImportDiagnostics {
+  unresolvedImports: UnresolvedCodeImport[];
+  unresolvedImportsTruncated: boolean;
+  /** These are sampled across the generation, not attributed to the queried target. */
+  unresolvedImportsScope: "indexed_snapshot";
+}
+export interface CodeImportResolutionCounts {
+  resolved: number;
+  ambiguous: number;
+  unresolved: number;
+  /** Unambiguous members retained in an otherwise incomplete grouped specifier. */
+  partial: number;
+}
+
+export interface CodeImpactTarget { path: string; fragmentId?: string }
+export interface CodeImpactResult {
+  generatedAt: string;
+  roots: Array<{ requested: CodeImpactTarget; fragment: KnowledgeFragment; references: CodeReference[] }>;
+  unresolved: CodeImpactTarget[];
+  omittedRoots: number;
+  relationsTruncated: boolean;
+  manifestWarnings: ProjectStructure["warnings"];
+  importDiagnostics?: CodeImportDiagnostics;
+}
+
+export const CODE_IMPACT_MAX_ROOTS = 3;
+export const CODE_IMPACT_REFERENCES_PER_ROOT = 12;
+export const CODE_IMPACT_MAX_REFERENCES = CODE_IMPACT_MAX_ROOTS * CODE_IMPACT_REFERENCES_PER_ROOT;
+
+/** Return verified file paths. Multiple paths may represent an explicit package/namespace import. */
+export type CodeImportResolver = (sourcePath: string, specifier: string) => readonly string[];
 
 export interface CodeEvidenceFileRecord {
   path: string;

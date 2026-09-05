@@ -16,6 +16,7 @@ const gates = [
   "eval:editorial:gate",
   "eval:documents:gate",
   "eval:tool-surface:gate",
+  "eval:imports:gate",
 ];
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";

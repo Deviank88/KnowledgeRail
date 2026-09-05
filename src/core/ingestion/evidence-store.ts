@@ -46,6 +46,22 @@ export interface EvidenceIrStore {
   syntheses: EvidenceSynthesisRecord[];
 }
 
+/** Canonical page associations shared by drift and bounded code impact. */
+export function pagePathsByClaim(store: EvidenceIrStore): Map<string, string[]> {
+  const pages = new Map<string, Set<string>>();
+  const add = (claimId: string, pagePath: string | undefined): void => {
+    if (!pagePath) return;
+    const values = pages.get(claimId) ?? new Set<string>();
+    values.add(pagePath);
+    pages.set(claimId, values);
+  };
+  for (const synthesis of store.syntheses) {
+    for (const claimId of synthesis.claimIds) add(claimId, synthesis.pagePath);
+  }
+  for (const resolution of store.resolutions) add(resolution.claimId, resolution.targetPagePath);
+  return new Map([...pages].map(([claimId, values]) => [claimId, [...values].sort()]));
+}
+
 const DISPOSITIONS = new Set<EvidenceLinkDisposition>([
   "candidate_update",
   "candidate_new_page",

@@ -101,6 +101,7 @@ try {
     "server.json",
     "assets/knowledge-rail-logo.png",
     "docs/guides/claude-code-hooks.md",
+    "docs/guides/code-evidence-retrieval.md",
   ]) {
     if (!packedPaths.has(required)) throw new Error(`Packed artifact is missing ${required}.`);
   }
@@ -111,6 +112,7 @@ try {
   }
   const publicDocs = new Set([
     "docs/guides/claude-code-hooks.md",
+    "docs/guides/code-evidence-retrieval.md",
   ]);
   const unexpectedDocs = [...packedPaths].filter((entry) => entry.startsWith("docs/") && !publicDocs.has(entry));
   if (unexpectedDocs.length > 0) {

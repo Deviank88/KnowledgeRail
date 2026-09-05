@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "scope": "Hand-authored source/manifest fixtures with explicit import-edge oracles; not a population-wide language benchmark.",
+  "cases": [
+    {
+      "id": "kotlin-alias-duplicate-declarations",
+      "files": {
+        "one/Misc.kt": "package acme\nclass Order {}",
+        "two/Other.kt": "package acme\nclass Order {}",
+        "unique/Unrelated.kt": "package acme\nfun place() {}",
+        "use.kt": "import acme.Order as Invoice\nimport acme.place\nfun run() {}"
+      },
+      "edges": [["use.kt", "unique/Unrelated.kt"]],
+      "issues": [["use.kt", "acme.Order", "ambiguous"]]
+    },
+    {
+      "id": "lwc-virtual-import-duplicate-apex-method",
+      "files": {
+        "one/Orders.cls": "public class Orders {\n @AuraEnabled\n public static void load() {}\n}",
+        "two/Orders.cls": "public class Orders {\n @AuraEnabled\n public static void load() {}\n}",
+        "odd/Billing.cls": "public class Billing {\n @AuraEnabled\n public static void save() {}\n}",
+        "use.js": "import load from '@salesforce/apex/Orders.load';\nimport save from '@salesforce/apex/Billing.save';"
+      },
+      "edges": [["use.js", "odd/Billing.cls"]],
+      "issues": [["use.js", "@salesforce/apex/Orders.load", "ambiguous"]]
+    },
+    {
+      "id": "java-declared-group-and-duplicate-type",
+      "files": {
+        "odd/One.java": "package acme;\npublic class One {}",
+        "a/Dup.java": "package acme;\npublic class Dup {}",
+        "b/Dup.java": "package acme;\npublic class Dup {}",
+        "Group.java": "import acme.*;\npublic class Group {}",
+        "Single.java": "import acme.Dup;\npublic class Single {}"
+      },
+      "edges": [["Group.java", "odd/One.java"], ["Group.java", "a/Dup.java"], ["Group.java", "b/Dup.java"]],
+      "issues": [["Single.java", "acme.Dup", "ambiguous"]]
+    },
+    {
+      "id": "csharp-namespace-and-ambiguous-alias",
+      "files": {
+        "odd/A.cs": "namespace Acme;\npublic class A {}",
+        "odd/B.cs": "namespace Acme;\npublic class B {}",
+        "a/Dup.cs": "namespace Other;\npublic class Dup {}",
+        "b/Dup.cs": "namespace Other;\npublic class Dup {}",
+        "Consumer.cs": "using Acme;\nusing Alias = Other.Dup;\npublic class Consumer {}"
+      },
+      "edges": [["Consumer.cs", "odd/A.cs"], ["Consumer.cs", "odd/B.cs"]],
+      "issues": [["Consumer.cs", "Other.Dup", "ambiguous"]]
+    },
+    {
+      "id": "php-partial-group-keeps-valid-member",
+      "files": {
+        "A.php": "<?php\nnamespace Acme;\nclass A {}",
+        "a/Dup.php": "<?php\nnamespace Acme;\nclass Dup {}",
+        "b/Dup.php": "<?php\nnamespace Acme;\nclass Dup {}",
+        "Consumer.php": "<?php\nuse Acme\\{A, Dup, Missing};\nclass Consumer {}"
+      },
+      "edges": [["Consumer.php", "A.php"]],
+      "issues": [["Consumer.php", "Acme\\Dup", "ambiguous"], ["Consumer.php", "Acme\\Missing", "unresolved"]]
+    },
+    {
+      "id": "python-root-conflict-and-relative",
+      "files": {
+        "orders.py": "value = 1\n",
+        "odd/orders.py": "value = 2\n",
+        "odd/use.py": "import orders\nfrom .orders import value\nimport external_vendor\n"
+      },
+      "edges": [["odd/use.py", "odd/orders.py"]],
+      "issues": [["odd/use.py", "orders", "ambiguous"], ["odd/use.py", "external_vendor", "unresolved"]]
+    },
+    {
+      "id": "javascript-relative-ambiguity-and-explicit-extension",
+      "files": {
+        "unit.ts": "export const value = 1;",
+        "unit.tsx": "export const value = 2;",
+        "use.ts": "import './unit'; import './unit.ts'; import 'node:fs';"
+      },
+      "edges": [["use.ts", "unit.ts"]],
+      "issues": [["use.ts", "./unit", "ambiguous"], ["use.ts", "node:fs", "unresolved"]]
+    },
+    {
+      "id": "javascript-manifest-ties-and-ordered-fallback",
+      "files": {
+        "tsconfig.json": "{\"compilerOptions\":{\"paths\":{\"@tie/*\":[\"./one.ts\"],\"@tie/*end\":[\"./two.ts\"],\"@fallback\":[\"./missing\",\"./one.ts\"],\"@blocked\":[\"./amb\",\"./two.ts\"]}}}",
+        "one.ts": "export const value = 1;",
+        "two.ts": "export const value = 2;",
+        "amb.ts": "export const value = 3;",
+        "amb.tsx": "export const value = 4;",
+        "use.ts": "import '@tie/Thingend'; import '@fallback'; import '@blocked';"
+      },
+      "edges": [["use.ts", "one.ts"]],
+      "issues": [["use.ts", "@tie/*, @tie/*end", "ambiguous"], ["use.ts", "@blocked", "ambiguous"]]
+    },
+    {
+      "id": "go-declared-package-multiple-files",
+      "files": {
+        "go.mod": "module example.com/app\n",
+        "strange/orders/a.go": "package orders\nfunc A() {}",
+        "strange/orders/b.go": "package orders\nfunc B() {}",
+        "main.go": "package main\nimport (\n\"example.com/app/strange/orders\"\n\"external.com/strange/orders\"\n)"
+      },
+      "edges": [["main.go", "strange/orders/a.go"], ["main.go", "strange/orders/b.go"]],
+      "issues": [["main.go", "external.com/strange/orders", "unresolved"]]
+    },
+    {
+      "id": "go-legacy-suffix-collision",
+      "files": {
+        "one/internal/orders/a.go": "package orders\nfunc A() {}",
+        "two/internal/orders/b.go": "package orders\nfunc B() {}",
+        "main.go": "package main\nimport \"example.com/internal/orders\""
+      },
+      "edges": [],
+      "issues": [["main.go", "internal/orders", "ambiguous"]]
+    },
+    {
+      "id": "rust-partial-group-and-module-collision",
+      "files": {
+        "lib.rs": "use crate::{good::Good, dup::Dup};\npub fn run() {}",
+        "good.rs": "pub struct Good {}",
+        "dup.rs": "pub struct Dup {}",
+        "dup/mod.rs": "pub struct Dup {}"
+      },
+      "edges": [["lib.rs", "good.rs"]],
+      "issues": [["lib.rs", "crate::dup::Dup", "ambiguous"]]
+    },
+    {
+      "id": "cpp-literal-header-conflict-no-twin",
+      "files": {
+        "unit.h": "int value();",
+        "odd/unit.h": "int value();",
+        "odd/unit.cpp": "int value() { return 1; }",
+        "odd/use.cpp": "#include \"unit.h\"\nint run() { return 0; }"
+      },
+      "edges": [],
+      "issues": [["odd/use.cpp", "unit.h", "ambiguous"]]
+    },
+    {
+      "id": "ruby-legacy-stem-collision",
+      "files": {
+        "one/orders.rb": "class Orders\nend\n",
+        "two/orders.rb": "class Orders\nend\n",
+        "use.rb": "require 'orders'\n"
+      },
+      "edges": [],
+      "issues": [["use.rb", "orders", "ambiguous"]]
+    }
+  ]
+}

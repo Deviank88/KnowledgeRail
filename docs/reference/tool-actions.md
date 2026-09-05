@@ -160,18 +160,18 @@ Actions/modes: `list`, `read`, `normalize`.
 
 Source ingestion, claims, coverage, recovery.
 
-Each claim contains `text`, `kind`, `origin`, and `confidence`, plus optional `target` and `relations`. A stakeholder target supports `entity_key`, `page_path`, `page_title`, `page_type`, `role`, `organization`, `email_domain`, `affiliation`, and `code_resource_uri`. `email_domain` is domain-only; `client`/`internal` may be source-declared when comparison is unavailable, while `partner` must be explicit.
+Each claim contains `text`, `kind`, `origin`, and `confidence`, plus optional `target` and `relations`. A target supports `page_path`, `page_title`, `page_type`, and `code_resource_uri`: use an indexed knowledge_code resource when the claim explains code, so synthesis can show a verified code link and line range; omit it for claims without code evidence. Stakeholders additionally support `entity_key`, `role`, `organization`, `email_domain`, and `affiliation`. `email_domain` is domain-only; `client`/`internal` may be source-declared when comparison is unavailable, while `partner` must be explicit.
 
 Actions/modes: `start`, `next`, `apply_claims`, `record_segment`, `source_status`, `evidence_status`, `finalize`, `report`, `record_recovery`, `resolve_recovery`.
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
 |---|---|---:|---|---|---|
-| `action` | `start` &#124; `next` &#124; `apply_claims` &#124; `record_segment` &#124; `source_status` &#124; `evidence_status` &#124; `finalize` &#124; `report` &#124; `record_recovery` &#124; `resolve_recovery` | yes | — | — | start=begin;next=segment;apply_claims=integrate claims;record_segment=classify;source_status=coverage;evidence_status=debt;finalize=close;report=drafts;record_recovery=track;resolve_recovery=resolve. |
+| `action` | `start` &#124; `next` &#124; `apply_claims` &#124; `record_segment` &#124; `source_status` &#124; `evidence_status` &#124; `finalize` &#124; `report` &#124; `record_recovery` &#124; `resolve_recovery` | yes | — | — | start=begin;next=read segment;apply_claims=integrate;record_segment=classify;source_status=coverage;evidence_status=debt;report=drafts. |
 | `normalized_filename` | string | no | — | — | — |
 | `max_chars` | integer | no | `12000` | ≥ 1; ≤ 50000 | — |
 | `segment_max_chars` | integer | no | — | ≥ 256; ≤ 50000 | — |
 | `segment_id` | string | no | — | — | — |
-| `claims` | array<object> | no | — | items ≥ 1 | Stakeholder target: entity_key,page_path,page_title,page_type,role,organization,email_domain,affiliation. |
+| `claims` | array<object> | no | — | items ≥ 1 | target: page_path,page_title,page_type; code_resource_uri=knowledge_code URI for code claims. Stakeholders: entity_key,role,organization,email_domain,affiliation. |
 | `segment_status` | `irrelevant` &#124; `unresolved` &#124; `legacy_unverified` | no | — | — | — |
 | `evidence_refs` | array<string> | no | — | — | — |
 | `page_refs` | array<string> | no | — | — | — |

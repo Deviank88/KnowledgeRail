@@ -2,6 +2,9 @@ import * as fs from "node:fs/promises";
 import { watch, type FSWatcher, type Stats } from "node:fs";
 import * as nodePath from "node:path";
 import { performance } from "node:perf_hooks";
+import { TopResults } from "./top-results.js";
+import { mapConcurrent } from "./concurrent-map.js";
+import { indexedTermsForRecord } from "./retrieval-terms.js";
 import { atomicWriteText } from "./fs-service.js";
 import { withKeyedLock } from "./lock-service.js";
 import {
@@ -26,7 +29,6 @@ import { normalizeSearchText, tokenizeSearchText, type RetrievalProfile } from "
 import {
   orderedWordBigrams,
   scoreBigramRerankCandidate,
-  scoreOrderedPhraseSegments,
   surfacePhraseTokens,
 } from "./phrase-scoring.js";
 import {
@@ -52,6 +54,15 @@ import {
   type RetrievalPosting,
 } from "./retrieval-checkpoint.js";
 
+export { indexedTermsForRecord } from "./retrieval-terms.js";
+
+interface CachedPhraseBigrams {
+  record: WeakRef<WikiPageRecord>;
+  title: ReadonlySet<string>;
+  passages: ReadonlyArray<ReadonlySet<string>>;
+  estimatedBytes: number;
+}
+
 interface IndexState extends RetrievalCheckpointData {
   records: Map<string, WikiPageRecord>;
   postings: Map<string, Map<string, RetrievalPosting>>;
@@ -76,6 +87,8 @@ interface IndexState extends RetrievalCheckpointData {
   changedRecords: number;
   snapshotLoadMs: number;
   verificationMs: number;
+  phraseCache: Map<string, CachedPhraseBigrams>;
+  phraseCacheBytes: number;
   refreshPromise?: Promise<IndexState>;
   persistencePromise?: Promise<void>;
   watcher?: FSWatcher;
@@ -141,6 +154,8 @@ export interface PhraseRerankDiagnostics {
 
 const states = new Map<string, IndexState>();
 const passageTokenCache = new WeakMap<WikiPageRecord, ReadonlyArray<ReadonlySet<string>>>();
+// A deterministic admission budget, not a promise about V8's exact heap layout.
+const MAX_PHRASE_CACHE_ESTIMATED_BYTES = 2 * 1024 * 1024;
 const DEFAULT_REFRESH_MS = 2_000;
 const DEFAULT_RECONCILIATION_MS = 60_000;
 const DELTA_COMPACT_COUNT = 100;
@@ -197,6 +212,8 @@ function emptyState(): IndexState {
     changedRecords: 0,
     snapshotLoadMs: 0,
     verificationMs: 0,
+    phraseCache: new Map(),
+    phraseCacheBytes: 0,
   };
 }
 
@@ -241,36 +258,6 @@ function stateFor(wikiRoot: string): IndexState {
     touchWorkspaceState(root);
   }
   return state;
-}
-
-function countTerms(text: string): Map<string, number> {
-  const result = new Map<string, number>();
-  const normalized = normalizeSearchText(text);
-  for (const token of normalized.match(/\/?[\p{L}\p{N}][\p{L}\p{N}_./:#-]*/gu) ?? []) {
-    result.set(token, (result.get(token) ?? 0) + 1);
-    for (const part of token.split(/[_./:#-]+/).filter((value) => value.length >= 2)) {
-      if (part !== token) result.set(part, (result.get(part) ?? 0) + 1);
-    }
-  }
-  return result;
-}
-
-export function indexedTermsForRecord(record: WikiPageRecord): IndexedTermTuple[] {
-  const title = countTerms(`${record.title} ${record.aliases.join(" ")}`);
-  const metadata = countTerms([
-    record.type,
-    record.tags.join(" "),
-    record.sources.join(" "),
-    record.requestId ?? "",
-    record.client ?? "",
-    record.project ?? "",
-    record.path,
-    record.passages.map((passage) => passage.heading).join(" "),
-  ].join(" "));
-  const body = countTerms(record.body);
-  return [...new Set([...title.keys(), ...metadata.keys(), ...body.keys()])]
-    .sort((left, right) => left < right ? -1 : left > right ? 1 : 0)
-    .map((term) => [term, body.get(term) ?? 0, title.get(term) ?? 0, metadata.get(term) ?? 0]);
 }
 
 function metadataFromStat(stat: Stats): RetrievalFileMetadata {
@@ -478,10 +465,10 @@ async function reconcileRetrievalIndex(
   const paths = await listWikiPagePaths(wikiRoot, { strict: true });
   const seen = new Set(paths);
   const removed = [...state.records.keys()].filter((existing) => !seen.has(existing));
-  const stats = await Promise.all(paths.map(async (relPath) => {
+  const stats = await mapConcurrent(paths, 64, async (relPath) => {
     const stat = await fs.stat(await resolveRealWithin(wikiRoot, relPath));
     return { relPath, stat, metadata: metadataFromStat(stat) };
-  }));
+  });
   const updates: Array<{
     relPath: string;
     record: WikiPageRecord;
@@ -527,7 +514,6 @@ async function reconcileRetrievalIndex(
     state.persistenceDirty = true;
   }
   state.lastScanMs = Date.now();
-  state.dirty = false;
   state.verificationMode = verificationMode;
   state.reusedRecords = reusedRecords;
   state.changedRecords = contentChanges;
@@ -587,7 +573,15 @@ export async function refreshRetrievalIndex(
       const verificationMode = configuredVerificationMode(options.verificationMode);
       const integrityUpgrade = verificationMode === "content" && state.verificationMode !== "content";
       if (options.force || state.dirty || fallbackDue || integrityUpgrade) {
-        await reconcileRetrievalIndex(wikiRoot, state, verificationMode);
+        // Consume only notifications received before this scan. A watcher event
+        // during its awaits must remain pending for the next reconciliation.
+        state.dirty = false;
+        try {
+          await reconcileRetrievalIndex(wikiRoot, state, verificationMode);
+        } catch (error) {
+          state.dirty = true;
+          throw error;
+        }
       }
       return state;
     })().finally(() => {
@@ -773,8 +767,8 @@ async function updateRetrievalPathsLocked(
     state.lastScanMs = 0;
     throw error;
   }
-  state.lastScanMs = Date.now();
-  state.dirty = false;
+  // A path-scoped update proves nothing about the freshness of other pages.
+  // Preserve pending notifications and the deadline of the last full scan.
   if (newRevision !== baseRevision) state.generation++;
 }
 
@@ -798,7 +792,40 @@ function passageTokens(record: WikiPageRecord): ReadonlyArray<ReadonlySet<string
   return tokens;
 }
 
+function phraseBigrams(state: IndexState, record: WikiPageRecord): CachedPhraseBigrams {
+  const cached = state.phraseCache.get(record.path);
+  if (cached) {
+    state.phraseCache.delete(record.path);
+    if (cached.record.deref() === record) {
+      state.phraseCache.set(record.path, cached);
+      return cached;
+    }
+    state.phraseCacheBytes -= cached.estimatedBytes;
+  }
+  let estimatedBytes = 256 + record.path.length * 2;
+  const bigrams = (text: string): ReadonlySet<string> => {
+    const result = new Set(orderedWordBigrams(surfacePhraseTokens(text)));
+    estimatedBytes += 64;
+    for (const bigram of result) estimatedBytes += 64 + bigram.length * 2;
+    return result;
+  };
+  const title = bigrams(record.title);
+  const passages = record.passages.map((passage) => bigrams(`${passage.heading} ${passage.text}`));
+  const signals = { record: new WeakRef(record), title, passages, estimatedBytes };
+  if (estimatedBytes > MAX_PHRASE_CACHE_ESTIMATED_BYTES) return signals;
+  while (state.phraseCacheBytes + estimatedBytes > MAX_PHRASE_CACHE_ESTIMATED_BYTES) {
+    const oldest = state.phraseCache.entries().next();
+    if (oldest.done) break;
+    state.phraseCache.delete(oldest.value[0]);
+    state.phraseCacheBytes -= oldest.value[1].estimatedBytes;
+  }
+  state.phraseCache.set(record.path, signals);
+  state.phraseCacheBytes += estimatedBytes;
+  return signals;
+}
+
 function bestPassage(
+  state: IndexState,
   record: WikiPageRecord,
   terms: readonly string[],
   queryBigrams: readonly string[]
@@ -807,14 +834,19 @@ function bestPassage(
   let bestUnigramScore = -1;
   let bestPhraseScore = -1;
   const cachedTokens = passageTokens(record);
+  // Cache only scored candidates, without retaining obsolete page records.
+  const cachedBigrams = queryBigrams.length > 0 ? phraseBigrams(state, record) : undefined;
   for (let index = 0; index < record.passages.length; index++) {
     const passage = record.passages[index]!;
-    const tokens = cachedTokens[index] ?? new Set<string>();
+    const tokens = cachedTokens[index]!;
     const unigramScore = terms.reduce((sum, term) => sum + (tokens.has(term) ? 1 : 0), 0);
-    const phraseScore = scoreOrderedPhraseSegments(
-      queryBigrams,
-      [record.title, `${passage.heading} ${passage.text}`]
-    ).matchedBigrams;
+    let phraseScore = 0;
+    if (cachedBigrams) {
+      const passageBigrams = cachedBigrams.passages[index]!;
+      for (const bigram of queryBigrams) {
+        if (cachedBigrams.title.has(bigram) || passageBigrams.has(bigram)) phraseScore++;
+      }
+    }
     if (phraseScore > bestPhraseScore ||
         (phraseScore === bestPhraseScore && unigramScore > bestUnigramScore)) {
       best = passage;
@@ -847,6 +879,8 @@ export async function searchRetrievalIndex(params: {
   phraseRerank?: boolean;
   /** Internal benchmark diagnostics; never added to MCP result payloads. */
   onPhraseDiagnostics?: (diagnostics: PhraseRerankDiagnostics) => void;
+  /** Opt-in local profiling; not part of MCP results. */
+  onLexicalDiagnostics?: (diagnostics: { candidates: number; scoringMs: number; sortingMs: number }) => void;
   /** Persist refreshed derived state. Read-only MCP operations set this to false. */
   persist?: boolean;
 }): Promise<RetrievalHit[]> {
@@ -879,43 +913,6 @@ export async function searchRetrievalIndex(params: {
   const profile = params.profile ?? "balanced";
   const k1 = profile === "precision" ? 1.0 : 1.4;
   const b = profile === "coverage" ? 0.55 : 0.75;
-  const candidatesByScore: Array<{
-    path: string;
-    record: WikiPageRecord;
-    score: number;
-    exactIdentifierMatch: boolean;
-  }> = [];
-  for (const path of candidates) {
-    const record = state.records.get(path);
-    if (!record || (typeFilter && !typeFilter.has(record.type))) continue;
-    let score = 0;
-    let matchedTerms = 0;
-    const normalizedRequestId = normalizeSearchText(record.requestId ?? "");
-    const normalizedTitle = normalizeSearchText(record.title);
-    for (const term of terms) {
-      const byPath = state.postings.get(term);
-      const posting = byPath?.get(path);
-      if (!posting) continue;
-      matchedTerms++;
-      const df = byPath?.size ?? 0;
-      const idf = Math.log(1 + (documentCount - df + 0.5) / (df + 0.5));
-      const tf = posting.body + posting.metadata * 2.5 + posting.title * 5;
-      const normalizedTf = (tf * (k1 + 1)) /
-        (tf + k1 * (1 - b + b * record.tokenCount / Math.max(averageLength, 1)));
-      score += idf * normalizedTf;
-      if (normalizedRequestId === term || normalizedTitle === term) score += 8;
-    }
-    score *= 1 + matchedTerms / terms.length;
-    candidatesByScore.push({
-      path,
-      record,
-      score,
-      exactIdentifierMatch: protectExactIdentifiers &&
-        protectedIdentifiers.every((identifier) => state.postings.get(identifier)?.has(path) === true),
-    });
-  }
-  candidatesByScore.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
-
   const maxResults = Math.max(1, params.maxResults ?? 10);
   const queryBigrams = [...new Set(orderedWordBigrams(surfacePhraseTokens(params.query ?? "")))];
   const phraseEnabled = phraseRerankConfigured(params.phraseRerank) &&
@@ -924,13 +921,56 @@ export async function searchRetrievalIndex(params: {
     maxResults <= MAX_PHRASE_REQUEST_RESULTS;
   const poolSize = phraseEnabled
     ? Math.min(
-        candidatesByScore.length,
         MAX_PHRASE_POOL,
         Math.max(MIN_PHRASE_POOL, maxResults * PHRASE_POOL_MULTIPLIER)
       )
-    : Math.min(candidatesByScore.length, maxResults);
+    : maxResults;
+  const bestCandidates = new TopResults<{
+    path: string;
+    record: WikiPageRecord;
+    score: number;
+    exactIdentifierMatch: boolean;
+  }>(Math.min(candidates.size, Math.floor(poolSize) || 0), (a, b) => b.score - a.score || a.path.localeCompare(b.path));
+  let candidateCount = 0;
+  const scoringStarted = params.onLexicalDiagnostics ? performance.now() : 0;
+  const queryPostings = terms.map((term) => {
+    const byPath = state.postings.get(term);
+    const df = byPath?.size ?? 0;
+    return { term, byPath, idf: Math.log(1 + (documentCount - df + 0.5) / (df + 0.5)) };
+  });
+  for (const path of candidates) {
+    const record = state.records.get(path);
+    if (!record || (typeFilter && !typeFilter.has(record.type))) continue;
+    let score = 0;
+    let matchedTerms = 0;
+    const normalizedRequestId = normalizeSearchText(record.requestId ?? "");
+    const normalizedTitle = normalizeSearchText(record.title);
+    for (const { term, byPath, idf } of queryPostings) {
+      const posting = byPath?.get(path);
+      if (!posting) continue;
+      matchedTerms++;
+      const tf = posting.body + posting.metadata * 2.5 + posting.title * 5;
+      const normalizedTf = (tf * (k1 + 1)) /
+        (tf + k1 * (1 - b + b * record.tokenCount / Math.max(averageLength, 1)));
+      score += idf * normalizedTf;
+      if (normalizedRequestId === term || normalizedTitle === term) score += 8;
+    }
+    score *= 1 + matchedTerms / terms.length;
+    candidateCount++;
+    bestCandidates.add({
+      path,
+      record,
+      score,
+      exactIdentifierMatch: protectExactIdentifiers &&
+        protectedIdentifiers.every((identifier) => state.postings.get(identifier)?.has(path) === true),
+    });
+  }
+  const sortingStarted = params.onLexicalDiagnostics ? performance.now() : 0;
+  const candidatesByScore = bestCandidates.sorted();
+  params.onLexicalDiagnostics?.({ candidates: candidateCount, scoringMs: sortingStarted - scoringStarted, sortingMs: performance.now() - sortingStarted });
+
   const pool = candidatesByScore.slice(0, poolSize).map((candidate, baselineRank) => {
-    const passage = bestPassage(candidate.record, terms, phraseEnabled ? queryBigrams : []);
+    const passage = bestPassage(state, candidate.record, terms, phraseEnabled ? queryBigrams : []);
     return { ...candidate, baselineRank, passage, rankScore: candidate.score };
   });
   const maximumPhraseScore = Math.max(0, ...pool.map((candidate) => candidate.passage.matchedBigrams));
@@ -954,7 +994,7 @@ export async function searchRetrievalIndex(params: {
     enabled: phraseEnabled && maximumPhraseScore > 0,
     queryBigramCount: queryBigrams.length,
     protectedIdentifierCount: protectExactIdentifiers ? protectedIdentifiers.length : 0,
-    candidateCount: candidatesByScore.length,
+    candidateCount,
     rescoredCount: phraseEnabled && maximumPhraseScore > 0 ? pool.length : 0,
     rankChanges: pool.flatMap((candidate, rerankedRank) =>
       candidate.baselineRank === rerankedRank ? [] : [{

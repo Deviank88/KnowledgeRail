@@ -47,6 +47,7 @@ export function segmentMarkdown(body: string, maxChars = 1600): WikiPassage[] {
   let buffer: string[] = [];
   let start = 0;
   let offset = 0;
+  let fence: { marker: string; length: number } | undefined;
 
   const flush = (): void => {
     const text = buffer.join("\n").trim();
@@ -55,7 +56,19 @@ export function segmentMarkdown(body: string, maxChars = 1600): WikiPassage[] {
   };
 
   for (const line of lines) {
-    const headingMatch = line.match(/^#{1,6}\s+(.+)$/);
+    // Fences allow up to three spaces; four spaces or a tab is indented
+    // code. Keep fence state across size-based passage splits and through EOF.
+    const insideFence = fence !== undefined;
+    if (fence) {
+      const closing = line.match(/^ {0,3}(`{3,}|~{3,})[ \t]*$/);
+      if (closing && closing[1]![0] === fence.marker && closing[1]!.length >= fence.length) fence = undefined;
+    } else {
+      const opening = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+      if (opening && (opening[1]![0] === "~" || !opening[2]!.includes("`"))) {
+        fence = { marker: opening[1]![0]!, length: opening[1]!.length };
+      }
+    }
+    const headingMatch = !insideFence && !fence ? line.match(/^#{1,6}\s+(.+)$/) : null;
     if (headingMatch) {
       flush();
       heading = headingMatch[1].trim();

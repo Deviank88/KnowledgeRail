@@ -1,3 +1,7 @@
+import { createDeclarationImportResolver } from "./import-resolution/declarations.js";
+import { createCImportResolver } from "./import-resolution/c-family.js";
+import { createGoImportResolver, GO_MODULE_MANIFEST } from "./import-resolution/go.js";
+import { createRustImportResolver } from "./import-resolution/rust.js";
 import {
   annotationTextBefore,
   braceDepthAt,
@@ -23,6 +27,7 @@ import {
   RUST_ADAPTER_VERSION,
   type CodeRoute,
   type CodeSource,
+  type CodeImportContext,
   type KnowledgeAdapter,
   type KnowledgeFragment,
 } from "./types.js";
@@ -1186,12 +1191,14 @@ abstract class BraceKnowledgeAdapter implements KnowledgeAdapter {
 }
 
 export class JavaKnowledgeAdapter extends BraceKnowledgeAdapter {
+  createImportResolver(context: CodeImportContext) { return createDeclarationImportResolver(context, "java"); }
   readonly parserVersion = JAVA_ADAPTER_VERSION;
   readonly extensionClaims = [".java"] as const;
   readonly config = JAVA_CONFIG;
 }
 
 export class KotlinKnowledgeAdapter extends BraceKnowledgeAdapter {
+  createImportResolver(context: CodeImportContext) { return createDeclarationImportResolver(context, "kotlin"); }
   readonly parserVersion = KOTLIN_ADAPTER_VERSION;
   readonly extensionClaims = [".kt", ".kts"] as const;
   readonly config = KOTLIN_CONFIG;
@@ -1204,24 +1211,29 @@ export class ApexKnowledgeAdapter extends BraceKnowledgeAdapter {
 }
 
 export class CSharpKnowledgeAdapter extends BraceKnowledgeAdapter {
+  createImportResolver(context: CodeImportContext) { return createDeclarationImportResolver(context, "csharp"); }
   readonly parserVersion = CSHARP_ADAPTER_VERSION;
   readonly extensionClaims = [".cs"] as const;
   readonly config = CSHARP_CONFIG;
 }
 
 export class GoKnowledgeAdapter extends BraceKnowledgeAdapter {
+  readonly projectManifests = [GO_MODULE_MANIFEST];
+  readonly createImportResolver = createGoImportResolver;
   readonly parserVersion = GO_ADAPTER_VERSION;
   readonly extensionClaims = [".go"] as const;
   readonly config = GO_CONFIG;
 }
 
 export class RustKnowledgeAdapter extends BraceKnowledgeAdapter {
+  readonly createImportResolver = createRustImportResolver;
   readonly parserVersion = RUST_ADAPTER_VERSION;
   readonly extensionClaims = [".rs"] as const;
   readonly config = RUST_CONFIG;
 }
 
 export class PhpKnowledgeAdapter extends BraceKnowledgeAdapter {
+  createImportResolver(context: CodeImportContext) { return createDeclarationImportResolver(context, "php"); }
   readonly parserVersion = PHP_ADAPTER_VERSION;
   readonly extensionClaims = [".php"] as const;
   readonly config = PHP_CONFIG;
@@ -1233,12 +1245,14 @@ export class PhpKnowledgeAdapter extends BraceKnowledgeAdapter {
 }
 
 export class CKnowledgeAdapter extends BraceKnowledgeAdapter {
+  readonly createImportResolver = createCImportResolver;
   readonly parserVersion = C_ADAPTER_VERSION;
   readonly extensionClaims = [".c"] as const;
   readonly config = C_CONFIG;
 }
 
 export class CppKnowledgeAdapter extends BraceKnowledgeAdapter {
+  readonly createImportResolver = createCImportResolver;
   readonly parserVersion = CPP_ADAPTER_VERSION;
   readonly extensionClaims = [".cpp", ".cc", ".cxx", ".h", ".hpp", ".hh"] as const;
   readonly config = CPP_CONFIG;

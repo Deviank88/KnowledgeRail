@@ -200,6 +200,52 @@ concepts; it is a deterministic schema-quality regression signal, not proof of a
 LLM's behavior. Provider-specific A/B remains required before attributing results
 to a particular model.
 
+## Code-evidence queries
+
+```bash
+npm run bench:code-query -- --scales=1000,10000 --iterations=30 --json=benchmarks/results/code-query.json
+```
+
+This benchmark writes deterministic synthetic snapshots with 1,000 and 10,000
+fragments. It measures a cold symbol distribution, warm exact and partial symbol
+lookups, incoming references, and text search. Every operation creates a new
+index instance, matching the MCP tool lifecycle. Result digests must match across
+before/after runs with identical parameters. Heap measurements run after garbage
+collection and include workspace eviction. The benchmark isolates query costs;
+it does not measure source parsing, resource reads or real-world extraction recall.
+
+Query state belongs to one project's resolved wiki root. Each workspace has its
+own 32 MiB estimated cache admission budget; activity in another project does not
+consume that budget or invalidate its generation. Parsed snapshots and lazy
+symbol/reference maps are covered by the estimate, which is not an exact V8 heap
+limit. With N resident workspaces the sum of these independent admission budgets
+is N × 32 MiB: the default workspace LRU cap of 32 permits 1,024 MiB of estimated
+admissions in one process. `KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP` changes the number
+of resident workspaces (a positive integer; invalid values use 32). This is neither
+a memory reservation nor a global RAM cap. Oversized uncached snapshots, concurrent
+loads, result copies, lexical/graph/semantic caches and runtime overhead add costs
+outside that number. Separate processes add their memory usage at system level.
+Report the admission estimate, measured V8 heap and process RSS separately.
+
+There is no TTL or automatic idle expiry. A generation stays resident until an
+internal snapshot write invalidates it, a later query observes an external change,
+or the workspace is released/evicted (including automatic workspace LRU eviction).
+An external edit without another query does not immediately release the cache.
+LRU eviction releases disposable state for the least recently used workspace;
+it does not transfer one project's admission allowance to another.
+
+Oversized snapshots remain searchable without cache admission. Each query
+checks inode/device, size, nanosecond modification/change timestamps and mode;
+cache misses validate a snapshot between two matching metadata observations.
+Explicit updates invalidate only the affected workspace. Public snapshot reads
+and source-resource validation continue to read their authoritative files.
+
+Exact symbol lookups skip partial matching only when enough eligible exact hits
+already fill the requested result count. Otherwise partial matches still fill
+the result set. Text search retains exhaustive substring scoring and uses bounded stable selection of the requested results. Compare
+latency and memory alongside `eval:code-evidence:gate`,
+`eval:code-evidence:languages:gate`, and `eval:drift:gate`.
+
 ## Scaling baseline
 
 Quick local run:
@@ -280,3 +326,256 @@ Each case is then rolled back and must recover its original format and canonical
 `tests/migration-compatibility.test.ts`, `tests/legacy-migration-v4.test.ts`, `tests/legacy-namespace-migration.test.ts`, and `tests/fs-manifest.test.ts` additionally cover automatic rollback after a failed backfill, corrupt ledgers, idempotent v4 repair, refusal to overwrite newer post-migration knowledge, the pre-rebrand `.llm-wiki` namespace, v1 manifest compatibility, coverage-ledger import, dual-namespace conflicts, unsafe or incomplete legacy metadata, and byte-identical manifest v2 output across CRLF/LF, Unicode NFD/NFC path, and filesystem timestamp variants.
 
 Migration must preserve unknown/custom canonical fields and must not silently reinterpret old pages into new semantic classes such as `invariant` or `inference`.
+
+
+## Local import references
+
+Import extraction and incoming `import` relations are separate capabilities.
+Adapters now own resolution through optional `createImportResolver(context)`;
+the context exposes indexed module paths and declarations grouped by file.
+Factories and their lookup maps are built only for adapters with actual imports,
+once while building the generation's incoming map. Each source/specifier pair
+is resolved once, even when its import inventory appears on several fragments.
+Temporary lookup maps are released after construction. The runtime validates
+returned paths against the inventory and deduplicates edges; call/reference/import
+precedence, filters and ordering remain shared rules.
+
+| Importing language | Supported project-local evidence | Selection |
+| --- | --- | --- |
+| JS/TS | Relative files, runtime/source substitutions, directory indexes, declared `paths`/`baseUrl` and one local config inheritance level | Exact pattern, then longest prefix; exact runtime file first, otherwise one candidate |
+| Python | Dotted modules, relative imports, packages, `.pyi` fallback, importer siblings and regular-package source roots | One candidate across eligible roots |
+| Java/Kotlin | Qualified declarations, static/member names already extracted, aliases, package/type wildcards | Unique file for a name; explicit wildcard groups may span files |
+| C# | Qualified types and namespace contributors | Unique file for a type; namespace imports can span files |
+| PHP | Declared classes/functions, grouped clauses and aliases | Unique file per declared name |
+| Go | `go.mod` module identity plus relative package directory; legacy suffix matching only without discovered Go manifests | Non-test implementation files within the importing module's boundary |
+| Rust | `crate`, `self`, `super`, use groups, `.rs`/`mod.rs` and indexed inline modules | One file per resolved module; source crate confines lookup |
+| C/C++ | Literal include paths from importer directory and repository root | One indexed file; no guessed `.c`/`.cpp` twin |
+| LWC | `@salesforce/apex/Class.method`, indexed `@salesforce/schema/Object.Field`, `c/component` | One indexed declaration or conventional local bundle |
+| Ruby/custom adapters without a resolver | Original lowercase import-tail to file-stem comparison | One candidate; collisions are reported as ambiguous |
+
+Resolvers keep their array-returning contract. An optional synchronous
+`CodeImportContext.reportIssue` callback reports failed singular lookups or members
+of a group. Custom resolver arrays remain trusted groups. The shared runtime counts
+each source/specifier once, prioritizes ambiguity over other failures and records
+`partial` when valid group members remain. Counts by adapter language family are
+internal generation inventories, not request counts or fallback rates.
+
+`knowledge_code references` exposes at most twelve `unresolvedImports` with four
+candidate paths each. Ambiguities sort before unresolved examples. The diagnostic
+scope is the whole indexed snapshot, independent of target and path filters;
+truncation is explicit, including strings abbreviated to 256 UTF-16 code units.
+Samples have a separate bounded selection and participate in existing cache
+admission. No per-query repository scan or new persistent cache is introduced.
+See the [usage guide](../docs/guides/code-evidence-retrieval.md) for interpretation.
+
+Run the dedicated source/manifest oracle with:
+
+```bash
+npm run eval:imports:gate
+node --import tsx benchmarks/import-resolution-eval.ts --gate --json=benchmarks/results/import-resolution.json
+```
+
+The versioned fixture covers thirteen cases across JS/TS, Python, Java, Kotlin,
+C#, PHP, Go, Rust, C/C++, Ruby and LWC/Apex. It requires exact file-level import
+edges and diagnostic outcomes, including missing/extra negatives and valid members
+of partial groups; queries must not rewrite snapshots. This gate joins the fifteen
+existing gates without relaxing their thresholds. These are hand-authored examples,
+not a broad measurement of language understanding or arbitrary repository layouts.
+
+Measure generation construction and bounded diagnostic disclosure separately:
+
+```bash
+node --expose-gc --import tsx benchmarks/import-diagnostics-bench.ts --json=benchmarks/results/import-diagnostics.json
+# Compare with a preserved incoming working tree:
+node --expose-gc --import tsx benchmarks/import-diagnostics-bench.ts --runtime=/path/to/baseline --json=benchmarks/results/import-diagnostics-before.json
+```
+
+The benchmark uses actual TS adapter output at 1k/10k fragments with one local and
+one unresolved external import per source. Extraction, manifest discovery and disk
+loading are outside the measured incoming-map construction. It separately reports
+warm reference selection, diagnostic cloning, retained heap and sample admission
+estimate. Compare result digests before interpreting timing differences.
+
+JS/TS supports `.js` → `.ts`/`.tsx`, `.jsx` → `.tsx`, `.mjs` → `.mts`, and
+`.cjs` → `.cts`. An exact existing runtime file wins before substitution.
+Extensionless imports may match a file or directory index; multiple alternatives
+stay unresolved. The nearest `tsconfig.json` or `jsconfig.json` provides declared
+aliases; `tsconfig.json` wins when both occur in the same directory. JSONC comments,
+trailing commas, exact mappings, one wildcard with a suffix and ordered target
+fallback are supported. Ambiguous targets stop fallback; equally specific wildcard
+patterns also stay unresolved. `rootDir` never supplies an implicit import root.
+One relative `extends` path is read with an optional `.json` suffix; relative options
+keep their declaring config's origin and child `paths` replaces the parent map.
+These supported rules follow the [TypeScript module reference](https://www.typescriptlang.org/docs/handbook/modules/reference.html#paths)
+and [config inheritance](https://www.typescriptlang.org/tsconfig/extends.html).
+This is a bounded structural resolver: it does not emulate every `moduleResolution`
+mode, project references, include/exclude ownership, package exports or bundler
+settings. Npm packages and undeclared aliases are not inferred. Remote, array,
+cyclic and deeper inheritance fail with manifest diagnostics; relative imports
+remain usable when the config is invalid.
+
+Python searches root and importer directory, so `src/cli.py` can import its
+sibling `src/orders_cli.py`. A chain of indexed `__init__.py`/`.pyi` packages
+also identifies the importer's package source root: with `src/app/__init__.py`,
+`src/app/service.py` can import `app.orders` from `src/app/orders.py`.
+This does not expose `orders_cli` globally to root-level scripts. A shared base
+is checked once; different candidates remain unresolved. Relative imports stay
+within the known package chain (or the existing directory boundary when no
+regular-package chain is indexed). `.pyi` is only a fallback for its corresponding
+`.py`. Additional `sys.path` roots, namespace-package root inference and dynamic
+imports remain outside this contract. `from pkg import child` links the recorded
+specifier `pkg`; it does not guess that `child` is a submodule.
+
+Java/Kotlin/PHP names come from extracted declarations, not a filename or an
+assumed `src/main/java` root. Duplicate qualified declarations stay unresolved
+for a direct name lookup. C# namespace imports and explicit Java/Kotlin wildcard
+imports intentionally identify groups, not a single arbitrarily chosen class.
+They describe the import scope, not proof that every declaration is used.
+Overload/type-system/accessibility analysis and unindexed constants are not added.
+
+Go indexes directory groups rather than file stems. With `module example.com/app`
+in a `go.mod`, both `internal/orders/create.go` and `internal/orders/cancel.go`
+can be reached from `example.com/app/internal/orders`, independent of the module's
+directory in the repository. An external import with the same directory suffix
+does not match. Nested `go.mod` files establish separate boundaries; other local
+modules are not inferred as dependencies. `_test.go` files are excluded. These
+identities follow the [Go module/package model](https://go.dev/ref/mod#modules-packages-and-versions).
+`go.work`, `replace`, vendor and build-tag selection remain outside this resolver.
+Without discovered Go manifests, the previous suffix heuristic remains available
+for compatibility, including its possible false positives.
+
+Adapters optionally declare `projectManifests` parsers. The shared reader discovers
+manifests along indexed file ancestors once per code generation, reads at most
+256 KiB per file with 16 concurrent operations, and retains compact parsed values.
+The optional `references` hook supplies up to 32 direct local dependencies per
+manifest, parsed with the same spec. Only one level is followed. Current dependencies
+are rechecked, including missing files; edited references discover new targets and
+prune old ones. No executable config or recursive dependency graph is evaluated.
+Known manifest edits (including equal-sized edits with restored mtime), deletion,
+recreation and root-manifest creation are detected on reference queries. To discover
+a newly added nested manifest, rebuild or call `knowledge_code action="update"`
+with its repository-relative path. `update` and `remove` publish a derived generation
+without extracting source files. This avoids rescanning every directory per query.
+Malformed, oversized and unsafe manifests produce at most 12 `manifestWarnings`
+in the MCP reference response, with `manifestWarningCount` for the total. They do
+not trigger fallback to a guessed module identity. Parser data shares the existing
+32 MiB estimated admission budget; oversized generations remain queryable without
+retention. Source snapshot schema and extraction versions are unchanged.
+
+Run `npm run bench:project-structure -- --iterations=30` for Go discovery,
+known-manifest freshness, retained/released heap and incoming-map costs at roughly
+1k/10k fragments. It compares 50 files per directory with one file per directory.
+It excludes source extraction and persisted-snapshot loading; it does not measure
+the separate `knowledge_context` code-impact path. Regression coverage is in
+`tests/project-structure.test.ts`. Add `--language=javascript` for declared aliases
+with a shared local base config using the same benchmark and lifecycle. Additional
+coverage is in `tests/javascript-project-structure.test.ts`, including comparisons
+with the dev dependency TypeScript compiler for unambiguous supported mappings.
+
+For the actual task compiler, run `npm run bench:code-context -- --gate`.
+It uses real TS extraction output in persisted 1k/10k-fragment snapshots and measures
+the complete `compileTaskContext` call, with 40 paired warm samples against the same
+document-only request. The 2,000-token case requests one source root; the 4,000-token
+case requests three. Both must actually disclose code relations and stay within the
+manifest's heuristic budget. `--gate` requires the paired p50 overhead to remain at
+most 5 ms; it is a separate performance gate, not a change to the 15 quality gates.
+Pass `--baseline=/path/to/preserved/runtime` to check document-only context parity.
+Cold snapshot loading, retained heap, admitted cache size, root/relation counts and
+display tokens are reported separately. Fixture extraction is outside the interval;
+source bodies are not materialized by context. The small wiki and empty evidence IR
+do not model a large history; actual-project measurements are recorded separately
+in `knowledge-routing-2.8.0.md`. This estimate covers the task-context manifest,
+not provider tokenization or every byte of the MCP envelope.
+
+`tests/code-task-context.test.ts` covers source roots, callers/importers, active claim
+roots, related wiki metadata, manifest refresh, full/compact MCP links, root/relation
+limits, token fitting, read-only failures and preservation of scope during widening.
+Related wiki metadata does not silently satisfy documentary coverage. Fixed expansion
+limits set `widenable: false`; larger context budgets are suggested only for display
+omissions that can actually benefit from them.
+
+Rust uses indexed file/module conventions within the source crate. `.rs` and
+`mod.rs` collisions remain unresolved; `super` cannot escape the crate.
+Use-tree expansion is bounded to 65,536 characters, depth 32 and 1,024 visited
+nodes. Arbitrary `#[path]`, conditional compilation, re-export chains and
+edition-dependent/external bare paths are not inferred. C/C++ does not infer
+compiler include directories or distinguish quote/angle syntax that the current
+string inventory does not preserve. Header references never imply a separate
+implementation-file import.
+
+Apex and Salesforce metadata do not emit Java-style imports. Their existing
+symbol/database reference matching still links metadata and Apex. LWC virtual
+imports now use actual indexed Apex methods and object/field declarations;
+standard platform modules or missing metadata do not receive fabricated edges.
+
+Validation: `tests/code-import-resolution.test.ts` contains ten realistic cases
+across the nine non-JS/Python languages, including Go's different-filename case.
+Eight cases failed before this correction; all ten now resolve their expected
+importing fragments. `tests/import-adapter-contract.test.ts` separately covers
+ambiguity, aliases, groups, negative paths, namespace/package cardinality,
+Salesforce imports, lazy construction, custom registries and unchanged persisted
+snapshots. These cases establish supported behavior, not a language-wide success
+rate. The earlier bare-specifier parity probes did not establish that coverage.
+
+Knowledge pages now expose a direct code resource when an Evidence IR claim has
+a verified code anchor. See [the retrieval workflow](../docs/guides/code-evidence-retrieval.md)
+and run `npm run dogfood:import-knowledge` to populate and verify this repository's
+local wiki. The source notes, pages and result JSON remain local generated data.
+
+## Quality and efficiency workloads (2.7.4)
+
+The [local comparison report](quality-efficiency-2.7.4.md) records the measured
+tradeoffs, scope and remaining limits. To reproduce the workloads:
+
+```bash
+npm run bench:update -- --pages=10000 --iterations=30 --vocabulary=20 --json=benchmarks/results/update.json
+npm run bench:page-terms
+npm run bench:reconcile -- --scales=100,10000,100000 --iterations=10
+npm run bench:reconcile:full -- --runtimes=/path/to/preserved/baseline,.
+npm run bench:code-query -- --scales=1000,10000 --iterations=100 --json=benchmarks/results/code-query.json
+npm run bench:code-profile
+npm run bench:code-parity -- --baseline=/path/to/preserved/baseline
+npm run bench:lexical-selection -- --iterations=100 --json=benchmarks/results/lexical.json
+npm run eval:project-precision
+npm run bench:stability -- --operations=10000 --duration-ms=300000
+```
+
+Preserve the pre-change working tree, including local optimizations, and use the
+same benchmark harness and parameters in both copies. `bench:lexical-selection`
+also accepts `--runtime=/path/to/preserved/baseline`. Its optional phase callback
+measures scoring (including heap selection) separately from final sorting.
+`bench:code-profile` isolates filtering, scoring, full sorting and result copies;
+`bench:code-parity` compares exact result objects including scores and stable ties.
+
+`bench:reconcile` measures the filesystem metadata phase with the actual confined
+path resolver and stat calls. It compares unbounded, 8, 16, 32 and 64 concurrent
+checks; the runtime uses 64. Memory includes the ordered results array and a
+5 ms sampler; sampling can miss short peaks. The worker pool stops scheduling on
+failure and drains started work before propagating the first error. Full
+reconciliation publishes only after verification succeeds. `bench:reconcile:full`
+adds cold indexing and forced warm reconciliation; multiple `--runtimes` run in
+separate processes to keep heap/RSS comparisons independent.
+
+`bench:update` reports edit and removal latency plus sampled heap/RSS, with an
+optional per-page vocabulary expansion. `bench:page-terms` compares a direct
+vocabulary scan, term derivation and an inverse map; it also reports the inverse
+map's additional heap after GC. Term removal now scales with the page's terms;
+whole-page deletion still rebuilds the corpus revision ledger.
+
+The versioned project-precision fixture contains locally authored questions about
+KnowledgeRail, not production user logs. Development and evaluation cases stay
+separate, synthetic adversarial pages are identified, and source anchors validate
+project evidence. `eval:project-precision -- --runtime=/path/to/preserved/baseline`
+repeats the fixed fixture on a preserved runtime. The evaluator reports found recall, displayed recall/precision,
+correct/false GAPs and silent misses, plus real-adapter import precision and the
+observed dynamic-Python-import limit. It does not tune ranking or lower existing
+gates to fit these cases.
+
+The stability plan is printed before execution: one project, 100 source files,
+100 wiki pages, 10,000 operations over at least five minutes. Each 100-operation
+cycle includes 40 symbol reads, 30 text queries, 20 reference reads and one of
+each of ten mutation/recovery scenarios. Every 1,000 operations it checks a
+2-second idle interval, post-GC heap and workspace release. The report separates
+admission estimates, post-GC heap, sampled heap/RSS peaks and OS process peak RSS.
+It exercises admitted and oversized snapshots and fully built lazy maps; this
+bounded local run is not a long-duration production guarantee.

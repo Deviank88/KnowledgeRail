@@ -45,6 +45,11 @@ export function mcpAgentInstructions(era: ProtocolEra): string {
     "Use one of the eight KnowledgeRail domain tools directly; do not look for a navigation menu. " +
     "For normal project work start with knowledge_context mode=task and a concrete objective; " +
     "omit response_detail so the compact default is used. " +
+    "For source changes, pass repository-relative files in changed_paths. Code roots, incoming codeRelations " +
+    "and codeWikiPages are bounded candidates from an indexed snapshot: read only relevant links, verify " +
+    "freshness, and do not treat lexical call/reference edges or an empty result as proof of execution or non-use. " +
+    "knowledge_code references may include unresolvedImports sampled across the indexed snapshot, not specific to its target. " +
+    "Resolve ambiguous choices from their candidates; unresolved imports can be external or unsupported, so rebuilding alone may not help. " +
     "Follow the structured nextAction returned by each operation. Materialize only relevant " +
     "knowledge-rail:// or code:// links with resources/read when available; otherwise use " +
     "knowledge_page action=read for knowledge-rail:// links. If coverage remains insufficient after " +

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as nodePath from "node:path";
 import fg from "fast-glob";
+import { TopResults } from "../top-results.js";
 import { atomicWriteText } from "../fs-service.js";
 import { withWikiFileLock } from "../lock-service.js";
 import { logger } from "../logger.js";
@@ -9,6 +10,14 @@ import { wikiMetaDir } from "../manifest-service.js";
 import { safeResolveWithin } from "../paths.js";
 import { tokenizeSearchText } from "../text-analysis.js";
 import { readFileSafe } from "../utils.js";
+import { registerWorkspaceState, touchWorkspaceState } from "../workspace-state.js";
+import {
+  CodeQueryRuntime,
+  DEFAULT_QUERY_ADAPTERS,
+  codePathAllowed,
+  normalizedCodeText,
+  normalizedQualifiedSymbol,
+} from "./query-runtime.js";
 import {
   createDefaultKnowledgeAdapterRegistry,
   KnowledgeAdapterRegistry,
@@ -17,6 +26,11 @@ import {
 } from "./adapter-registry.js";
 import {
   CODE_EVIDENCE_INDEX_VERSION,
+  CODE_IMPACT_MAX_ROOTS,
+  CODE_IMPACT_REFERENCES_PER_ROOT,
+  type CodeImpactTarget,
+  type CodeImpactResult,
+  type CodeImportDiagnostics,
   type CodeEvidenceAdapterRosterEntry,
   type CodeEvidenceFileRecord,
   type CodeEvidenceHit,
@@ -28,12 +42,22 @@ import {
   type CodeSource,
   type KnowledgeAdapter,
   type KnowledgeFragment,
+  type ProjectStructure,
 } from "./types.js";
 
 const DEFAULT_MAX_RESULTS = 12;
 const MAX_RESULTS = 100;
 const MAX_CODE_FILE_BYTES = 2 * 1024 * 1024;
 const INDEX_FILE_NAME = "code-evidence-index.json";
+const MAX_QUERY_CACHE_ESTIMATED_BYTES = 32 * 1024 * 1024;
+interface QueryCacheState {
+  identity?: string;
+  runtime?: CodeQueryRuntime;
+  pending?: Promise<CodeQueryRuntime>;
+  estimatedBytes: number;
+  snapshotEstimatedBytes: number;
+}
+const queryStates = new Map<string, QueryCacheState>();
 const CODE_IGNORES = [
   ".git/**",
   ".agents/**",
@@ -179,6 +203,110 @@ async function discardCorruptSnapshot(
 
 async function writeSnapshot(wikiRoot: string, snapshot: CodeEvidenceSnapshot): Promise<void> {
   await atomicWriteText(codeEvidenceIndexFile(wikiRoot), `${JSON.stringify(snapshot, null, 2)}\n`);
+  const state = queryStates.get(nodePath.resolve(wikiRoot));
+  if (state) forgetQueryRuntime(state);
+}
+
+function forgetQueryRuntime(state: QueryCacheState): void {
+  state.estimatedBytes = 0;
+  state.snapshotEstimatedBytes = 0;
+  state.runtime = undefined;
+  state.identity = undefined;
+}
+
+function queryState(wikiRoot: string): QueryCacheState {
+  let state = queryStates.get(wikiRoot);
+  if (!state) {
+    state = { estimatedBytes: 0, snapshotEstimatedBytes: 0 };
+    queryStates.set(wikiRoot, state);
+    const registered = state;
+    registerWorkspaceState(wikiRoot, "code-evidence-query", () => {
+      forgetQueryRuntime(registered);
+      queryStates.delete(wikiRoot);
+    });
+  } else {
+    touchWorkspaceState(wikiRoot);
+  }
+  return state;
+}
+
+async function querySnapshotIdentity(wikiRoot: string): Promise<{ identity: string; size: number } | null> {
+  try {
+    const stat = await fs.stat(codeEvidenceIndexFile(wikiRoot), { bigint: true });
+    if (!stat.isFile()) throw new Error("Code evidence index is not a regular file.");
+    return {
+      identity: `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}:${stat.mode}`,
+      size: Number(stat.size),
+    };
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function loadQueryRuntime(
+  requestedRoot: string,
+  registry: KnowledgeAdapterRegistry
+): Promise<CodeQueryRuntime> {
+  const adapters = registry.roster();
+  const root = nodePath.resolve(requestedRoot);
+  const state = queryState(root);
+  const before = await querySnapshotIdentity(root);
+  if (before && state.runtime && state.identity === before.identity && state.runtime.registry === registry) return state.runtime;
+  if (state.pending) {
+    await state.pending;
+    // A waiting caller verifies the file again: a writer may have replaced it
+    // while the first caller was reading or constructing the query structures.
+    return loadQueryRuntime(root, registry);
+  }
+  forgetQueryRuntime(state);
+  if (!before) return new CodeQueryRuntime(emptySnapshot(adapters), registry);
+  state.pending = (async () => {
+    let identity = before;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const snapshot = await readCodeEvidenceSnapshot(root, adapters);
+      const after = await querySnapshotIdentity(root);
+      if (!after) return new CodeQueryRuntime(emptySnapshot(adapters), registry);
+      if (identity.identity === after.identity) {
+        const runtime = new CodeQueryRuntime(snapshot, registry);
+        // Include an allowance for parsed objects and the lazy symbol/reference
+        // maps. This is an admission estimate, not V8 heap accounting.
+        const estimatedBytes = after.size * 4 + snapshot.fragments.length * 512;
+        if (estimatedBytes <= MAX_QUERY_CACHE_ESTIMATED_BYTES && queryStates.get(root) === state) {
+          // Admission and invalidation belong to this project alone. A large
+          // snapshot in one workspace must not displace another project's cache.
+          state.runtime = runtime;
+          state.identity = after.identity;
+          state.estimatedBytes = estimatedBytes;
+          state.snapshotEstimatedBytes = estimatedBytes;
+        }
+        return runtime;
+      }
+      identity = after;
+    }
+    // A busy external writer must not attach a cached generation to metadata
+    // from different bytes. Serve a freshly validated, uncached snapshot.
+    return new CodeQueryRuntime(await readCodeEvidenceSnapshot(root, adapters), registry);
+  })().finally(() => { state.pending = undefined; });
+  return state.pending;
+}
+
+/** Internal diagnostics for capacity checks; not part of the MCP tool payload. */
+export function getCodeQueryCacheDiagnostics(wikiRoot: string): { cached: boolean; estimatedBytes: number; maxEstimatedBytes: number } {
+  const state = queryStates.get(nodePath.resolve(wikiRoot));
+  return {
+    cached: state?.runtime !== undefined,
+    estimatedBytes: state?.estimatedBytes ?? 0,
+    maxEstimatedBytes: MAX_QUERY_CACHE_ESTIMATED_BYTES,
+  };
+}
+
+function accountProjectStructure(wikiRoot: string, runtime: CodeQueryRuntime): void {
+  const state = queryStates.get(wikiRoot);
+  if (state?.runtime !== runtime) return;
+  const estimatedBytes = state.snapshotEstimatedBytes + runtime.projectStructureEstimatedBytes();
+  if (estimatedBytes > MAX_QUERY_CACHE_ESTIMATED_BYTES) forgetQueryRuntime(state);
+  else state.estimatedBytes = estimatedBytes;
 }
 
 async function readCodeSource(repositoryRoot: string, path: string): Promise<{ source: CodeSource; contentHash: string }> {
@@ -228,31 +356,19 @@ function clampResults(value: number | undefined): number {
   return value;
 }
 
-function normalized(value: string): string {
-  return value.normalize("NFKC").toLowerCase();
-}
-
-function normalizedQualifiedSymbol(value: string): string {
-  return normalized(value)
-    .trim()
-    .replace(/\s*(?:->|::|#|\\)\s*/gu, ".")
-    .replace(/^\.+|\.+$/gu, "");
-}
-
 function fieldIncludes(values: readonly string[], term: string): boolean {
-  return values.some((value) => normalized(value).includes(term));
+  return values.some((value) => normalizedCodeText(value).includes(term));
 }
 
-function scoreFragment(fragment: KnowledgeFragment, query: string, terms: readonly string[]): {
+export function scoreFragment(fragment: KnowledgeFragment, queryNormalized: string, terms: readonly string[]): {
   score: number;
   matchedTerms: string[];
 } {
-  const queryNormalized = normalized(query).trim();
-  const symbol = normalized(fragment.symbol);
-  const qualifiedName = normalized(fragment.qualifiedName);
-  const path = normalized(fragment.path);
-  const definition = normalized(fragment.definition);
-  const docComment = normalized(fragment.docComment ?? "");
+  const symbol = normalizedCodeText(fragment.symbol);
+  const qualifiedName = normalizedCodeText(fragment.qualifiedName);
+  const path = normalizedCodeText(fragment.path);
+  const definition = normalizedCodeText(fragment.definition);
+  const docComment = normalizedCodeText(fragment.docComment ?? "");
   const routeText = fragment.routes.map((route) => `${route.method} ${route.path} ${route.handler ?? ""}`.toLowerCase());
   let score = symbol === queryNormalized || qualifiedName === queryNormalized ? 120 : 0;
   if (symbol.includes(queryNormalized) || qualifiedName.includes(queryNormalized)) score += 32;
@@ -281,11 +397,6 @@ function scoreFragment(fragment: KnowledgeFragment, query: string, terms: readon
   return { score, matchedTerms };
 }
 
-function pathAllowed(path: string, prefixes: readonly string[] | undefined): boolean {
-  if (!prefixes || prefixes.length === 0) return true;
-  return prefixes.some((prefix) => path === prefix || path.startsWith(`${prefix.replace(/\/$/, "")}/`));
-}
-
 export function codeResourceUri(fragment: KnowledgeFragment): string {
   const encodedPath = fragment.path.split("/").map(encodeURIComponent).join("/");
   return `code://repo/${encodedPath}#${encodeURIComponent(fragment.id)}`;
@@ -297,27 +408,6 @@ function sortedFragments(fragments: readonly KnowledgeFragment[]): KnowledgeFrag
     left.range.startLine - right.range.startLine ||
     left.id.localeCompare(right.id)
   );
-}
-
-function uniqueSorted(values: readonly string[]): string[] {
-  return [...new Set(values)].sort();
-}
-
-function enrichLwcBundles(fragments: readonly KnowledgeFragment[]): KnowledgeFragment[] {
-  const targetsByJavaScriptPath = new Map<string, string[]>();
-  for (const fragment of fragments) {
-    if (!fragment.path.toLowerCase().endsWith(".js-meta.xml") || fragment.configKeys.length === 0) continue;
-    const javaScriptPath = fragment.path.slice(0, -"-meta.xml".length);
-    targetsByJavaScriptPath.set(javaScriptPath, uniqueSorted([
-      ...(targetsByJavaScriptPath.get(javaScriptPath) ?? []),
-      ...fragment.configKeys,
-    ]));
-  }
-  return fragments.map((fragment) => {
-    const targets = targetsByJavaScriptPath.get(fragment.path);
-    if (!targets) return fragment;
-    return { ...fragment, configKeys: uniqueSorted([...fragment.configKeys, ...targets]) };
-  });
 }
 
 function rosterWithAdapter(
@@ -353,25 +443,28 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
       ? new KnowledgeAdapterRegistry(params.adapters)
       : params.adapter
         ? new KnowledgeAdapterRegistry([params.adapter])
-        : createDefaultKnowledgeAdapterRegistry());
+        : DEFAULT_QUERY_ADAPTERS);
   }
 
   async snapshot(): Promise<CodeEvidenceSnapshot> {
     return readCodeEvidenceSnapshot(this.wikiRoot, this.registry.roster());
   }
 
-  private async querySnapshot(): Promise<CodeEvidenceSnapshot> {
-    let snapshot: CodeEvidenceSnapshot;
+  private async queryRuntime(repair = true): Promise<CodeQueryRuntime> {
+    let runtime: CodeQueryRuntime;
     try {
-      snapshot = await this.snapshot();
-    } catch {
+      runtime = await loadQueryRuntime(this.wikiRoot, this.registry);
+    } catch (error) {
+      if (!repair) throw error;
+      // Filesystem failures are not corrupt derived data and must reach callers.
+      if ((error as NodeJS.ErrnoException).code) throw error;
       await this.rebuild();
-      snapshot = await this.snapshot();
+      runtime = await loadQueryRuntime(this.wikiRoot, this.registry);
     }
-    if (snapshot.files.length > 0 && !sameAdapterRoster(snapshot.adapters, this.registry.roster())) {
+    if (runtime.snapshot.files.length > 0 && !sameAdapterRoster(runtime.snapshot.adapters, this.registry.roster())) {
       throw new Error("Code evidence adapter roster changed; rebuild the index to refresh only affected languages.");
     }
-    return { ...snapshot, fragments: enrichLwcBundles(snapshot.fragments) };
+    return runtime;
   }
 
   private async ensureCurrentSnapshotSchema(): Promise<void> {
@@ -451,7 +544,9 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
     await this.ensureCurrentSnapshotSchema();
     return withWikiFileLock(this.wikiRoot, codeEvidenceIndexFile(this.wikiRoot), async () => {
       const normalizedPath = normalizedRelativePath(path);
+      safeResolveWithin(this.repositoryRoot, normalizedPath);
       const before = await this.snapshot();
+      if (this.isProjectManifest(normalizedPath)) return this.invalidateProjectStructure(before);
       const adapter = this.registry.resolve({ path: normalizedPath });
       if (!adapter) throw new Error(`No code evidence adapter supports: ${normalizedPath}`);
       const { source, contentHash } = await readCodeSource(this.repositoryRoot, normalizedPath);
@@ -490,6 +585,7 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
       const normalizedPath = normalizedRelativePath(path);
       safeResolveWithin(this.repositoryRoot, normalizedPath);
       const before = await this.snapshot();
+      if (this.isProjectManifest(normalizedPath)) return this.invalidateProjectStructure(before);
       const existed = before.files.some((record) => record.path === normalizedPath);
       if (!existed) {
         return report({ scannedFiles: 0, reusedFiles: before.files.length, reparsedFiles: 0, removedFiles: 0, snapshot: before });
@@ -505,22 +601,37 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
     });
   }
 
+  private isProjectManifest(path: string): boolean {
+    const fileName = nodePath.posix.basename(path);
+    return this.registry.registrations.some(({ adapter }) => adapter.projectManifests?.some((spec) => spec.fileName === fileName));
+  }
+
+  private async invalidateProjectStructure(before: CodeEvidenceSnapshot): Promise<CodeEvidenceUpdateReport> {
+    // Publish a new derived generation so other processes also discover newly
+    // created nested manifests. Existing source fragments and anchors stay intact.
+    const snapshot = { ...before, generatedAt: new Date().toISOString() };
+    await writeSnapshot(this.wikiRoot, snapshot);
+    return report({ scannedFiles: 0, reusedFiles: before.files.length, reparsedFiles: 0, removedFiles: 0, snapshot });
+  }
+
   async search(query: string, options: CodeSearchOptions = {}): Promise<CodeEvidenceHit[]> {
     if (!query.trim()) throw new Error("Code evidence query must not be empty.");
     const maxResults = clampResults(options.maxResults);
     const kindFilter = options.kinds ? new Set(options.kinds) : null;
     const terms = tokenizeSearchText(query);
-    const snapshot = await this.querySnapshot();
-    return snapshot.fragments
-      .filter((fragment) => !kindFilter || kindFilter.has(fragment.kind))
-      .filter((fragment) => pathAllowed(fragment.path, options.paths))
-      .map((fragment) => ({ fragment, ...scoreFragment(fragment, query, terms) }))
-      .filter((hit) => hit.score > 0)
-      .sort((left, right) => right.score - left.score ||
+    const queryNormalized = normalizedCodeText(query).trim();
+    const { snapshot } = await this.queryRuntime();
+    const best = new TopResults<{ fragment: KnowledgeFragment; score: number; matchedTerms: string[] }>(
+      maxResults, (left, right) => right.score - left.score ||
         left.fragment.path.localeCompare(right.fragment.path) ||
-        left.fragment.range.startLine - right.fragment.range.startLine)
-      .slice(0, maxResults)
-      .map((hit) => ({ ...hit, resourceUri: codeResourceUri(hit.fragment) }));
+        left.fragment.range.startLine - right.fragment.range.startLine
+    );
+    for (const fragment of snapshot.fragments) {
+      if ((kindFilter && !kindFilter.has(fragment.kind)) || !codePathAllowed(fragment.path, options.paths)) continue;
+      const scored = scoreFragment(fragment, queryNormalized, terms);
+      if (scored.score > 0) best.add({ fragment, ...scored });
+    }
+    return best.sorted().map((hit) => ({ ...hit, fragment: structuredClone(hit.fragment), resourceUri: codeResourceUri(hit.fragment) }));
   }
 
   async symbol(name: string, options: CodeSearchOptions = {}): Promise<CodeEvidenceHit[]> {
@@ -528,60 +639,94 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
     const maxResults = clampResults(options.maxResults);
     const sought = normalizedQualifiedSymbol(name);
     if (!sought) throw new Error("Symbol name must contain an identifier.");
-    const kindFilter = options.kinds ? new Set(options.kinds) : null;
-    const snapshot = await this.querySnapshot();
-    return snapshot.fragments
-      .filter((fragment) => fragment.kind !== "module" && fragment.kind !== "comment")
-      .filter((fragment) => !kindFilter || kindFilter.has(fragment.kind))
-      .filter((fragment) => pathAllowed(fragment.path, options.paths))
-      .map((fragment) => {
-        const symbol = normalizedQualifiedSymbol(fragment.symbol);
-        const qualified = normalizedQualifiedSymbol(fragment.qualifiedName);
-        const score = symbol === sought || qualified === sought ? 200
-          : qualified.endsWith(`.${sought}`) ? 160
-          : symbol.includes(sought) || qualified.includes(sought) ? 80
-          : 0;
-        return { fragment, score, matchedTerms: score > 0 ? [sought] : [] };
-      })
-      .filter((hit) => hit.score > 0)
-      .sort((left, right) => right.score - left.score || left.fragment.path.localeCompare(right.fragment.path))
-      .slice(0, maxResults)
-      .map((hit) => ({ ...hit, resourceUri: codeResourceUri(hit.fragment) }));
+    const runtime = await this.queryRuntime();
+    return runtime.symbol(sought, options, maxResults)
+      .map((hit) => ({ ...hit, fragment: structuredClone(hit.fragment), resourceUri: codeResourceUri(hit.fragment) }));
   }
 
   async references(symbolId: string, options: CodeSearchOptions = {}): Promise<CodeReference[]> {
+    return (await this.referenceQuery(symbolId, options)).references;
+  }
+
+  /** Read-only context expansion. Shares the ordinary runtime/admission policy;
+   * never rebuilds, updates source files or writes a snapshot on failure. */
+  async impact(targets: readonly CodeImpactTarget[]): Promise<CodeImpactResult> {
+    // Automatic task-context reads must not follow an index from another wiki.
+    try {
+      const [rootReal, indexReal] = await Promise.all([fs.realpath(this.wikiRoot), fs.realpath(codeEvidenceIndexFile(this.wikiRoot))]);
+      if (nodePath.relative(rootReal, indexReal).replace(/\\/g, "/") !== `.knowledge-rail/${INDEX_FILE_NAME}`) {
+        throw new Error("Code impact index resolves outside its canonical workspace location.");
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const unique = [...new Map(targets.map((target) => [`${target.path}\0${target.fragmentId ?? ""}`, target])).values()];
+    const requested = unique.slice(0, CODE_IMPACT_MAX_ROOTS);
+    const runtime = await this.queryRuntime(false);
+    const byPath = new Map(requested.map((target) => [target.path, [] as KnowledgeFragment[]]));
+    for (const fragment of runtime.snapshot.fragments) byPath.get(fragment.path)?.push(fragment);
+    const roots: CodeImpactResult["roots"] = [];
+    const unresolved: CodeImpactTarget[] = [];
+    const resolved = requested.map((target) => {
+      const fragments = byPath.get(target.path)!;
+      const fragment = target.fragmentId
+        ? fragments.find((candidate) => candidate.id === target.fragmentId)
+        : fragments.find((candidate) => candidate.kind === "module" && candidate.qualifiedName === target.path) ??
+          fragments.find((candidate) => candidate.kind === "module");
+      if (!fragment) unresolved.push(target);
+      return { requested: target, fragment, fragments };
+    });
+    let relationsTruncated = false;
+    if (resolved.some((root) => root.fragment)) await runtime.refreshProjectStructure(this.repositoryRoot);
+    for (const root of resolved) {
+      if (!root.fragment) continue;
+      const targets = root.requested.fragmentId ? [root.fragment] : root.fragments.filter((fragment) => fragment.kind !== "comment");
+      const references = runtime.referencesTo(targets, {}, CODE_IMPACT_REFERENCES_PER_ROOT + 1);
+      relationsTruncated ||= references.length > CODE_IMPACT_REFERENCES_PER_ROOT;
+      roots.push({ requested: { ...root.requested }, fragment: structuredClone(root.fragment),
+        references: references.slice(0, CODE_IMPACT_REFERENCES_PER_ROOT).map((reference) => ({
+          source: structuredClone(reference.source), target: structuredClone(reference.target), relation: reference.relation,
+          resourceUri: codeResourceUri(reference.source),
+        })),
+      });
+    }
+    accountProjectStructure(this.wikiRoot, runtime);
+    return { generatedAt: runtime.snapshot.generatedAt, roots, unresolved: structuredClone(unresolved),
+      omittedRoots: unique.length - requested.length, relationsTruncated,
+      manifestWarnings: structuredClone(runtime.projectStructureWarnings()),
+      ...(roots.length ? { importDiagnostics: structuredClone(runtime.importResolutionDiagnostics().diagnostics) } : {}),
+    };
+  }
+
+  async referencesWithDiagnostics(symbolId: string, options: CodeSearchOptions = {}): Promise<{
+    references: CodeReference[];
+    manifestWarnings: ProjectStructure["warnings"];
+    importDiagnostics: CodeImportDiagnostics;
+  }> {
+    const { runtime, references } = await this.referenceQuery(symbolId, options);
+    return { references, manifestWarnings: structuredClone(runtime.projectStructureWarnings()),
+      importDiagnostics: structuredClone(runtime.importResolutionDiagnostics().diagnostics) };
+  }
+
+  private async referenceQuery(symbolId: string, options: CodeSearchOptions): Promise<{ runtime: CodeQueryRuntime; references: CodeReference[] }> {
     if (!symbolId.trim()) throw new Error("symbolId must not be empty.");
     const maxResults = clampResults(options.maxResults);
-    const snapshot = await this.querySnapshot();
-    const target = snapshot.fragments.find((fragment) => fragment.id === symbolId);
-    if (!target) throw new Error(`Unknown code evidence symbol id: ${symbolId}`);
-    const targetNames = new Set([
-      normalized(target.symbol),
-      normalized(target.qualifiedName),
-      normalized(target.qualifiedName.split(".").at(-1)!),
-      ...target.databaseRefs.map(normalized),
-    ]);
-    const moduleStem = target.path.split("/").at(-1)!.replace(/\.[^.]+$/, "").toLowerCase();
-    const references: CodeReference[] = [];
-    for (const source of snapshot.fragments) {
-      if (source.id === target.id || !pathAllowed(source.path, options.paths)) continue;
-      const calls = source.calls.map(normalized);
-      const refs = [...source.references, ...source.databaseRefs].map(normalized);
-      let relation: CodeReference["relation"] | null = calls.some((value) =>
-        targetNames.has(value) || targetNames.has(value.split(".").at(-1)!)
-      ) ? "call" : null;
-      if (!relation && refs.some((value) => targetNames.has(value))) relation = "reference";
-      if (!relation && target.kind === "module" && source.imports.some((value) =>
-        value.toLowerCase().split("/").at(-1) === moduleStem
-      )) relation = "import";
-      if (relation) references.push({ source, target, relation, resourceUri: codeResourceUri(source) });
-    }
-    const relationRank = { call: 0, reference: 1, import: 2 } as const;
-    return references
-      .sort((left, right) => relationRank[left.relation] - relationRank[right.relation] ||
-        Number(right.source.isTest) - Number(left.source.isTest) ||
-        left.source.path.localeCompare(right.source.path) ||
-        left.source.range.startLine - right.source.range.startLine)
-      .slice(0, maxResults);
+    const runtime = await this.queryRuntime();
+    await runtime.refreshProjectStructure(this.repositoryRoot);
+    const references = runtime.references(symbolId, options, maxResults);
+    accountProjectStructure(this.wikiRoot, runtime);
+    const target = references[0] ? structuredClone(references[0].target) : undefined;
+    return { runtime, references: references.map((reference) => ({
+      ...reference, source: structuredClone(reference.source), target: target!,
+      resourceUri: codeResourceUri(reference.source),
+    })) };
+  }
+
+  /** Bounded callers may expose these warnings without changing existing hit shapes. */
+  async projectStructureWarnings(options: { refresh?: boolean } = {}): Promise<ProjectStructure["warnings"]> {
+    const runtime = await this.queryRuntime();
+    if (options.refresh !== false) await runtime.refreshProjectStructure(this.repositoryRoot);
+    accountProjectStructure(this.wikiRoot, runtime);
+    return structuredClone(runtime.projectStructureWarnings());
   }
 }

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Deviank88/KnowledgeRail/v2.7.3/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
+  <img src="https://raw.githubusercontent.com/Deviank88/KnowledgeRail/v2.7.4/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
 </p>
 
 <h1 align="center">KnowledgeRail</h1>
@@ -8,7 +8,7 @@ KnowledgeRail is a local-first MCP server that turns project documentation and s
 
 It is designed for agents that need to understand, change, review, or document a codebase without loading the whole repository into the model context. Retrieval is bounded, provenance is preserved, missing evidence is reported explicitly, and difficult queries widen progressively instead of silently losing relevant information.
 
-> **Current status:** stable release `2.7.3`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports explicitly bound or safely inferred local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
+> **Current status:** stable release `2.7.4`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports explicitly bound or safely inferred local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
 
 ## What it provides
 
@@ -30,6 +30,12 @@ KnowledgeRail does not call an LLM itself. The connected MCP client chooses and 
 
 Code evidence is extracted locally without tree-sitter, native binaries, downloaded grammars, or runtime parser dependencies. Each file is owned by exactly one versioned adapter, so upgrading one language reparses only that language's files. Unsupported or deliberately skipped constructs remain visible through recorded raw-fallback demand rather than being assigned an unreliable anchor.
 
+In the table below, **imports means extracted specifiers**. Incoming `import`
+relations additionally resolve project-local declarations or paths: JS/TS,
+Python, Java/Kotlin, C#, PHP, Go and Rust, C/C++ headers, and supported LWC virtual
+imports. Ruby retains stem matching. Ambiguities and unsupported conventions
+remain visible limitations; see [module reference coverage](benchmarks/README.md#local-import-references).
+
 | Adapter | Files | Indexed constructs |
 | --- | --- | --- |
 | TypeScript / JavaScript / LWC | `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.js-meta.xml` | Classes, functions, methods, tests, routes, imports, calls, LWC decorators and component targets. |
@@ -48,6 +54,40 @@ Code evidence is extracted locally without tree-sitter, native binaries, downloa
 
 The extractors are intentionally conservative. LWC HTML templates, Java anonymous classes, dynamic Apex query object names, Rust macro expansion, PHP `eval()`/string callables and Blade/Twig templates, K&R C definitions, macro-generated C/C++ declarations, complex C++ operator/template metaprogramming, Python lambdas/dynamic definitions/metaclass-generated members, indirect or qualified decorator-generated routes, calls inside f-string interpolations, and notebooks are not guessed. Kotlin computed Ktor paths and string-named Kotest cases are not emitted independently. Salesforce metadata is limited to the explicit SFDX suffix roster; malformed XML falls back to a file module. Ruby metaprogramming, inferred ActiveRecord tables, individual RSpec `it` blocks, operator methods, and ambiguous plain command-form heredocs or regex literals remain best-effort or out of scope. Headers use the C++ superset adapter. Python uses a separate indentation engine with CPython-compatible tab stops; Ruby uses its own keyword-block engine. Qualified `knowledge_code action="symbol"` lookups treat `.`, `#`, `::`, PHP namespace backslashes, and `->` as equivalent separators, while returned names retain the language-native form. The pinned golden corpus contains 52 source files, 1,429 source lines, and 199 hand-labeled symbols across twelve language adapters; the mixed-repository benchmark adds two LWC files for 54 files and 1,446 lines overall. Its perfect in-corpus score is a deterministic regression guarantee, not a claim of universal parser accuracy. Code anchors are line-based: trailing-whitespace edits remain fresh, while formatting that inserts or removes lines is deliberately reported as drift because it shifts the cited range. `knowledge_admin action="status"` reports the extension histogram supplied with recorded grep fallbacks, allowing later language priorities to follow real repository demand.
 
+### Interpreting module references
+
+Use `knowledge_code action="references"` with the indexed module's `symbol_id`
+to retrieve import edges. The adapter's `imports` list records source specifiers;
+a returned `import` relation is the resolver's connection to a module in this
+project. JS/TS uses unambiguous relative paths, supported extension substitutions,
+and declared `paths`/`baseUrl` from the nearest `tsconfig.json` or `jsconfig.json`,
+including one local `extends` level. Python resolves absolute dotted names from both the repository
+root and the importing file's directory, so `src/cli.py` can import its sibling
+`src/orders_cli.py`. Package `__init__.py` and relative imports are supported;
+conflicting candidates remain unresolved. A verified regular-package chain also
+supplies Python's source root. Java/Kotlin/PHP use declared qualified names;
+C# namespaces and Go package directories can identify several contributing files.
+Go uses `go.mod` identities and nested module boundaries when available. Known
+manifests are checked on reference queries; newly added nested manifests require
+`knowledge_code action="update" path="<directory>/go.mod"` or an index rebuild.
+Projects without discovered Go manifests retain suffix matching for compatibility.
+C/C++ links the included header, and Rust resolves supported crate/module paths.
+LWC can link Apex methods, schema declarations and local component bundles.
+These static rules do not execute build tools or resolve arbitrary external
+packages. Ruby and custom adapters without a resolver retain stem matching,
+including its false positives and missing load-path checks.
+An empty reference list does not prove that a module is unused. Inspect the
+extracted specifier and use a qualified `symbol` lookup or read the source when
+an import edge is missing; treat heuristic edges as candidates to verify.
+See [the import resolution contract](benchmarks/README.md#local-import-references)
+for supported cases and limitations.
+
+When a knowledge claim explains code, record its indexed `code://repo/...#symbol-...`
+resource as the Evidence IR `target.codeResourceUri`. Synthesis then places a
+direct code link and line range on the wiki page if anchor capture succeeds;
+claims without code evidence do not receive a fabricated link. The stored hash
+and parser version support drift checks. See [the workflow and verified examples](docs/guides/code-evidence-retrieval.md).
+
 ## Requirements
 
 - Node.js `22.12.0` or newer
@@ -61,7 +101,7 @@ KnowledgeRail ships no browser or document renderer. Mermaid source remains ordi
 Run this from any directory inside the project in a terminal or another client that launches stdio servers with the project as its working directory:
 
 ```bash
-npx -y knowledge-rail@2.7.3
+npx -y knowledge-rail@2.7.4
 ```
 
 No project path is needed when the MCP client guarantees a project-scoped process cwd or supplies one unambiguous legacy MCP Root. Cursor project setup is explicit because its global MCP process may be shared across windows.
@@ -91,7 +131,7 @@ node /absolute/path/to/KnowledgeRail/dist/index.js
 Run this once from the project root or any nested directory:
 
 ```bash
-npx -y knowledge-rail@2.7.3 setup cursor
+npx -y knowledge-rail@2.7.4 setup cursor
 ```
 
 The command discovers the project upward and safely creates or merges `.cursor/mcp.json`. It preserves other MCP servers and pins an explicit `${workspaceFolder}` binding. Re-running it is idempotent.
@@ -106,7 +146,7 @@ The equivalent manual project configuration is:
       "command": "npx",
       "args": [
         "-y",
-        "knowledge-rail@2.7.3",
+        "knowledge-rail@2.7.4",
         "--root",
         "${workspaceFolder}"
       ]
@@ -142,7 +182,7 @@ For a Cursor multi-root workspace, install one project configuration in every ro
 From the project, add KnowledgeRail at project scope:
 
 ```bash
-claude mcp add --transport stdio --scope project knowledge-rail -- npx -y knowledge-rail@2.7.3
+claude mcp add --transport stdio --scope project knowledge-rail -- npx -y knowledge-rail@2.7.4
 ```
 
 Claude Code writes the shared project entry to `.mcp.json` and launches the local server in project context. Use `claude mcp list` to verify the connection. The command shape and project scope follow the [official Claude Code MCP guide](https://docs.anthropic.com/en/docs/claude-code/mcp).
@@ -156,7 +196,7 @@ For a client that explicitly guarantees one stdio process per project with the p
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.7.3"]
+      "args": ["-y", "knowledge-rail@2.7.4"]
     }
   }
 }
@@ -169,8 +209,8 @@ The workspace precedence is explicit `--root`; one unambiguous legacy MCP Root; 
 Inspect the exact choice without starting MCP:
 
 ```bash
-npx -y knowledge-rail@2.7.3 doctor
-npx -y knowledge-rail@2.7.3 doctor --root /absolute/project/path
+npx -y knowledge-rail@2.7.4 doctor
+npx -y knowledge-rail@2.7.4 doctor --root /absolute/project/path
 ```
 
 The command prints the canonical root and its resolution source, or exits non-zero with corrective guidance.
@@ -185,7 +225,7 @@ For a source/release checkout, build the deterministic bundle:
 npm run mcpb:build
 ```
 
-Then install `artifacts/knowledge-rail-2.7.3.mcpb` from **Claude Desktop → Settings → Extensions → Advanced settings → Install Extension**. The bundle contains the compiled server and its production dependencies, starts the `desktop` adapter directly, and does not require a project path. See Anthropic's [local MCP server guide](https://support.anthropic.com/en/articles/10949351/getting-started-with-local-mcp-servers-on-claude-desktop) and the [MCP Bundle specification](https://github.com/modelcontextprotocol/mcpb).
+Then install `artifacts/knowledge-rail-2.7.4.mcpb` from **Claude Desktop → Settings → Extensions → Advanced settings → Install Extension**. The bundle contains the compiled server and its production dependencies, starts the `desktop` adapter directly, and does not require a project path. See Anthropic's [local MCP server guide](https://support.anthropic.com/en/articles/10949351/getting-started-with-local-mcp-servers-on-claude-desktop) and the [MCP Bundle specification](https://github.com/modelcontextprotocol/mcpb).
 
 The manual local-development configuration remains available for hosts that have not adopted MCP Bundles:
 
@@ -194,7 +234,7 @@ The manual local-development configuration remains available for hosts that have
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.7.3", "desktop"]
+      "args": ["-y", "knowledge-rail@2.7.4", "desktop"]
     }
   }
 }
@@ -207,10 +247,10 @@ In a new chat, ask KnowledgeRail to list workspaces, choose one entry, and confi
 Projects opened successfully by an IDE/terminal are added to the local catalog automatically without changing their clean eight-tool workflow. Operators can also manage catalog metadata locally:
 
 ```bash
-npx -y knowledge-rail@2.7.3 workspace list
-npx -y knowledge-rail@2.7.3 workspace register
-npx -y knowledge-rail@2.7.3 workspace register /absolute/project/path
-npx -y knowledge-rail@2.7.3 workspace unregister ws_example
+npx -y knowledge-rail@2.7.4 workspace list
+npx -y knowledge-rail@2.7.4 workspace register
+npx -y knowledge-rail@2.7.4 workspace register /absolute/project/path
+npx -y knowledge-rail@2.7.4 workspace unregister ws_example
 ```
 
 Registration never copies, uploads, scans the disk, or deletes project files. `workspace register` without a path discovers only upward from cwd.
@@ -220,7 +260,7 @@ Registration never copies, uploads, scans the disk, or deletes project files. `w
 Start one gateway for many concurrent local clients and workspaces:
 
 ```bash
-npx -y knowledge-rail@2.7.3 --transport http
+npx -y knowledge-rail@2.7.4 --transport http
 ```
 
 The default endpoint is `http://127.0.0.1:3333/mcp`; liveness only is available at `/healthz`. MCP requests require the random credential stored in the OS-protected per-user KnowledgeRail state directory. The desktop adapter reads it automatically, so it never belongs in project configuration or a repository.
@@ -315,6 +355,15 @@ knowledge_context {
 
 On MCP `2026-07-28`, `knowledge_context` returns selected `knowledge-rail://` resource links. The client materializes only the passages it needs with `resources/read`; clients that do not expose resource reads can use `knowledge_page action="read"` with the exact URI. The envelope always reports `retrieval.coverageMode` as `lexical` or `semantic`, plus any graceful-degradation warning. When evidence was omitted only because of the budget, `nextAction` provides the next bounded widening request. Semantic, stale, or unresolved gaps are returned without a futile widening loop and must remain explicit unknowns.
 
+For source changes, `changed_paths` also accepts repository-relative indexed code
+files. Task context can return `changeImpact.codeRoots`, incoming `codeRelations`
+and related `codeWikiPages` from active anchored claims. Expansion uses the existing
+code snapshot, with at most three roots and twelve candidates per root, further
+reduced by the token budget. Context does not rebuild missing or invalid code indexes.
+Read only relevant code links and verify freshness: lexical calls/references and
+heuristic imports remain candidates, and an empty result does not prove non-use.
+See the [code evidence guide](docs/guides/code-evidence-retrieval.md) for scope and limits.
+
 The consolidated catalog is deliberately action-oriented, but validation remains action-specific. For example, `knowledge_page action="edit"` is rejected without `path`, `old_string`, and `new_string`; ingestion cannot finalize before complete coverage; document review reports blockers and delivery readiness for the exact inspected Markdown.
 
 Caller-owned page, file, and code bodies are never rewritten to modernize historical tool names. If a canonical `SCHEMA.md` still refers to a retired operation, `knowledge_admin action="migrate"` can propose the corresponding current operation for explicit review; reads remain byte-preserving.
@@ -359,15 +408,15 @@ knowledge_admin {
 The same detector is available without an MCP server for agent hooks and CI. Hook mode reports non-fresh anchors but never blocks the calling tool; it is silent when everything checked is fresh:
 
 ```bash
-npx -y knowledge-rail@2.7.3 drift --no-ledger
-npx -y knowledge-rail@2.7.3 drift --no-ledger --path src/payments.ts --path src/invoices
+npx -y knowledge-rail@2.7.4 drift --no-ledger
+npx -y knowledge-rail@2.7.4 drift --no-ledger --path src/payments.ts --path src/invoices
 ```
 
 An absolute event path is accepted only when it is confined to the discovered project. For pre-commit or CI, `--check` exits `2` on any non-fresh anchor or timeout; operational failures exit `1`. JSON mode returns the complete shared-core result:
 
 ```bash
-npx -y knowledge-rail@2.7.3 drift --check --no-ledger
-npx -y knowledge-rail@2.7.3 drift --format json --no-ledger
+npx -y knowledge-rail@2.7.4 drift --check --no-ledger
+npx -y knowledge-rail@2.7.4 drift --format json --no-ledger
 ```
 
 Text output is capped at 20 affected anchors. Its `stale` count is the aggregate of `drift_suspected` and `anchor_unresolvable`, not a fourth detector verdict. The default timeout is three seconds: ordinary hook mode reports a timeout on stderr and exits `0`, while `--check` exits `2`. Omit `--no-ledger` only when the disposable freshness ledger should be updated for later context compilation.
@@ -376,7 +425,7 @@ The action reads current code and writes only disposable state to `wiki/.knowled
 
 ## Project client hooks integration
 
-Claude Code, Codex and Cursor can receive project-scoped KnowledgeRail rules and read-only drift hooks directly. Preview with `npx -y knowledge-rail@2.7.3 setup clients`; apply only after review with the same command plus `--apply`. From an MCP client, ask the model to call `knowledge_admin action="client_setup" setup_mode="preview"`, then explicitly request `setup_mode="apply"`. Applying through the desktop/catalog profile requires a write-scoped workspace binding; preview and status remain read-only. Ordinary initialization never installs hooks implicitly.
+Claude Code, Codex and Cursor can receive project-scoped KnowledgeRail rules and read-only drift hooks directly. Preview with `npx -y knowledge-rail@2.7.4 setup clients`; apply only after review with the same command plus `--apply`. From an MCP client, ask the model to call `knowledge_admin action="client_setup" setup_mode="preview"`, then explicitly request `setup_mode="apply"`. Applying through the desktop/catalog profile requires a write-scoped workspace binding; preview and status remain read-only. Ordinary initialization never installs hooks implicitly.
 
 The full guide, generated files, client trust steps and security boundaries are in [docs/guides/claude-code-hooks.md](docs/guides/claude-code-hooks.md).
 

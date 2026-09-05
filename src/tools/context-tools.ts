@@ -74,12 +74,18 @@ function compactManifestText(manifest: TaskContext): string {
       lines.push(`- ${relation.direction} ${relation.kind}: ${relation.from} -> ${relation.to}`);
     }
   }
+  if (manifest.changeImpact.codeRoots?.length) {
+    lines.push("", "Code impact candidates (indexed snapshot; verify relevant resources before changing code):");
+    for (const root of manifest.changeImpact.codeRoots) lines.push(`- ${root.origin}: ${root.path}#${root.symbol}`);
+    for (const relation of manifest.changeImpact.codeRelations ?? []) lines.push(`- incoming ${relation.relation}: ${relation.path}#${relation.symbol}`);
+  }
+  for (const warning of manifest.changeImpact.codeWarnings ?? []) lines.push(`CODE WARNING: ${warning}`);
   for (const gap of manifest.unknowns) lines.push(`UNKNOWN ${gap.kind}: ${gap.description}`);
   return lines.join("\n");
 }
 
 function evidenceLinks(manifest: TaskContext): ResourceLink[] {
-  return manifest.evidence.map((evidence) => ({
+  const links: ResourceLink[] = manifest.evidence.map((evidence) => ({
     type: "resource_link",
     uri: evidence.uri,
     name: `${evidence.stale ? "[STALE] " : ""}${
@@ -88,6 +94,13 @@ function evidenceLinks(manifest: TaskContext): ResourceLink[] {
     description: evidence.reason,
     mimeType: "text/markdown",
   }));
+  for (const code of [...(manifest.changeImpact.codeRoots ?? []), ...(manifest.changeImpact.codeRelations ?? [])]) {
+    links.push({ type: "resource_link", uri: code.uri, name: `${code.path}#${code.symbol}`, mimeType: "text/plain",
+      description: "Indexed code impact candidate; materialize only if relevant. Call/reference edges are lexical, not proof of execution." });
+  }
+  for (const page of manifest.changeImpact.codeWikiPages ?? []) links.push({ type: "resource_link", uri: page.uri, name: page.title,
+    mimeType: "text/markdown", description: "Related wiki page with an active anchored claim; inspect before relying on it." });
+  return [...new Map(links.map((link) => [link.uri, link])).values()];
 }
 
 export function compactStructuredContext(manifest: TaskContext) {
@@ -109,6 +122,14 @@ export function compactStructuredContext(manifest: TaskContext) {
     changeImpact: {
       mode: manifest.changeImpact.mode,
       decisions: manifest.changeImpact.decisions,
+      ...(manifest.changeImpact.codeRoots ? {
+        codeRoots: manifest.changeImpact.codeRoots,
+        codeRelations: manifest.changeImpact.codeRelations,
+        codeWikiPages: manifest.changeImpact.codeWikiPages,
+        codeSnapshot: manifest.changeImpact.codeSnapshot,
+        codeWarnings: manifest.changeImpact.codeWarnings,
+        codeTruncated: manifest.changeImpact.codeTruncated,
+      } : {}),
     },
     gaps: manifest.unknowns,
     retrieval: {
@@ -144,7 +165,7 @@ export function registerContextTools(
         objective: z.string().min(1).max(4_096),
         query: z.string().min(1).max(4_096).optional().describe("Retrieval query; defaults to objective."),
         changed_paths: z.array(z.string().min(1).max(1_024)).max(20).optional()
-          .describe("Wiki-relative changed components for impact analysis."),
+          .describe("Changed wiki Markdown paths or repository-relative indexed source files for bounded impact analysis."),
         page_types: z.array(z.string().min(1).max(128)).max(20).optional(),
         retrieval_profile: z.enum(["precision", "balanced", "coverage"]).default("balanced"),
         max_evidence: z.number().int().min(1).max(20).default(8),

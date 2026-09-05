@@ -1,7 +1,6 @@
 import * as nodePath from "node:path";
 
 interface WorkspaceStateEntry {
-  touchedAt: number;
   disposers: Map<string, () => void>;
 }
 
@@ -27,11 +26,11 @@ function disposeRoot(root: string): void {
 function enforceCap(): void {
   const cap = configuredCap();
   while (entries.size > cap) {
-    const oldest = [...entries.entries()].sort((left, right) =>
-      left[1].touchedAt - right[1].touchedAt || left[0].localeCompare(right[0])
-    )[0];
-    if (!oldest) return;
-    disposeRoot(oldest[0]);
+    // Registration and access move entries to the end of the Map. Its order
+    // remains exact even when timestamps tie or the wall clock moves backward.
+    const oldest = entries.keys().next();
+    if (oldest.done) return;
+    disposeRoot(oldest.value);
   }
 }
 
@@ -41,8 +40,7 @@ export function registerWorkspaceState(
   dispose: () => void
 ): void {
   const root = normalized(wikiRoot);
-  const entry = entries.get(root) ?? { touchedAt: Date.now(), disposers: new Map() };
-  entry.touchedAt = Date.now();
+  const entry = entries.get(root) ?? { disposers: new Map() };
   entry.disposers.set(key, dispose);
   entries.delete(root);
   entries.set(root, entry);
@@ -53,7 +51,6 @@ export function touchWorkspaceState(wikiRoot: string): void {
   const root = normalized(wikiRoot);
   const entry = entries.get(root);
   if (!entry) return;
-  entry.touchedAt = Date.now();
   entries.delete(root);
   entries.set(root, entry);
 }

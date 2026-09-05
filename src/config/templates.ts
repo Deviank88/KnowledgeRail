@@ -283,6 +283,7 @@ Standard markdown links for external URLs:
 1. Normalize the source when necessary with \`knowledge_files action="normalize"\`.
 2. Run \`knowledge_ingest action="start"\` on the normalized file and follow its \`nextAction\`.
 3. The guided cycle is \`next → apply_claims\`: \`apply_claims\` records, links, validates, and synthesizes Evidence IR before updating canonical pages.
+   When a claim explains implemented behavior, find the relevant class or function with \`knowledge_code\` and pass its indexed URI as \`target.code_resource_uri\`. The knowledge page then exposes a direct code link backed by a captured anchor. Omit code targets for claims without relevant code evidence; check drift before relying on an older implementation claim.
 4. A segment without useful claims may be classified only with an allowed state and explicit reason.
 5. Use \`knowledge_ingest action="source_status"\` to inspect coverage and gaps.
 6. Finalize a source only when the state proposes \`action="finalize"\` after complete coverage.
@@ -298,6 +299,7 @@ When answering a question using the wiki:
 1. Call \`knowledge_context mode="task"\` with the appropriate intent and a concrete objective; compact response detail is the default.
 2. Use \`mode="search"\` or \`mode="graph"\` only for targeted diagnostics, not as a mandatory chain.
 3. Materialize only relevant resource links, including applicable entries from \`decisions\` and \`changeImpact.decisions\`.
+   For source changes, pass repository-relative files in \`changed_paths\`. Inspect \`changeImpact.codeRoots\`, \`codeRelations\` and \`codeWikiPages\` as bounded candidates from the existing code index; open only pertinent links and verify current code. Lexical call/reference edges do not prove execution, and an empty result does not prove that a module is unused. If the index is missing or incompatible, refresh it explicitly as suggested by the GAP.
 4. If the response contains a widening \`nextAction\`, execute it with the suggested budget.
 5. Do not manually chain search, graph, and page dumps.
 6. If knowledge remains insufficient and no further widening is suggested, report \`evidenceGaps\` as GAP/unknown without hallucinating.

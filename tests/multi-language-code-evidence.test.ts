@@ -166,7 +166,7 @@ test("adapter claims are exclusive and language extensions resolve to one owner"
   assert.equal(registry.resolve({ path: "scripts/orders.py" })?.parserVersion, PYTHON_ADAPTER_VERSION);
   assert.equal(registry.resolve({ path: "stubs/orders.pyi" })?.parserVersion, PYTHON_ADAPTER_VERSION);
   assert.equal(registry.resolve({ path: "lwc/component.js-meta.xml" })?.parserVersion,
-    "typescript-javascript-deterministic-v2");
+    "typescript-javascript-deterministic-v4");
   assert.equal(registry.resolve({ path: "objects/Invoice__c.object-meta.xml" })?.parserVersion,
     SFMETA_ADAPTER_VERSION);
   assert.equal(registry.resolve({ path: "objects/Invoice__c.validationRule-meta.xml" })?.parserVersion,

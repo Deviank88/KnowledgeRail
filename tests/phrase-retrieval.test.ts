@@ -12,7 +12,9 @@ import {
 } from "../src/core/phrase-scoring.js";
 import {
   clearRetrievalIndexes,
+  refreshRetrievalIndex,
   searchRetrievalIndex,
+  updateRetrievalPaths,
   type PhraseRerankDiagnostics,
 } from "../src/core/retrieval-index.js";
 
@@ -231,6 +233,73 @@ test("identifier-heavy lookups retain lexical passage selection", async () => {
     assert.equal(result[0]?.heading, "REQ-771");
     assert.equal(diagnostics?.enabled, false);
     assert.equal(diagnostics?.protectedIdentifierCount, 5);
+  } finally {
+    clearRetrievalIndexes();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("cached phrase evidence supports different queries and follows updates and checkpoint reloads", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-phrase-cache-"));
+  const relativePath = "pairs/page.md";
+  const search = (query: string) => searchRetrievalIndex({ wikiRoot: root, query, phraseRerank: true });
+  try {
+    await writePage(root, relativePath, [
+      { heading: "First", text: "alpha beta gamma" },
+      { heading: "Second", text: "gamma beta alpha" },
+    ]);
+    clearRetrievalIndexes();
+    assert.equal((await search("alpha beta"))[0]?.heading, "First");
+    assert.equal((await search("beta alpha"))[0]?.heading, "Second");
+    assert.equal((await search("alpha beta alpha beta"))[0]?.heading, "First");
+
+    await writePage(root, relativePath, [
+      { heading: "First", text: "gamma beta alpha" },
+      { heading: "Second", text: "alpha beta gamma" },
+    ]);
+    await updateRetrievalPaths(root, [relativePath]);
+    const updated = await search("alpha beta");
+    assert.equal(updated[0]?.heading, "Second");
+    assert.equal((await search("beta alpha"))[0]?.heading, "First");
+    clearRetrievalIndexes();
+    const restored = await search("alpha beta");
+    assert.equal(restored[0]?.heading, updated[0]?.heading);
+    assert.equal(restored[0]?.score, updated[0]?.score);
+    assert.equal(restored[0]?.excerpt, updated[0]?.excerpt);
+  } finally {
+    clearRetrievalIndexes();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("phrase cache stays bounded and eviction preserves exact search results", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-phrase-budget-"));
+  try {
+    for (let index = 0; index < 60; index++) {
+      await writePage(root, `pairs/page-${String(index).padStart(2, "0")}.md`, [{
+        heading: "Evidence",
+        text: `alpha beta ${Array.from({ length: 512 }, (_, word) => `word${index}x${word}`).join(" ")}`,
+      }]);
+    }
+    clearRetrievalIndexes();
+    const params = { wikiRoot: root, query: "alpha beta", maxResults: 60, persist: false };
+    const first = await searchRetrievalIndex(params);
+    const state = await refreshRetrievalIndex(root, { persist: false });
+    assert.ok(state.phraseCache.size > 0 && state.phraseCache.size < 60, "the corpus must exceed the cache budget");
+    assert.ok(state.phraseCacheBytes <= 2 * 1024 * 1024);
+    const second = await searchRetrievalIndex(params);
+    assert.deepEqual(second, first, "recomputing evicted evidence must preserve scores, order and passages");
+    assert.ok(state.phraseCacheBytes <= 2 * 1024 * 1024);
+
+    await writePage(root, "pairs/oversized.md", [{
+      heading: "Large evidence",
+      text: `alpha beta ${Array.from({ length: 30_000 }, (_, word) => `oversizedword${word}`).join(" ")}`,
+    }]);
+    await updateRetrievalPaths(root, ["pairs/oversized.md"]);
+    const large = await searchRetrievalIndex({ ...params, maxResults: 100 });
+    assert.ok(large.some((hit) => hit.path === "pairs/oversized.md"));
+    assert.equal(state.phraseCache.has("pairs/oversized.md"), false, "oversized records remain searchable without cache admission");
+    assert.ok(state.phraseCacheBytes <= 2 * 1024 * 1024);
   } finally {
     clearRetrievalIndexes();
     await fs.rm(root, { recursive: true, force: true });

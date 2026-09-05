@@ -25,19 +25,19 @@ Ordinary `knowledge_admin action="init"` does not install executable hooks. Setu
 Preview all clients:
 
 ```bash
-npx -y knowledge-rail@2.7.3 setup clients
+npx -y knowledge-rail@2.7.4 setup clients
 ```
 
 Apply all clients:
 
 ```bash
-npx -y knowledge-rail@2.7.3 setup clients --apply
+npx -y knowledge-rail@2.7.4 setup clients --apply
 ```
 
 Select one or more clients with repeated `--client` flags:
 
 ```bash
-npx -y knowledge-rail@2.7.3 setup clients --client claude --client codex --apply
+npx -y knowledge-rail@2.7.4 setup clients --client claude --client codex --apply
 ```
 
 An optional project path may follow `clients`. Without it, KnowledgeRail discovers the current project safely.

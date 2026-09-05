@@ -1,3 +1,4 @@
+import { createPythonImportResolver } from "./import-resolution/python.js";
 import {
   codeFragmentId,
   unique,
@@ -809,6 +810,7 @@ function commentFragments(
 }
 
 export class PythonKnowledgeAdapter implements KnowledgeAdapter {
+  readonly createImportResolver = createPythonImportResolver;
   readonly parserVersion = PYTHON_ADAPTER_VERSION;
   readonly extensionClaims = PYTHON_EXTENSION_CLAIMS;
 

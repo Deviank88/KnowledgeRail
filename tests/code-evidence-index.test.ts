@@ -73,6 +73,78 @@ async function writeFixture(root: string): Promise<void> {
   }
 }
 
+test("TypeScript resources survive regex quotes, templates and braces while preserving division", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-regex-range-"));
+  const wikiRoot = path.join(root, "wiki");
+  try {
+    const content = [
+      'const pattern = /["`{}😀]/u;',
+      'export function afterRegex(value: string) {',
+      '  const local = /[\'{}]/u;',
+      '  const ratio = 12 / 3 / 2;',
+      '  return pattern.test(value) && local.test(value) && ratio === 2;',
+      '}',
+      'export function returnRegex(value: string) {',
+      '  return /["`]/u.test(value);',
+      '}',
+      'export function adjacent() { return 99; }',
+    ].join("\n");
+    await fs.writeFile(path.join(root, "regex.ts"), content);
+    const index = new PersistentCodeEvidenceIndex({ repositoryRoot: root, wikiRoot });
+    await index.rebuild();
+    for (const [symbol, startLine, endLine] of [["afterRegex", 2, 6], ["returnRegex", 7, 9], ["adjacent", 10, 10]] as const) {
+      const hit = (await index.symbol(symbol))[0];
+      assert.equal(hit?.fragment.symbol, symbol);
+      const read = await readCodeResource({ repositoryRoot: root, wikiRoot, resourceUri: hit!.resourceUri, maxCharacters: 2000 });
+      assert.equal(read.startLine, startLine);
+      assert.equal(read.endLine, endLine);
+      assert.equal(read.text, content.split("\n").slice(startLine - 1, endLine).join("\n"));
+    }
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
+
+test("TypeScript code resources include bodies after parameter and return-type braces", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-code-function-body-"));
+  const wikiRoot = path.join(root, "wiki");
+  try {
+    await fs.writeFile(path.join(root, "functions.ts"), [
+      "export function fromContext({ value }: { value: number }): number {",
+      "  return value + 42;",
+      "}",
+      "export async function record(params: { value: number }): Promise<{ saved: number }> {",
+      "  return { saved: params.value };",
+      "}",
+      "export function multiline(",
+      "  { value }: { value: number },",
+      "  map = (item: number) => ({ mapped: item }),",
+      "): { mapped: number } {",
+      "  return map(value);",
+      "}",
+      "export function generic<T extends (item: number) => number>(map: T): number {",
+      "  return map(73);",
+      "}",
+      "export function unrelated(): void { throw new Error('adjacent secret'); }",
+    ].join("\n"));
+    const index = new PersistentCodeEvidenceIndex({ repositoryRoot: root, wikiRoot });
+    await index.rebuild();
+    for (const [symbol, body] of [
+      ["fromContext", "return value + 42;"],
+      ["record", "return { saved: params.value };"],
+      ["multiline", "return map(value);"],
+      ["generic", "return map(73);"],
+    ] as const) {
+      const hit = (await index.symbol(symbol))[0]!;
+      assert.ok(hit, symbol);
+      const resource = await readCodeResource({ repositoryRoot: root, wikiRoot, resourceUri: codeResourceUri(hit.fragment) });
+      assert.ok(resource.text.includes(body), `${symbol} must include its implementation`);
+      assert.ok(!resource.text.includes("adjacent secret"));
+      assert.equal(resource.text.trimEnd().endsWith("}"), true);
+    }
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
 test("TypeScript adapter indexes minimum code evidence and structural relations", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-code-index-"));
   const wikiRoot = path.join(root, "wiki");
@@ -123,7 +195,7 @@ test("TypeScript adapter indexes minimum code evidence and structural relations"
 
     const staleParserSnapshot = await index.snapshot();
     staleParserSnapshot.files.find((file) => file.path === "src/service.ts")!.parserVersion =
-      "typescript-javascript-deterministic-v1";
+      "typescript-javascript-deterministic-v2";
     await fs.writeFile(codeEvidenceIndexFile(wikiRoot), `${JSON.stringify(staleParserSnapshot, null, 2)}\n`, "utf8");
     await assert.rejects(readCodeResource({
       repositoryRoot: root,

@@ -143,13 +143,13 @@ const IngestSchema = z.object({
     "report",
     "record_recovery",
     "resolve_recovery",
-  ]).describe("start=begin;next=segment;apply_claims=integrate claims;record_segment=classify;source_status=coverage;evidence_status=debt;finalize=close;report=drafts;record_recovery=track;resolve_recovery=resolve."),
+  ]).describe("start=begin;next=read segment;apply_claims=integrate;record_segment=classify;source_status=coverage;evidence_status=debt;report=drafts."),
   normalized_filename: z.string().optional(),
   max_chars: z.number().int().min(1).max(50_000).default(12_000),
   segment_max_chars: z.number().int().min(256).max(50_000).optional(),
   segment_id: z.string().optional(),
   claims: z.array(z.record(z.string(), z.unknown())).min(1).optional()
-    .describe("Stakeholder target: entity_key,page_path,page_title,page_type,role,organization,email_domain,affiliation."),
+    .describe("target: page_path,page_title,page_type; code_resource_uri=knowledge_code URI for code claims. Stakeholders: entity_key,role,organization,email_domain,affiliation."),
   segment_status: z.enum(["irrelevant", "unresolved", "legacy_unverified"]).optional(),
   evidence_refs: z.array(z.string()).optional(),
   page_refs: z.array(z.string()).optional(),
@@ -689,7 +689,8 @@ export function registerAgentTools(
         : Array.isArray(structured.unknowns) ? structured.unknowns : [];
       const hasGaps = gaps.length > 0;
       const hasBudgetGap = gaps.some((gap) =>
-        gap && typeof gap === "object" && (gap as { kind?: unknown }).kind === "budget_limited"
+        gap && typeof gap === "object" && (gap as { kind?: unknown }).kind === "budget_limited" &&
+        (gap as { widenable?: unknown }).widenable !== false
       );
       const retrievalSufficient = retrieval.coverageSufficient === true;
       const sufficient = retrievalSufficient && !hasGaps;
@@ -703,6 +704,9 @@ export function registerAgentTools(
           suggestedArguments: {
             mode: "task",
             objective: args.objective,
+            ...(args.query ? { query: args.query } : {}),
+            ...(args.changed_paths ? { changed_paths: args.changed_paths } : {}),
+            ...(args.page_types ? { page_types: args.page_types } : {}),
             intent: args.intent,
             retrieval_profile: "coverage",
             max_evidence: Math.min(args.max_evidence * 2, 20),

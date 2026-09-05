@@ -6,6 +6,7 @@ import {
   clearRetrievalIndexes,
   searchRetrievalIndex,
   updateRetrievalPaths,
+  refreshRetrievalIndex,
 } from "../src/core/retrieval-index.js";
 
 function argument(name: string): string | undefined {
@@ -16,6 +17,8 @@ function argument(name: string): string | undefined {
 function pagePath(index: number): string {
   return `requirements/Page-${String(index).padStart(5, "0")}.md`;
 }
+
+const vocabularyPerPage = Math.max(0, Number(argument("vocabulary") ?? 0));
 
 function pageRaw(index: number, revision = 0): string {
   return [
@@ -34,6 +37,7 @@ function pageRaw(index: number, revision = 0): string {
     "## Verification",
     "",
     `The durable ledger is verified before retry. Revision ${revision}.`,
+    Array.from({ length: vocabularyPerPage }, (_, term) => `vocab${index}unique${term}`).join(" "),
   ].join("\n");
 }
 
@@ -56,21 +60,44 @@ async function main(): Promise<void> {
     }
     clearRetrievalIndexes();
     await searchRetrievalIndex({ wikiRoot: root, query: "payment authorization", forceRefresh: true });
+    const state = await refreshRetrievalIndex(root);
+    state.watcher?.close();
+    const vocabulary = state.postings.size;
+    global.gc?.();
+    const beforeMemory = process.memoryUsage();
     const samples: number[] = [];
+    const removalSamples: number[] = [];
+    let peakHeap = beforeMemory.heapUsed;
+    let peakRss = beforeMemory.rss;
     for (let revision = 1; revision <= iterations; revision++) {
       await fs.writeFile(path.join(root, pagePath(0)), pageRaw(0, revision));
       const startedAt = performance.now();
       await updateRetrievalPaths(root, [pagePath(0)]);
       samples.push(performance.now() - startedAt);
+      await fs.unlink(path.join(root, pagePath(0)));
+      const removalStart = performance.now();
+      await updateRetrievalPaths(root, [pagePath(0)]);
+      removalSamples.push(performance.now() - removalStart);
+      await fs.writeFile(path.join(root, pagePath(0)), pageRaw(0, revision));
+      await updateRetrievalPaths(root, [pagePath(0)]);
+      peakHeap = Math.max(peakHeap, process.memoryUsage().heapUsed);
+      peakRss = Math.max(peakRss, process.memoryUsage().rss);
     }
     const sorted = [...samples].sort((left, right) => left - right);
-    process.stdout.write(`${JSON.stringify({
-      pages,
-      iterations,
+    global.gc?.();
+    const report = {
+      pages, iterations, vocabularyPerPage, vocabulary, node: process.version,
+      gcExposed: Boolean(global.gc), beforeMemory, afterMemory: process.memoryUsage(), peakHeap, peakRss,
+      removalP50Ms: percentile(removalSamples.sort((a, b) => a - b), .5),
+      removalP95Ms: percentile(removalSamples, .95),
+      p99Ms: percentile(sorted, .99),
       p50Ms: percentile(sorted, 0.5),
       p95Ms: percentile(sorted, 0.95),
       meanMs: samples.reduce((sum, value) => sum + value, 0) / samples.length,
-    }, null, 2)}\n`);
+    };
+    const output = argument("json");
+    if (output) await fs.writeFile(output, JSON.stringify(report, null, 2) + "\n");
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } finally {
     clearRetrievalIndexes();
     await fs.rm(root, { recursive: true, force: true });

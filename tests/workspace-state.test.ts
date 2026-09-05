@@ -7,6 +7,8 @@ import { getWikiPageRecords } from "../src/core/retrieval-index.js";
 import {
   clearWorkspaceStates,
   evictWorkspaceStateForProject,
+  registerWorkspaceState,
+  touchWorkspaceState,
   workspaceStateCount,
 } from "../src/core/workspace-state.js";
 import { WorkspaceBindingManager } from "../src/workspaces/bindings.js";
@@ -66,5 +68,36 @@ test("workspace state uses an LRU cap and evicts on the final binding release", 
     if (previousCap === undefined) delete process.env["KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP"];
     else process.env["KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP"] = previousCap;
     await Promise.all(roots.map((root) => fs.rm(root, { recursive: true, force: true })));
+  }
+});
+
+test("LRU eviction follows access order when timestamps tie or the clock moves backward", (t) => {
+  const previousCap = process.env["KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP"];
+  process.env["KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP"] = "2";
+  clearWorkspaceStates();
+  // The current LRU does not read the clock. This mock prevents a future
+  // timestamp-based implementation from passing under ties or clock rollback.
+  let now = 1000;
+  t.mock.method(Date, "now", () => now);
+  const evicted: string[] = [];
+  const register = (name: string): void => registerWorkspaceState(
+    path.join(os.tmpdir(), name), "test", () => { evicted.push(name); }
+  );
+  try {
+    register("a");
+    register("b");
+    touchWorkspaceState(path.join(os.tmpdir(), "a"));
+    register("c");
+    assert.deepEqual(evicted, ["b"], "the recently touched workspace must survive timestamp ties");
+
+    now = 500;
+    register("a");
+    register("d");
+    assert.deepEqual(evicted, ["b", "c"], "registration also updates recency independently of wall time");
+    assert.equal(workspaceStateCount(), 2);
+  } finally {
+    clearWorkspaceStates();
+    if (previousCap === undefined) delete process.env["KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP"];
+    else process.env["KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP"] = previousCap;
   }
 });

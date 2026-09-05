@@ -2,12 +2,13 @@ import { constants as fsConstants } from "node:fs";
 import * as fs from "node:fs/promises";
 import { createHash, timingSafeEqual } from "node:crypto";
 import * as nodePath from "node:path";
+import { indexedTermsForRecord } from "./retrieval-terms.js";
 import { normalizeManifestPath, normalizeMarkdownBytes, wikiMetaDir } from "./manifest-service.js";
 import type { WikiPageRecord, WikiPassage } from "./page-record.js";
 import { derivedCheckpointDirectoryKind } from "./checkpoint-lock.js";
 
 export const RETRIEVAL_CHECKPOINT_SCHEMA_VERSION = 2;
-export const RETRIEVAL_BUILDER_VERSION = "global-flat-v2-merkle";
+export const RETRIEVAL_BUILDER_VERSION = "global-flat-v3-fenced-passages";
 export const RETRIEVAL_CHECKPOINT_ENCODING = "global-flat-v1";
 
 const MAX_SNAPSHOT_BYTES = 256 * 1024 * 1024;
@@ -443,7 +444,11 @@ export function removeCheckpointRecord(data: RetrievalCheckpointData, relPath: s
   data.fingerprints.delete(relPath);
   data.fileMetadata.delete(relPath);
   data.totalTokenCount = Math.max(0, data.totalTokenCount - existing.tokenCount);
-  for (const [term, byPath] of data.postings) {
+  // Re-derive this page's terms instead of scanning the corpus vocabulary or
+  // retaining a second page-to-terms index. This also works after journal replay.
+  for (const [term] of indexedTermsForRecord(existing)) {
+    const byPath = data.postings.get(term);
+    if (!byPath) continue;
     byPath.delete(relPath);
     if (byPath.size === 0) data.postings.delete(term);
   }

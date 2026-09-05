@@ -1,4 +1,6 @@
-import { staleClaimsByPage } from "../core/drift-detection.js";
+import { normalizeRepositoryPath, staleClaimsByPage } from "../core/drift-detection.js";
+import { readEvidenceIrStore } from "../core/ingestion/evidence-store.js";
+import { expandCodeImpact, taskCodePaths, type CodeImpactFields } from "./code-impact.js";
 import type { GraphEdge, GraphEdgeKind, GraphNode } from "../core/graph-index.js";
 import { getRuntimeWikiGraph, type RuntimeGraph } from "../core/graph-runtime.js";
 import {
@@ -81,7 +83,7 @@ export interface TaskEvidenceRef {
   path: string;
 }
 
-export interface ChangeImpact {
+export interface ChangeImpact extends CodeImpactFields {
   mode: "explicit" | "inferred" | "not_applicable";
   requestedPaths: string[];
   changedComponents: TaskEvidenceRef[];
@@ -820,7 +822,14 @@ function resolvedIntentPolicy(
 export async function compileTaskContext(params: CompileTaskContextParams): Promise<TaskContext> {
   const objective = boundedText(params.objective, "Task objective");
   const query = boundedText(params.query ?? objective, "Task retrieval query");
-  const requestedPaths = uniqueSorted((params.changedPaths ?? []).map(normalizedPagePath));
+  if ((params.changedPaths?.length ?? 0) > 20) throw new Error("At most 20 changed paths are supported.");
+  const sourcePaths: string[] = [];
+  const requestedPaths = uniqueSorted((params.changedPaths ?? []).flatMap((value) => {
+    if (/\.md$/iu.test(value)) return [normalizedPagePath(value)];
+    try { sourcePaths.push(normalizeRepositoryPath(value)); }
+    catch { throw new Error(`Changed path must be a normalized relative wiki Markdown path or repository source path: ${value}`); }
+    return [];
+  }));
   const retrievalQuery = requestedPaths.length === 0
     ? query
     : `${query} ${requestedPaths.join(" ")}`;
@@ -864,7 +873,9 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
     hit,
     categories: classifyCandidate(hit),
   }));
-  const staleClaims = await staleClaimsByPage(params.wikiRoot);
+  let evidenceStore: ReturnType<typeof readEvidenceIrStore> | undefined;
+  const readStore = () => evidenceStore ??= readEvidenceIrStore(params.wikiRoot);
+  const staleClaims = await staleClaimsByPage(params.wikiRoot, readStore);
   for (const candidate of availableCandidates) {
     const stale = staleClaims.get(candidate.hit.path);
     if (stale?.claimIds.length) {
@@ -962,5 +973,69 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
       tokenBudget,
     }), tokenBudget);
   }
-  return context;
+  const mentionedPaths = taskCodePaths(`${objective}\n${query}`);
+  const anchoredPages = policy.impact ? context.evidence.filter((evidence) => !evidence.stale &&
+    candidateByPath.get(evidence.path)?.hit.record.body.includes("code://repo/")).map((evidence) => evidence.path) : [];
+  if (!sourcePaths.length && !mentionedPaths.length && !anchoredPages.length) return context;
+  const expansion = await expandCodeImpact({
+    wikiRoot: params.wikiRoot, explicitPaths: sourcePaths, taskPaths: mentionedPaths,
+    selectedPages: anchoredPages, inferClaims: policy.impact, readStore, staleClaims, graph: runtime,
+  });
+  if (!expansion.fields.codeRoots) return context;
+  const fields = expansion.fields;
+  const extraGaps = [...expansion.gaps];
+  let budgetTrimmed = false;
+  const trimNotice = () => {
+    if (budgetTrimmed) return;
+    budgetTrimmed = true;
+    fields.codeTruncated = true;
+    extraGaps.push({ kind: "budget_limited", description: "Additional code impact candidates were omitted to respect the task-context token budget." });
+  };
+  const assemble = (): TaskContext => {
+    const { size: _size, ...base } = context;
+    const selectedPages = new Set(base.evidence.map((evidence) => evidence.path));
+    const roots = fields.codeRoots!.filter((root) => !root.pagePath || selectedPages.has(root.pagePath));
+    if (roots.length !== fields.codeRoots!.length) { fields.codeRoots = roots; trimNotice(); }
+    const rootUris = new Set(roots.map((root) => root.uri));
+    const gaps = uniqueGaps([...base.unknowns, ...extraGaps]);
+    return withSize({ ...base, unknowns: gaps, gaps,
+      changeImpact: { ...base.changeImpact, ...fields,
+        mode: expansion.requestedPaths.length ? "explicit" : base.changeImpact.mode,
+        requestedPaths: uniqueSorted([...base.changeImpact.requestedPaths, ...expansion.requestedPaths]),
+        codeRelations: fields.codeRelations!.filter((relation) => rootUris.has(relation.rootUri)),
+        codeWikiPages: fields.codeWikiPages!.filter((page) => rootUris.has(page.rootUri)),
+      },
+    }, tokenBudget);
+  };
+  let expanded = assemble();
+  const fitPrefix = <K extends "codeRelations" | "codeWikiPages" | "codeRoots">(key: K) => {
+    const values = fields[key]!;
+    if (expanded.size.heuristicTokens <= tokenBudget || !values.length) return;
+    trimNotice();
+    let low = 0, high = values.length;
+    // Prefix size is monotone. Avoid serializing all 36 successive tails.
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      fields[key] = values.slice(0, middle) as CodeImpactFields[K];
+      const trial = assemble();
+      if (trial.size.heuristicTokens <= tokenBudget) low = middle;
+      else high = middle - 1;
+    }
+    fields[key] = values.slice(0, low) as CodeImpactFields[K];
+    expanded = assemble();
+  };
+  fitPrefix("codeRelations");
+  fitPrefix("codeWikiPages");
+  // Root links retain priority over optional wiki display entries for explicit
+  // source tasks. The established document-only path never enters this loop.
+  while (expanded.size.heuristicTokens > tokenBudget && selected.length > 1 && fields.codeRoots!.length) {
+    selected = selected.slice(0, -1);
+    context = withSize(contextWithoutSize({ intent: params.intent, objective, requestedPaths, selected,
+      available: availableCandidates, allHitCount: ordered.length, policy, graph: taskGraph,
+      coverage: hybrid.coverage, retrieval, tokenBudget,
+    }), tokenBudget);
+    trimNotice(); expanded = assemble();
+  }
+  fitPrefix("codeRoots");
+  return expanded;
 }
