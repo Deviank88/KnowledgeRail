@@ -1,12 +1,15 @@
 # Knowledge routing review — 2.8.0 tranches
 
-The first three tranches are recorded below as historical evidence. The fourth
-tranche adds explicit import ambiguity diagnostics and a dedicated import oracle.
-Current verification: **433 tests, 75 files, 16 quality gates** (the original
-fifteen plus the new import gate). The whole 2.8.0 milestone remains incomplete.
+The first six tranches below are historical evidence. The seventh completes the
+implemented language extensions, precision fixes, public-manifest corpus and live
+Ollama evaluation. Current verification: **470 tests in 78 files, 18 quality gates**,
+production build, zero runtime audit vulnerabilities and **1,600 identical query
+comparisons**. No action or quality threshold was removed to meet timing targets.
+The complete milestone remains open for the explicit language and real-project
+coverage backlog; passing integration does not claim universal language/semantic accuracy.
 
-Local verification, 2026-09-05/06 (Europe/Rome), macOS arm64, Node 24.9.0.
-This is unreleased work on the existing 2.7.4 working tree. That tree already
+Local verification, 2026-09-05/07 (Europe/Rome), macOS arm64, Node 24.9.0.
+This report covers 2.8.0 work developed on the existing 2.7.4 working tree. That tree already
 contained adapter factories, import fixes, query caches and anchored wiki links.
 Those earlier improvements are not attributed to this tranche. The complete
 pre-change runtime was preserved at `/tmp/knowledgerail-review-baseline.Puhnr3`;
@@ -548,3 +551,595 @@ R3 is implemented within this contract. Python declared package roots, Ruby
 import-like fixture text, a broader functional/language corpus, R5 related-claim
 proposals and R6 fallback denominators remain open. Existing lexical call/reference
 candidates are not compiler-proven execution edges. No release was published.
+
+
+## Fifth tranche — common work and reproduced precision defects
+
+Continuation on 2026-09-06 (Europe/Rome), Node 24.9.0, macOS arm64. The incoming
+working tree was clean at `24e783c`, package version 2.7.4, with 433 passing tests.
+The complete incoming runtime is preserved at
+`/var/folders/02/jd8r0gn93697nww15ln701lc0000gn/T/knowledgerail-280-pending-baseline.5MPJJy`.
+This tranche closes the requested common work and known defects within the
+contracts below. No dependency, release version or publication was changed.
+
+### Declarations, precision and compatibility
+
+Python setuptools declarations now supply physical roots and logical package
+names from `pyproject.toml` or `setup.cfg`: package-dir, explicit packages/modules,
+and supported literal find roots/include/exclude patterns. Named directory mappings
+preserve relative imports. Metadata-only pyproject files do not shadow setup.cfg.
+Without a declared layout, only the script directory or a verified regular-package
+root supplies absolute imports; relative imports require a real package chain.
+A repository-root guess or a directory without package initializers is insufficient.
+Runtime `.py` modules keep precedence over their `.pyi` stubs. The supported mapping
+forms follow the [setuptools package discovery documentation](https://setuptools.pypa.io/en/stable/userguide/package_discovery.html).
+Implicit namespaces, dynamic configuration and backend execution remain excluded.
+
+Composer PSR-4 and autoload-dev declarations check class namespace/path
+correspondence, support string/array directories and retain nested-project boundaries.
+Metadata-only Composer files preserve declaration-based resolution within their
+project. Classmap/files/PSR-0 and constants are not implemented by this reader.
+The mappings follow the [Composer schema](https://getcomposer.org/doc/04-schema.md#autoload).
+Cargo declares custom library/binary target roots and one level of literal workspace
+members; workspace membership does not invent cross-crate dependency edges.
+Existing crate/self/super, groups and inline-module resolution is preserved.
+Wildcard members, cfg/path attributes, dependency resolution and re-exports remain
+outside this subset. References: [Cargo targets](https://doc.rust-lang.org/cargo/reference/cargo-targets.html)
+and [workspaces](https://doc.rust-lang.org/cargo/reference/workspaces.html).
+
+Both Python and Cargo reuse the bounded TOML reader; all formats reuse the existing
+confined project-structure reader, freshness checks, dependency depth, warnings
+and per-workspace admission. TOML supports tables, array tables, quoted/dotted keys,
+strings, arrays and inline tables, with 16,384 nodes and depth 32. Unsupported or
+malformed syntax yields diagnostics, without running build tools or adding a parser
+dependency. These fixtures are hand-authored from documented forms, not anonymized
+production repositories or proof of full build-tool grammar coverage.
+
+Ruby require_relative uses its literal path from the importer, including explicit
+`.rb`; unrelated same-stem files and ordinary require without a modeled load path
+remain unresolved. C/C++ quoted includes use the including directory, while angle
+includes stay unresolved without compiler include-path support. No implementation
+twin or repository-root candidate is invented. This quote-directory behavior follows
+[GCC's include search rules](https://gcc.gnu.org/onlinedocs/cpp/Search-Path.html).
+
+Raw fragment import arrays and snapshot v2 remain compatible. Optional syntax
+provenance on file modules distinguishes require/require_relative and quote/angle,
+including mixed partially resolved forms. Existing language golden bytes and scores
+were preserved. Parser versions advance selectively: TS/JS v5, Ruby v2, C/C++ v3.
+TS extraction ignores import-looking comments, strings and templates while retaining
+actual side-effect imports, require calls, quoted binding names and long import
+clauses. Regression tests include a clause over 65,536 characters. Existing source
+features were not capped or dropped to make extraction faster.
+
+### Functional knowledge and related evidence
+
+The new functional-routing gate has **29 scenarios**: three recorded domain stories,
+two layouts with unrelated source names, twelve impact queries split between
+Italian development and English evaluation questions, fifteen unreliable-claim
+variants, and document-only/code-only projects. Aliases are authored in evidence;
+queries do not name source paths or symbols. Twelve impact queries achieve **100%
+shown precision and recall** on this controlled corpus. Unsupported conceptual
+knowledge in a code-only project produces an explicit GAP. Stale, anchorless,
+superseded, ambiguous and contradicted claims do not become trusted code roots.
+
+A newly recorded or reused active anchored claim can propose at most eight direct
+call/import neighbors with relation, direction, basis and code URI. Lookup reuses
+the existing exact-symbol and incoming indexes, with bounded ranking through
+TopResults and no second retained graph. Calls qualify only when the name identifies
+one definition, and are explicitly lexical candidates. Outgoing import materialization
+uses one fragment pass rather than a scan for every target. Enclosing file modules
+are no longer shown as callers of their own declarations.
+
+Proposals do not write claims, relations or pages. Each of six project/layout
+variants materializes its two useful proposals, verifies that the store still has
+one claim, then explicitly records one additional accepted claim. The store reaches
+two claims only after that action. Missing index metadata does not undo the original
+claim. The ordinary authoring workflow exposes these candidates as structured data
+and resource links. Caps apply across the complete record response, with truncation
+and warnings exposed.
+
+This evaluation is lexical with recorded domain aliases. Optional live semantic
+provider accuracy is **not measured**; existing deterministic semantic integration
+tests and gates still pass. The original twelve evaluation questions retain their
+previous outcomes: **92.3% shown recall, 50% shown precision and two false GAPs**.
+Their questions, source content and expected results were not weakened to improve
+the new report. Artifacts: `results/280-completion-functional.json` and
+`results/280-completion-project-precision.json`.
+
+### Import and fallback evaluation
+
+The import oracle now contains **23 cases**, thirteen development and ten evaluation,
+requiring exactly **23 file import edges and 27 problematic outcomes**. Every
+positive edge and negative/ambiguous outcome passes. The previous golden expectations
+for Python repository-root ambiguity and C include-root ambiguity were corrected to
+the documented semantics, with explicit positive and negative regression cases.
+This is a semantic bug fix, separate from unchanged query-ranking parity.
+
+The same fixture hash runs against both preserved and current runtimes. Its offline
+fallback oracle asks for the incoming imports of every indexed file module and
+requires fallback for missing or extra expected file edges. Across **79 requests**,
+ten needed fallback before and zero after:
+
+| Language family | Requests | Before fallback requests | After |
+| --- | ---: | ---: | ---: |
+| JS/TS | 12 | 1 | 0 |
+| Python | 11 | 2 | 0 |
+| PHP | 10 | 2 | 0 |
+| Rust | 9 | 2 | 0 |
+| C/C++ fixture (CPP adapter) | 8 | 2 | 0 |
+| Ruby | 6 | 1 | 0 |
+| Java/Kotlin/C#/Go/Apex combined | 23 | 0 | 0 |
+
+Artifacts: `results/280-completion-import-before.json` and
+`results/280-completion-import-gate.json`. This is an offline oracle comparison,
+not observed historical user fallback telemetry or a population-wide failure rate.
+
+R6 now counts successful public search/symbol/reference responses, including empty
+ones, with per-workspace request IDs. Errors, resource reads and internal context
+operations do not inflate the denominator. Reference language comes from its target;
+search/symbol language comes from explicit file scopes or returned hits, with mixed
+and unknown buckets when necessary. A correlated record_fallback increments one
+request once and records a normalized reason. Unlinked, foreign or expired IDs stay
+separate. A missing recorded fallback is not proof that the user never used one.
+
+Admin status and `report:code-requests` expose aggregates. The new bounded counter
+file retains at most 512 recent IDs and 256 KiB, with no query text, source path,
+body, symbol or stable content hash. The legacy fallback journal remains unchanged
+and has its preexisting content contract. Counters start with this instrumentation;
+old fallback events cannot reconstruct a historical served-request denominator.
+Cross-process lock tests verify exact counts from three independent writers.
+
+### Cost, memory and preserved functionality
+
+The final code-query workload uses the same thirty samples and 1k/10k fragment
+fixtures as the preserved baseline. Digests remain identical for all nine operations,
+and all **1,600 text/symbol parity comparisons** match separately.
+
+| Fragments | References p50 before → after | References p95 before → after | Warm heap before → after |
+| --- | ---: | ---: | ---: |
+| 1,000 | 0.210 → 0.214 ms | 0.353 → 0.380 ms | 11.137 → 11.283 MiB |
+| 10,000 | 0.659 → 0.719 ms | 0.901 → 0.877 ms | 28.926 → 29.077 MiB |
+
+These timings do not establish a general search speedup. The measured warm heap
+increase is about 0.15 MiB. Public MCP request counters are additional work and are
+measured separately, rather than omitted from the stated cost of the new feature.
+Artifacts: `results/280-completion-code-query-before.json`,
+`results/280-completion-code-query-after.json`, `results/280-completion-query-parity.json`.
+
+The unchanged 500-page/15-iteration context-disclosure workload retains the same
+payloads: eight evidence entries, no GAP, 1,781 manifest tokens and 1,950 tokens with
+selected materialization. Manifest p50 is 4.168 → 3.645 ms; selected materialization
+0.634 → 0.535 ms. These small-run variations are not attributed to an optimization.
+Reports: `results/280-completion-context-before.json` and
+`results/280-completion-context-after.json`.
+
+The actual code-context benchmark also passes its unchanged 5 ms paired-p50 gate
+and checks document-only output parity against the preserved runtime:
+
+| Fragments / token budget | Added p50 / p95 | Displayed roots / relations | Manifest tokens | Retained heap |
+| --- | ---: | ---: | ---: | ---: |
+| 1,000 / 2,000 | 0.568 / 0.721 ms | 1 / 1 | 1,960 | 2,190,656 bytes |
+| 1,000 / 4,000 | 0.945 / 1.132 ms | 3 / 27 | 3,986 | 1,320,960 bytes |
+| 10,000 / 2,000 | 0.944 / 1.565 ms | 1 / 1 | 1,961 | 11,133,024 bytes |
+| 10,000 / 4,000 | 1.571 / 1.967 ms | 3 / 26 | 3,932 | 11,091,672 bytes |
+
+The 10k admission estimate is **24,910,620 / 33,554,432 bytes**; the limit was not
+raised. Retained heap includes loaded code/context state, not only expansion
+allocations. Reports: `results/280-completion-context-impact.json` and the existing
+Go/JS structure rechecks `results/280-completion-structure-go.json` and
+`results/280-completion-structure-javascript.json`.
+
+An initial durable counter implementation added **14.561 ms p50 per served response**.
+The final counters reuse atomic writes and process locks with explicit OS buffering:
+**0.584 ms p50 / 0.886 ms p95** per response, **0.571 ms p50** per fallback and
+**0.113 ms p50** for status (fifty samples, 5,115-byte counter file). Canonical
+knowledge writes retain fsync by default. No counter samples, languages, reasons,
+correlation or concurrency guarantees were removed to achieve this reduction;
+only the new diagnostic counters omit the power-loss durability barrier. They
+persist across ordinary process restarts, while sudden power loss can lose recent
+counts. The window/size limits are unchanged and there is no retained telemetry
+cache. Reports: `results/280-completion-telemetry.json` (initial implementation) and
+`results/280-completion-telemetry-buffered.json` (final).
+
+### Final verification and current project knowledge
+
+All **447 tests in 78 files**, TypeScript checks, repository hygiene, **17 quality
+gates**, production build and npm runtime audit pass; the audit reports zero
+vulnerabilities. The original sixteen gates retain their thresholds and the new
+functional-routing gate adds a separate contract. No language golden hash or
+threshold was changed to mask a regression. Existing raw imports, registry/custom
+adapter behavior, query ordering, resource links, evidence history, context token
+budgets and durability defaults are preserved. Corrected false edges have their
+own explicit semantic regressions.
+
+The maintenance script ran successfully on an isolated copy and then this
+workspace. Six current wiki pages have **24 fresh anchors**, with all 24 ordinary
+code resources opened. The real impact context opens another **34 resources**:
+three roots and 31 relations, one related wiki page, within **5,933 / 6,000 tokens**.
+Fifty-two historical anchors still report drift and remain auditable; none causes
+a current page to be falsely marked stale. Report:
+`results/280-completion-import-knowledge.json`.
+
+Remaining work is explicit: wider realistic/anonymized language corpora, live
+semantic-provider evaluation, Java/Kotlin build ownership and overloads, C# partial
+and nested types, PHP constants/classmap, compiler include paths, Ruby gemspec load
+paths, fuller Rust build semantics and TS project/package/bundler ownership. These
+were not silently marked complete by the common-work closure.
+
+
+## Sixth tranche — review follow-up, 2026-09-06
+
+The five-tranche working tree (447 tests) was preserved at
+`/var/folders/02/jd8r0gn93697nww15ln701lc0000gn/T/knowledgerail-280-review-baseline.ypfndchk`.
+This is the comparison baseline, including all previously implemented features.
+The review identified two operational defects, one repeated-refresh cost and
+several documentation/schema omissions. All seven items are addressed below.
+
+| Review item | Resolution and evidence |
+| --- | --- |
+| Unrelated TOML disables Python/Cargo | The shared TOML reader projects selected declaration fields and skips unrelated values without allocating their contents. Tests cover dates, unrelated malformed tool options, inline/dotted keys, multiline strings and fake table headers. Selected invalid roots still fail closed. |
+| Cargo workspace glob discards root package | Package targets and workspace members are parsed independently. Globs, invalid members and reference-count limits emit nonfatal notices through the shared reader; valid package roots and supported literal members survive. |
+| Corrupt telemetry cannot recover | The next counter mutation archives the original bytes under the existing workspace/process lock and starts a new counting period. Status exposes the archive and startedAt; old request IDs become unlinked. Tests cover empty/truncated/inconsistent files, concurrent writers and foreign symlinks. |
+| Python backend coverage unclear | Guide, changelog, milestone and project knowledge explicitly state that layout declarations support setuptools only. Poetry/Hatch/Flit/PDM projects retain package-boundary/script resolution but can miss absolute imports from external tests/scripts. Tests pin both retained edges and documented unresolved cases. These backends have not been added. |
+| Changelog lost existing limits | Restored Go's suffix heuristic without go.mod, the incomplete unresolved-cause taxonomy and the fact that rootDir is not import identity. |
+| Compact action description and free-text reasons | The guide explains compact routing hints and links the complete enum/action reference. fallback_reason now lists no_match, ambiguous, unresolved_import and unsupported_extension in the schema, with other as the free-text fallback. All actions and parameters remain available. |
+| Refresh once per claim | The index instance was already shared; structure freshness was repeated. A bounded batch now loads one snapshot and refreshes manifests once, deduplicates repeated target IDs and preserves individual failures and the overall eight-candidate cap. |
+
+Projection is deliberately not a general TOML validator. Lexically ambiguous input,
+such as an unterminated multiline string/container or malformed table header, can
+still prevent trustworthy declaration discovery and fail the manifest. Merely
+seeing text resembling a table header inside a value never creates a root. The
+string-boundary cases follow the [TOML 1.0 specification](https://toml.io/en/v1.0.0#string).
+Cargo member globs are valid Cargo syntax but remain unexpanded by this resolver;
+they now receive an explicit notice while independent package targets survive.
+See [Cargo workspace members](https://doc.rust-lang.org/cargo/reference/workspaces.html#the-members-and-exclude-fields).
+No compiler/build tool is executed and the existing size, node, depth, reference
+and workspace-admission bounds remain in force.
+
+Telemetry recovery is limited to corrupt content. It does not reset newer formats,
+IO errors, non-regular files or foreign symlinks. Read-only status reports corruption
+without moving files; a subsequent counting operation performs recovery. Original
+files are kept as `code-request-counts.corrupt-<timestamp>-<id>.json` for inspection.
+The active file remains bounded to 256 KiB and 512 correlation IDs; retained archives
+are separate and are not silently deleted. The new period is explicit, so rates
+cannot combine a new denominator with old linked fallback events. Ordinary atomic
+OS-buffered writes and canonical knowledge durability defaults are preserved.
+
+### Reproductions and verification
+
+Six new regressions exercise projection, Python backend boundaries, Cargo member
+isolation, telemetry recovery, confinement and the proposal batch. On the preserved
+runtime, the five behavior/API regressions fail and the confinement guard already
+passes. On the final runtime all six pass. Existing tests retain future-version
+protection and failure-preserves-claim behavior through the batch API. The current
+complete suite passes **453 tests in 78 files**, all **17 quality gates**, TypeScript
+checks, repository hygiene and production build. Text/symbol parity remains **1,600
+identical comparisons** (`results/280-review-fixes-query-parity.json`).
+
+The public catalog contains **13,496 bytes / 4,499 estimated tokens**, below the
+unchanged 13,500/4,500 limits, with **31/31 routing cases correct**. Savings come from
+shorter wording/spacing in descriptions; no action, parameter or validation was
+removed. `docs/reference/tool-actions.md` was regenerated from the schemas.
+
+### Performance
+
+`related-code-evidence-bench.ts` queries eight distinct IDs on the same persisted
+fixture, with real manifest freshness IO and forty warm samples. The preserved
+runtime performs the original sequential calls; the current runtime uses one batch.
+
+| Fragments | Refreshes before → after | Batch p50 before → after | Batch p95 before → after |
+| --- | ---: | ---: | ---: |
+| 1,000 | 8 → 1 | 1.344 → 0.210 ms | 1.512 → 0.356 ms |
+| 10,000 | 8 → 1 | 1.284 → 0.202 ms | 1.428 → 0.275 ms |
+
+Returned proposal digests are identical at both sizes. These are proposal-query
+costs, not total ingestion latency: source/anchor updates, claim persistence and
+resource materialization are excluded. The measured reduction does not depend on
+omitting candidates or returning stale manifest metadata. Reports:
+`results/280-review-fixes-related-before.json` and `results/280-review-fixes-related-after.json`.
+Whole-process heap includes dynamically loaded modules and does not isolate the
+cost of this batch; no memory reduction is claimed from those samples.
+
+The healthy-counter workload retains the same 5,115-byte file and bounds. Fifty
+samples measure served-response p50 **0.541 → 0.545 ms**, fallback **0.554 → 0.540 ms**,
+and read-only status **0.105 → 0.106 ms**. These variations do not indicate a material
+healthy-path regression or a speedup. Archive IO is exceptional and is verified by
+recovery/concurrency tests, not included in these healthy timings. Reports:
+`results/280-review-fixes-telemetry-before.json` and `results/280-review-fixes-telemetry-after.json`.
+
+The unchanged context gate also passes. At 10k fragments paired code-expansion p50
+is **0.937 / 1.428 ms** for one/three roots, below 5 ms. Document-only results remain
+identical to the preserved runtime. Cache admission remains
+**24,910,620 / 33,554,432 bytes**. Report: `results/280-review-fixes-context-impact.json`.
+
+Knowledge maintenance passed on the isolated copy and then the workspace: six pages,
+**24 current fresh anchors and 24 direct resources opened**. The real impact context
+opens another **28 resources** (three roots, 25 relations), within **5,394 / 6,000
+estimated tokens**. Sixty-one historical anchors remain drifted and auditable without
+making current pages stale. Report: `results/280-review-fixes-import-knowledge.json`.
+The original language-extension backlog, optional live semantic evaluation and two
+historical false GAPs remain open; none was claimed fixed by this review follow-up.
+
+## Seventh tranche — extensions, precision and live evaluation, 2026-09-07
+
+### Implemented behavior and preserved contracts
+
+JVM declarations now span Java/Kotlin sources, static imports identify the owning
+class and duplicate/overloaded names in competing Gradle layouts remain ambiguous.
+Shared namespace scopes handle nested/file-scoped C# and separate PHP namespaces.
+C# partial declarations must agree in kind/arity and project boundary; competing
+projects are not merged. PHP adds indexed constants, mixed grouped imports and
+Composer PSR-0/classmap/files/exclusions alongside existing PSR-4 behavior.
+
+Ruby reads literal ordered gemspec require_paths, including RubyGems' declared
+default; dynamic conditions/mutations do not supply guessed roots. C/C++ reads
+ordered compilation-database options and bounded literal CMake directory/target
+declarations. Local quoted includes and require_relative remain usable when the
+independent manifest cannot resolve other imports. Competing C/C++ configurations
+remain ambiguous. Go's no-manifest suffix fallback stays available, with explicit
+legacy_suffix_heuristic diagnostics rather than silent declared provenance.
+
+The shared reader discovers bounded *.gemspec/*.csproj names at indexed ancestors,
+retains confinement/freshness checks and invalidates known manifest changes without
+source extraction or snapshot writes. New nested declarations need update/rebuild.
+Python and Composer compile literal glob filters once with a shared matcher that
+avoids exponential regex backtracking. Namespace parsing shares one brace-scope
+scan. No external parser, build execution, dependency or second persistent graph
+was added. Java/Kotlin/C#/PHP extraction advances to v2; snapshot v2 stays compatible.
+
+These are bounded declaration contracts, grounded in the
+[Composer autoload specification](https://getcomposer.org/doc/04-schema.md#autoload),
+[RubyGems require_paths](https://guides.rubygems.org/specification-reference/#require_paths),
+[Clang compilation databases](https://clang.llvm.org/docs/JSONCompilationDatabase.html),
+[CMake target include directories](https://cmake.org/cmake/help/latest/command/target_include_directories.html)
+and [C# partial declarations](https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/partial-classes-and-methods).
+They do not evaluate Gradle/MSBuild, dynamic gemspecs, compiler macros/system headers,
+transitive CMake configuration or installed dependencies. Databases in arbitrary
+build directories are not discovered unless exposed at indexed ancestors/root.
+
+### Precision and corpus evidence
+
+Complete delimited identifiers now contribute full coverage aliases even beyond
+three segments; a prefix alone still fails. Inferred artifact requirements accept
+a relevant selected heading, while explicit page-type requirements remain strict.
+Display selection removes a lower-ranked lexical candidate only when a same-type
+candidate covers a strict superset of its query signals. Full coverage candidates,
+semantic/graph evidence, request traceability, source diversity, contradictions and
+explicit artifact-chain widening are retained. This is a ranking heuristic, not
+proof that an omitted page contains no useful information.
+
+The unchanged original project-precision corpus reports:
+
+| Evaluation metric | Preserved runtime | Final runtime |
+| --- | ---: | ---: |
+| Full-pool recall | 100% | 100% |
+| Displayed recall | 92.31% (12/13) | 92.31% (12/13) |
+| Displayed precision | 50% | 75% |
+| False GAPs | 2 | 0 |
+| Silent misses / passage errors | 0 / 0 | 0 / 0 |
+
+Development displayed precision is 46.67% → 77.78%, with 100% recall. Questions,
+bodies, oracles, thresholds and budgets were not changed. Reports:
+`results/280-close-precision-before.json` and `results/280-close-precision-final.json`.
+
+The import fixture now has 30 cases (17 development/13 evaluation), 36 expected
+edges and 34 diagnostic outcomes, all matched. Its 114 oracle reference requests
+require zero fallbacks; this is not observed user behavior. The public-manifest gate
+adds six exact manifests pinned by commit, URL and SHA-256: Django, Symfony Console,
+ripgrep, Rack, chi and Flask. Three development/three evaluation overlays supply
+seven edges and five expected diagnostics. Source overlays are controlled fixtures,
+not the real projects' complete source trees. The Flask case preserves the explicit
+unsupported-Flit boundary; it does not establish Flit layout support. Reports:
+`results/280-close-final-imports.json` and `results/280-close-final-public-manifests.json`.
+
+### Ollama qwen3-embedding:0.6b
+
+Live evaluation uses the user's local Ollama endpoint, 1024-dimensional embeddings,
+unchanged questions and production LSH/ANN defaults. Optional queryPrefix affects
+queries only and participates in provider identity; no user configuration was
+persisted. The prefix follows the
+[official Qwen example](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B):
+`Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery: `.
+
+Both runs preserve the fourteen existing semantic-oracle queries and exact-identifier
+rank, but recover **0/2 paraphrase-only probes**: aggregate recall remains 87.5%.
+No ANN attempt scans all vectors. The instruction reduces maximum ANN candidate
+ratio from 52.83% to 39.62% and no-benefit token growth from six queries to one
+(+2 estimated tokens). It does not establish a semantic recall improvement.
+Final semantic p50 is 71.728 ms without instruction and 70.631 ms with it, including
+the local provider; these are one-pass corpus measurements, not steady-state SLA estimates.
+
+The live functional corpus passes all 29 scenarios and all twelve impact queries
+have 100% displayed precision/recall. Those stories contain recorded IT/EN aliases;
+passing them does not contradict the two missing paraphrase probes. Reports:
+`results/280-close-final-semantic-live.json`,
+`results/280-close-final-semantic-live-instruct.json` and
+`results/280-close-final-functional-live.json`.
+
+### Performance and feature preservation
+
+Before/after runs use the preserved sixth-tranche runtime on the same machine,
+sequentially, with the same fixtures and thirty samples. Text/symbol parity is
+**1,600/1,600** and code-query result digests are identical at 1k/10k fragments.
+At 10k, reference p50 is 0.786 → 0.748 ms, general search 14.759 → 14.924 ms and
+default symbol lookup 0.641 → 0.618 ms. Warm whole-process heap is 29.110 → 29.223 MiB.
+These small variations do not establish a general query speedup. Reports:
+`results/280-close-query-before.json`, `results/280-close-query-after.json` and
+`results/280-close-query-parity.json`.
+
+The first selector implementation regressed the 500-page document-context benchmark
+from 82.590 to 135.051 ms p50. CPU profiling identified repeated alias/token work.
+Query-specific streaming alias matching and reuse of matched signals within each
+attempt reduce the final p50 to **72.608 ms** (p95 95.945 → 84.872 ms). The same
+benchmark retains eight evidence entries, zero GAPs and identical payload sizes;
+manifest-plus-materialized evidence stays at 5,847 bytes / 1,950 estimated tokens.
+No body, resource, graph expansion or quality check was removed for this result.
+Only query signal sets live until the attempt ends; no new retained workspace cache.
+Reports: `results/280-close-disclosure-before.json`, `...-after.json`, `...-final.json`.
+
+The actual code-context compiler retains document parity and passes the unchanged
+5 ms paired-overhead gate. At 10k, p50 overhead is **0.859 / 1.543 ms** for one/three
+roots, with cache admission **24,910,620 / 33,554,432 bytes**. Retained measured heap
+is about 11.1 MB, separate from the conservative admission estimate. Token budgets,
+three roots/twelve incoming candidates/six related pages remain unchanged.
+Report: `results/280-close-final-context.json`.
+
+Existing Go/JS manifest benchmark digests remain identical. At 5,001 files, Go warm
+freshness+lookup p50 is 0.086 → 0.102 ms (dense) and 0.086 → 0.088 ms (sparse);
+JS is 0.166 → 0.167 ms and 0.165 → 0.172 ms. New format costs are measured with the
+same harness, including discovery IO rather than only lookup:
+
+| Format, 5,001 files | Fragments | Cold dense / sparse | Warm freshness p50 dense / sparse | Retained heap dense / sparse |
+| --- | ---: | ---: | ---: | ---: |
+| C# csproj | 10,002 | 16.231 / 132.386 ms | 0.157 / 0.165 ms | 1.26 / 1.88 MB |
+| Ruby gemspec | 10,001 | 14.463 / 117.693 ms | 0.169 / 0.168 ms | 1.22 / 1.18 MB |
+| C++ compilation DB | 5,001 | 18.967 / 149.146 ms | 0.106 / 0.105 ms | 1.23 / 1.29 MB |
+
+Dense means fifty files/directory, sparse one. The C++ prototype fixture extracts
+one module per header, so it is not labeled a 10k-fragment run. Cold source extraction
+and snapshot loading are excluded. Sparse discovery cost remains visible; source
+updates discover new nested boundaries, while warm queries avoid repeated whole-tree
+discovery. Reports: `results/280-close-structure-*.json`.
+
+### Verification, knowledge and remaining scope
+
+All **470 tests in 78 files**, TypeScript checks, repository checks, **18 quality gates**
+and production build pass. Runtime npm audit reports **zero vulnerabilities**.
+Catalog size is **13,497 bytes / 4,499 estimated tokens**, below unchanged caps,
+with all **31 routing cases** correct. No action, validation, original oracle or
+quality threshold was removed. Tests that simulate a future Java parser version now
+use a value distinct from the new current v2; original migration assertions remain.
+
+Knowledge maintenance passed on the isolated copy, then on this workspace. Six pages
+contain **25 current fresh anchors and 25 opened direct resources**. The real impact
+context opens another **33 resources** (three roots/thirty relations), within
+**5,941 / 6,000 estimated tokens**. Eighty-one historical anchors still show drift;
+their audit history is retained and does not mark superseded-only pages stale.
+Report: `results/280-close-import-knowledge.json`.
+
+The milestone's remaining boxes are explicit: wider real-user projects/oracles,
+Python Poetry/Hatch/Flit/PDM layouts, Rust cfg/path attributes/re-exports, JS/TS
+ownership/project references/package resolution and the complete unresolved-cause
+taxonomy. Installed dependencies/build execution remain excluded. Live model quality
+has been measured with a negative paraphrase result, not certified. This tranche is
+complete; the entire backlog is not silently marked closed. No release/tag/publication
+or package-version change was performed.
+
+### Review follow-up — shared batch target bound
+
+`RELATED_EVIDENCE_MAX_TARGETS` now supplies both claim selection/truncation and the
+defensive batch admission check. The limit stays eight and is distinct from the
+candidate count. TypeScript checks, the three existing related-evidence tests,
+production build and current knowledge-anchor refresh pass. This is a constant
+extraction with unchanged selection behavior; no new timing claim or broader
+suite rerun is attributed to it.
+
+### Review follow-up — workspace specificity and explicit costs
+
+The exploratory `workspace-selection-eval.ts` freezes the six existing wiki pages
+byte-for-byte, including their claim history, and records page SHA-256 values. Twelve
+questions name expected specific pages and supporting active-claim text before
+retrieval. An isolated copy of the current runtime bypasses only the dominance call;
+the probe asserts identical complete scored pools and retains the same budgets.
+Fixed W0 and explicit lexical mode isolate the selection stage. Three profiles and
+two budgets repeat those twelve questions for 72 runs; they are not 72 independent
+queries, nor a new held-out quality corpus.
+
+All expected pages remain displayed **72/72 before and after**, with no expected
+target removed by dominance. The selector removes some candidates in every run.
+However, **every expected page already ranks first**. Consequently this check does
+not test the risk of a higher-ranked overview suppressing a more specific page.
+The workspace has thematic implementation pages rather than a separately authored
+overview/detail hierarchy. The rule remains under observation; this result cannot
+establish general stability, answer correctness or freshness of the selected passage.
+Other pages have not been labeled irrelevant, so no precision score is inferred.
+Report: `results/280-workspace-selection.json`; questions:
+`fixtures/workspace-specific-pages.json`. Neither workspace pages nor runtime
+selection policy are changed by the probe.
+
+The guide, changelog and current project knowledge now explicitly describe CMake's
+file-wide failure scope: one unsupported relevant declaration clears all roots and
+targets from that file, including independent literal declarations. Local quoted
+includes remain available. Conditional/generated build setups should expect missing
+CMake-derived imports; the corpus does not measure a real-project coverage percentage.
+README and the query-prefix guide explain that changing the prefix invalidates
+semantic identity and triggers full document re-embedding at next synchronization,
+even when document embedding inputs are identical.
+
+The unused retrievalEvidenceSignals wrapper is removed; the shared request-local
+factory remains. A C/C++ comment explains that the inner break keeps one match per
+configuration while the outer loop preserves ambiguity across configurations.
+No ranking rule, budget or threshold changed. TypeScript checks, **38 targeted tests**
+and production build pass; the review's global suite/gate results are not presented
+as a fresh rerun. Current knowledge has **25 fresh anchors**, 25 opened direct resources
+and 33 impact resources within **5,949/6,000 tokens**; 83 historical drift entries
+remain auditable. Report: `results/280-review-observations-knowledge.json`.
+
+### Review follow-up — overview/detail coverage guard
+
+The reported omission is reproduced by a small deterministic wiki: an overview
+ranks first and a specific same-type page ranks second with five of six query
+signals, yet the old selector hides it with four result slots available. Selection
+now protects candidates covering **at least half of all query facets and entities**.
+The denominator comes from the same request-local matcher already shared with
+coverage, including signals missing from every retrieved page. It adds one count
+per attempt and one comparison per candidate, with no new source scan or cache.
+Strict dominance still removes low-coverage lexical candidates; existing semantic,
+graph, traceability and explicit coverage exceptions remain. Normal result/token
+budgets still apply and GAP assessment retains the entire candidate pool.
+
+`tests/hybrid-retrieval.test.ts` checks the following six scenarios in precision,
+balanced and coverage profiles, semantic disabled, fixed W0 and four result slots.
+Each run asserts the overview/specific pool order and actual matched signal counts.
+
+| Overview signals | Specific signals | Types | Specific shown after guard |
+| --- | --- | --- | --- |
+| 6/6 | 6/6 | Same | Yes |
+| 6/6 | 5/6 | Same | Yes |
+| 6/6 | 5/6 | Different | Yes |
+| 6/6 | 3/6 | Same | Yes |
+| 6/6 | 2/6 | Same | No, dominated |
+| 4/6 | 2/6 | Same | No, absent query signals still count |
+
+A coverage regression also checks technical-entity components, duplicate facets,
+queries without signals and reuse of matched sets. The original project-precision fixture,
+questions, labels, budgets and thresholds are unchanged (SHA-256
+`0826c3e4de63e0427c7da8662908f74ce0b8ddfe6937679a693d9b68612281b0`).
+
+| Split / metric | Before guard | After guard |
+| --- | ---: | ---: |
+| Evaluation shown precision | 75% | 75% |
+| Evaluation shown recall | 12/13 (92.31%) | 12/13 (92.31%) |
+| Development shown precision | 77.78% | 70% |
+| Development shown recall | 100% | 100% |
+| False GAPs / silent misses / passage errors, both splits | 0 / 0 / 0 | 0 / 0 / 0 |
+
+The development cost is one additional unlabelled-as-relevant `cache` result on
+`dev-lru` ("Workspace LRU eviction order"). It is retained by the general protection;
+the threshold was not tuned to remove it. Both splits still improve on the original
+pre-selection precision, 50% evaluation and 46.67% development. Report:
+`results/280-dominance-precision.json`.
+
+A sequential before/after disclosure benchmark uses a frozen pre-guard runtime,
+500 pages and 30 iterations per runtime, with identical output payloads: eight
+evidences, zero GAPs and 5,847 bytes / 1,950 estimated tokens for manifest plus
+selected evidence. Editorial latency p50 is **70.701 → 70.220 ms**, p95
+**81.782 → 80.844 ms**. This run shows no regression, not an established speedup.
+Reports: `results/280-dominance-disclosure-before.json` and `...-after.json`.
+
+Repository checks, TypeScript checks, **478 tests in 78 files**, all **18 quality
+gates** and the production build pass. No functionality, evaluation oracle, quality
+threshold or budget was removed. Verification metadata and runtime hashes are in
+`results/280-dominance-verification.json`.
+
+Knowledge maintenance verifies **25 current fresh anchors**, 25 direct code resources
+and 33 impact resources within **5,976/6,000 tokens**; 85 historical drift entries
+remain auditable. The workspace A/B probe was rerun after that refresh: expected
+pages remain shown **72/72**, identical scored pools, no target removed by dominance.
+Targets still rank first, so that probe adds no overview/detail evidence. Reports:
+`results/280-dominance-knowledge.json` and `results/280-dominance-workspace-selection.json`.
+
+The reproduced five-of-six omission is closed. General stability remains unclaimed:
+useful pages below the half-query threshold can still be dominated, and a synthetic
+hierarchy is not real-project answer-quality validation. Those broader observations
+remain explicit in the milestone.

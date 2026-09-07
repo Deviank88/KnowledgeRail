@@ -53,7 +53,7 @@ const RECOVERY_RESOLUTIONS = KNOWLEDGE_RECOVERY_RESOLUTIONS.filter(
 
 const ContextSchema = z.object({
   mode: z.enum(["task", "list", "search", "graph"]).default("task")
-    .describe("task=evidence/gaps; list=pages; search=passages; graph=relations/dependencies."),
+    .describe("task=evidence/gaps;list=pages;search=passages;graph=relations/dependencies."),
   intent: z.enum(["understand", "implement", "modify", "debug", "review", "document"]).default("understand"),
   objective: z.string().min(1).max(4_096).optional(),
   query: z.string().min(1).max(4_096).optional(),
@@ -81,8 +81,8 @@ const ContextSchema = z.object({
 
 const PageSchema = z.object({
   action: z.enum(["read", "write", "edit", "move", "delete", "append_log"])
-    .describe("read=open; write=create; edit=replace; move=rename; delete=remove; append_log=event."),
-  path: z.string().optional().describe("Wiki .md path; leading wiki/ maps to root."),
+    .describe("read=open;write=create;edit=replace;move=rename;delete=remove;append_log=event."),
+  path: z.string().optional().describe("Wiki .md path; wiki/ maps to root."),
   resource_uri: z.string().startsWith("knowledge-rail://page/").optional(),
   max_chars: z.number().int().min(1).max(50_000).default(6_000),
   content: z.string().optional(),
@@ -90,7 +90,7 @@ const PageSchema = z.object({
   new_string: z.string().optional(),
   replace_all: z.boolean().default(false),
   old_path: z.string().optional(),
-  new_path: z.string().optional().describe("Wiki-relative .md; creates dirs."),
+  new_path: z.string().optional(),
   dry_run: z.boolean().default(false),
   entry: z.string().optional(),
   level: z.enum(["INFO", "WARN", "ACTION", "DECISION"]).default("ACTION"),
@@ -119,7 +119,7 @@ const PageSchema = z.object({
 
 const FilesSchema = z.object({
   action: z.enum(["list", "read", "normalize"]).default("list")
-    .describe("list=sources; read=open; normalize=Markdown."),
+    .describe("list=sources;read=open;normalize=Markdown."),
   category: z.enum(CATEGORY_ENUM).optional(),
   pattern: z.string().default("**/*"),
   path: z.string().optional(),
@@ -149,7 +149,7 @@ const IngestSchema = z.object({
   segment_max_chars: z.number().int().min(256).max(50_000).optional(),
   segment_id: z.string().optional(),
   claims: z.array(z.record(z.string(), z.unknown())).min(1).optional()
-    .describe("target: page_path,page_title,page_type; code_resource_uri=knowledge_code URI for code claims. Stakeholders: entity_key,role,organization,email_domain,affiliation."),
+    .describe("target:page_path,page_title,page_type;code_resource_uri=knowledge_code URI. Stakeholders:entity_key,role,organization,email_domain,affiliation."),
   segment_status: z.enum(["irrelevant", "unresolved", "legacy_unverified"]).optional(),
   evidence_refs: z.array(z.string()).optional(),
   page_refs: z.array(z.string()).optional(),
@@ -221,7 +221,7 @@ const IngestSchema = z.object({
 const CodeSchema = CodeEvidenceInputSchema;
 
 const DocumentContextSchema = z.object({
-  action: z.enum(["plan", "section"]).describe("plan=design outline; section=collect evidence."),
+  action: z.enum(["plan", "section"]).describe("plan=design outline;section=collect evidence."),
   document_type: z.string().trim().min(1).max(128).regex(/^[^\r\n]+$/),
   required_sections: z.array(
     z.string().trim().min(1).max(160).regex(/^[^\r\n]+$/)
@@ -252,7 +252,7 @@ const DocumentContextSchema = z.object({
 
 const DocumentSchema = z.object({
   action: z.enum(["write", "review"])
-    .describe("write=save Markdown; review=delivery check."),
+    .describe("write=save Markdown;review=delivery check."),
   filename: z.string().trim().min(4).max(255).regex(/^[^\r\n]+\.md$/i),
   document_type: z.string().trim().min(1).max(128).regex(/^[^\r\n]+$/),
   required_sections: z.array(
@@ -567,6 +567,7 @@ async function applyEvidenceSegment(args: z.output<typeof IngestSchema>): Promis
       text: [
         `Segmento applicato: ${segmentId}.`,
         `Claim: ${recorded.claims.length} (${recorded.created} nuovi, ${recorded.reused} riusati).`,
+        ...(recorded.relatedEvidence ? ["Related code candidates are proposals: materialize and verify before explicitly recording them."] : []),
         ...(recorded.anchorWarnings.length > 0
           ? recorded.anchorWarnings.map((warning) => `Anchor warning: ${warning}`)
           : []),
@@ -574,7 +575,8 @@ async function applyEvidenceSegment(args: z.output<typeof IngestSchema>): Promis
         `Coverage: ${coverage.segmentsRecorded} segmenti rappresentati; ${coverage.segmentsPending} pending.`,
         index,
       ].join("\n"),
-    }],
+    }, ...(recorded.relatedEvidence?.candidates.map((candidate) => ({ type: "resource_link" as const, uri: candidate.resourceUri,
+      name: `${candidate.direction} ${candidate.relation} candidate`, description: candidate.basis, mimeType: "text/plain" })) ?? [])],
     structuredContent: {
       segmentId,
       claimIds,
@@ -588,6 +590,7 @@ async function applyEvidenceSegment(args: z.output<typeof IngestSchema>): Promis
         .map((draft) => draft.pagePath),
       coverage,
       anchorWarnings: recorded.anchorWarnings,
+      ...(recorded.relatedEvidence ? { relatedEvidence: recorded.relatedEvidence } : {}),
     },
   };
 }

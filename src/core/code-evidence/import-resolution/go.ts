@@ -61,7 +61,11 @@ export function createGoImportResolver(context: CodeImportContext): CodeImportRe
     for (let start = 0; start < parts.length; start++) {
       const matches = suffixes.get(parts.slice(start).join("/"));
       if (matches) {
-        if (matches.size === 1) return [...directories.get([...matches][0]!)!];
+        if (matches.size === 1) {
+          const candidates = directories.get([...matches][0]!)!;
+          context.reportIssue?.({ status: "unresolved", reason: "legacy_suffix_heuristic", matchedName: specifier, candidates });
+          return [...candidates];
+        }
         context.reportIssue?.({ status: "ambiguous", reason: "multiple_matches", matchedName: parts.slice(start).join("/"),
           candidates: [...matches].flatMap((directory) => [...directories.get(directory)!]) });
         return [];

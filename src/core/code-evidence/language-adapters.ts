@@ -1,7 +1,11 @@
-import { createDeclarationImportResolver } from "./import-resolution/declarations.js";
+import { createDeclarationImportResolver, CSHARP_PROJECT_MANIFEST } from "./import-resolution/declarations.js";
 import { createCImportResolver } from "./import-resolution/c-family.js";
+import { COMPILE_COMMANDS_MANIFEST, CMAKE_MANIFEST } from "./import-resolution/c-config.js";
 import { createGoImportResolver, GO_MODULE_MANIFEST } from "./import-resolution/go.js";
 import { createRustImportResolver } from "./import-resolution/rust.js";
+import { CARGO_MANIFEST } from "./import-resolution/rust-config.js";
+import { COMPOSER_MANIFEST, createPhpImportResolver } from "./import-resolution/php-config.js";
+import { namespaceScopes } from "./namespace-scopes.js";
 import {
   annotationTextBefore,
   braceDepthAt,
@@ -178,12 +182,12 @@ function ownerForOffset(owners: readonly TypeOwner[], offset: number): TypeOwner
 
 function javaLikeTypes(
   context: BraceExtractionContext,
-  namespace: string,
+  namespace: string | ((offset: number) => string),
   caseInsensitive: boolean
 ): TypeOwner[] {
   const flags = caseInsensitive ? "gmi" : "gm";
   const pattern = new RegExp(
-    "^[ \\t]*(?:(?:public|protected|private|global|static|abstract|virtual|final|sealed|non-sealed|strictfp|with\\s+sharing|without\\s+sharing|inherited\\s+sharing|partial)\\s+)*(class|interface|enum|record|struct)\\s+([A-Za-z_][\\w$]*)\\b[^;{]*\\{",
+    "^[ \\t]*(?:(?:public|protected|private|internal|global|static|abstract|virtual|final|sealed|non-sealed|strictfp|with\\s+sharing|without\\s+sharing|inherited\\s+sharing|partial)\\s+)*(class|interface|enum|record|struct)\\s+([A-Za-z_][\\w$]*)\\b[^;{]*\\{",
     flags
   );
   const owners: TypeOwner[] = [];
@@ -192,7 +196,7 @@ function javaLikeTypes(
     const start = matchStart(match);
     const open = context.masked.indexOf("{", start);
     const parent = ownerForOffset(owners, start);
-    const prefix = parent?.qualifiedName ?? namespace;
+    const prefix = parent?.qualifiedName ?? (typeof namespace === "string" ? namespace : namespace(start));
     owners.push({
       ...braceCandidate({
         context,
@@ -298,7 +302,9 @@ const JAVA_CONFIG: BraceLanguageConfig = {
   keywords: JAVA_KEYWORDS,
   testPath: (path) => commonTestPath(path) || /(?:^|\/)src\/test\//u.test(path),
   candidates: javaCandidates,
-  imports: (content) => importsByPattern(content, /^\s*import\s+(?:static\s+)?([\w.*]+)\s*;/gmu),
+  imports: (content, masked) => importsByPattern(masked ?? maskBraceLanguage(content, "java"), /^\s*import\s+(?:static\s+)?([\w.*]+)\s*;/gmu),
+  importStatements: (_content, masked) => [...masked.matchAll(/^\s*import\s+(static\s+)?([\w.*]+)\s*;/gmu)]
+    .map((match) => ({ specifier: match[2]!, kind: match[1] ? "static" : "import" })),
   configKeys: (content) => unique([...content.matchAll(/@Value\s*\(\s*["']\$\{([^}:]+)(?::[^}]*)?\}["']\s*\)/gmu)]
     .map((match) => match[1]!)),
   databaseRefs: () => [],
@@ -580,7 +586,7 @@ const KOTLIN_CONFIG: BraceLanguageConfig = {
   keywords: KOTLIN_KEYWORDS,
   testPath: (path) => commonTestPath(path) || /(?:^|\/)src\/test\//u.test(path),
   candidates: kotlinCandidates,
-  imports: (content) => importsByPattern(content, /^\s*import\s+([A-Za-z_]\w*(?:\.[A-Za-z_*]\w*)*(?:\s+as\s+[A-Za-z_]\w*)?)/gmu),
+  imports: (content, masked) => importsByPattern(masked ?? maskBraceLanguage(content, "kotlin"), /^\s*import\s+([A-Za-z_]\w*(?:\.[A-Za-z_*]\w*)*(?:\s+as\s+[A-Za-z_]\w*)?)/gmu),
   configKeys: (content) => unique([
     ...[...content.matchAll(/@Value\s*\(\s*["']\$\{([^}:]+)(?::[^}]*)?\}["']\s*\)/gmu)].map((match) => match[1]!),
     ...[...content.matchAll(/\bSystem\.getenv\s*\(\s*["']([^"']+)["']/gmu)].map((match) => match[1]!),
@@ -660,7 +666,7 @@ const APEX_CONFIG: BraceLanguageConfig = {
 };
 
 function csharpCandidates(context: BraceExtractionContext): BraceCandidate[] {
-  const namespace = /\bnamespace\s+([A-Za-z_][\w.]*)\s*(?:;|\{)/u.exec(context.masked)?.[1] ?? "";
+  const namespace = namespaceScopes(context.masked, "csharp");
   const owners = javaLikeTypes(context, namespace, false);
   const controllerPrefixes = new Map(owners.map((owner) => [
     owner.qualifiedName,
@@ -722,7 +728,7 @@ const CSHARP_CONFIG: BraceLanguageConfig = {
   keywords: CSHARP_KEYWORDS,
   testPath: commonTestPath,
   candidates: csharpCandidates,
-  imports: (content) => importsByPattern(content, /^\s*(?:global\s+)?using\s+(?:static\s+)?(?:[A-Za-z_]\w*\s*=\s*)?([\w.]+)\s*;/gmu),
+  imports: (content, masked) => importsByPattern(masked ?? maskBraceLanguage(content, "csharp"), /^\s*(?:global\s+)?using\s+(?:static\s+)?(?:[A-Za-z_]\w*\s*=\s*)?([\w.]+)\s*;/gmu),
   configKeys: (content) => unique([...content.matchAll(/\b(?:Configuration|config)\s*\[\s*["']([^"']+)["']\s*\]/gmu)]
     .map((match) => match[1]!)),
   databaseRefs: (content) => importsByPattern(content, /\b(?:FromSqlRaw|ExecuteSqlRaw)\s*\(\s*["'][^"']*?\b(?:FROM|UPDATE|INTO)\s+([A-Za-z_][\w.]*)/giu),
@@ -888,11 +894,7 @@ const RUST_CONFIG: BraceLanguageConfig = {
   imports: rustImports,
 };
 
-function phpNamespace(masked: string): string {
-  return /\bnamespace\s+([A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*)\s*(?:;|\{)/iu.exec(masked)?.[1] ?? "";
-}
-
-function phpTypeOwners(context: BraceExtractionContext, namespace: string): TypeOwner[] {
+function phpTypeOwners(context: BraceExtractionContext, namespace: (offset: number) => string): TypeOwner[] {
   const owners: TypeOwner[] = [];
   const pattern = /^[ \t]*(?:(?:abstract|final|readonly)\s+)*(class|interface|trait|enum)\s+([A-Za-z_]\w*)\b[^;{]*\{/gimu;
   for (const match of context.masked.matchAll(pattern)) {
@@ -900,7 +902,7 @@ function phpTypeOwners(context: BraceExtractionContext, namespace: string): Type
     const start = matchStart(match);
     const open = context.masked.indexOf("{", start);
     const parent = ownerForOffset(owners, start);
-    const prefix = parent?.qualifiedName ?? namespace;
+    const prefix = parent?.qualifiedName ?? namespace(start);
     owners.push({
       ...braceCandidate({
         context,
@@ -937,7 +939,7 @@ function phpTestMarker(context: BraceExtractionContext, start: number, symbol: s
 }
 
 function phpCandidates(context: BraceExtractionContext): BraceCandidate[] {
-  const namespace = phpNamespace(context.masked);
+  const namespace = namespaceScopes(context.masked, "php");
   const owners = phpTypeOwners(context, namespace);
   const ownerRoutePrefixes = new Map(owners.map((owner) => [
     owner.qualifiedName,
@@ -987,7 +989,8 @@ function phpCandidates(context: BraceExtractionContext): BraceCandidate[] {
     const start = matchStart(match);
     if (ownerForOffset(owners, start)) continue;
     const symbol = match[1]!;
-    const qualifiedName = namespace ? `${namespace}\\${symbol}` : symbol;
+    const prefix = namespace(start);
+    const qualifiedName = prefix ? `${prefix}\\${symbol}` : symbol;
     candidates.push(braceCandidate({
       context,
       match,
@@ -998,6 +1001,18 @@ function phpCandidates(context: BraceExtractionContext): BraceCandidate[] {
     }));
   }
   const laravelRoute = /\bRoute\s*::\s*(get|post|put|patch|delete|options|any)\s*\(\s*["']([^"']+)["']/giu;
+  for (const match of context.masked.matchAll(/\bconst\s+([^;{}]+);/giu)) {
+    const start = matchStart(match);
+    if (ownerForOffset(owners, start)) continue;
+    // Constants in functions are invalid PHP; only namespace declarations count.
+    if (candidates.some((candidate) => candidate.kind === "function" && candidate.start < start && start < candidate.end)) continue;
+    const prefix = namespace(start);
+    for (const declaration of match[1]!.matchAll(/(?:^|,)\s*([A-Za-z_]\w*)\s*=/gu)) {
+      const symbol = declaration[1]!;
+      candidates.push({ kind: "constant", symbol, qualifiedName: prefix ? `${prefix}\\${symbol}` : symbol,
+        start, end: start + match[0].length, definition: definitionLine(context.content, start) });
+    }
+  }
   for (const match of context.content.matchAll(laravelRoute)) {
     const start = matchStart(match);
     if (context.masked.slice(start, start + 5).toLowerCase() !== "route") continue;
@@ -1023,7 +1038,7 @@ function phpImports(content: string): string[] {
     content,
     masked,
   };
-  const owners = phpTypeOwners(context, phpNamespace(masked));
+  const owners = phpTypeOwners(context, namespaceScopes(masked, "php"));
   const values: string[] = [];
   for (const match of content.matchAll(/^[ \t]*use\s+(?:(function|const)\s+)?([^;]+);/gimu)) {
     const start = matchStart(match);
@@ -1067,8 +1082,14 @@ const PHP_CONFIG: BraceLanguageConfig = {
   databaseRefs: phpDatabaseRefs,
 };
 
-function includes(content: string): string[] {
-  return unique([...content.matchAll(/^\s*#\s*include\s*[<"]([^>"]+)[>"]/gmu)].map((match) => match[1]!));
+function includes(content: string, masked?: string): string[] {
+  return unique([...content.matchAll(/^[ \t]*#\s*include\s*("[^"\r\n]+"|<[^>\r\n]+>)/gmu)]
+    .filter((match) => !masked || masked.slice(match.index, match.index + match[0].indexOf(match[1]!)).includes("include"))
+    .map((match) => match[1]!));
+}
+
+function includeStatements(content: string, masked: string): NonNullable<KnowledgeFragment["importStatements"]> {
+  return includes(content, masked).map((value) => ({ specifier: value.slice(1, -1), kind: value.startsWith('"') ? "quote" : "angle" }));
 }
 
 function cFamilyCandidates(context: BraceExtractionContext, cpp: boolean): BraceCandidate[] {
@@ -1166,6 +1187,7 @@ const C_CONFIG: BraceLanguageConfig = {
   testPath: commonTestPath,
   candidates: (context) => cFamilyCandidates(context, false),
   imports: includes,
+  importStatements: includeStatements,
 };
 
 const CPP_CONFIG: BraceLanguageConfig = {
@@ -1174,6 +1196,7 @@ const CPP_CONFIG: BraceLanguageConfig = {
   testPath: commonTestPath,
   candidates: (context) => cFamilyCandidates(context, true),
   imports: includes,
+  importStatements: includeStatements,
 };
 
 abstract class BraceKnowledgeAdapter implements KnowledgeAdapter {
@@ -1211,6 +1234,7 @@ export class ApexKnowledgeAdapter extends BraceKnowledgeAdapter {
 }
 
 export class CSharpKnowledgeAdapter extends BraceKnowledgeAdapter {
+  readonly projectManifests = [CSHARP_PROJECT_MANIFEST];
   createImportResolver(context: CodeImportContext) { return createDeclarationImportResolver(context, "csharp"); }
   readonly parserVersion = CSHARP_ADAPTER_VERSION;
   readonly extensionClaims = [".cs"] as const;
@@ -1227,13 +1251,15 @@ export class GoKnowledgeAdapter extends BraceKnowledgeAdapter {
 
 export class RustKnowledgeAdapter extends BraceKnowledgeAdapter {
   readonly createImportResolver = createRustImportResolver;
+  readonly projectManifests = [CARGO_MANIFEST];
   readonly parserVersion = RUST_ADAPTER_VERSION;
   readonly extensionClaims = [".rs"] as const;
   readonly config = RUST_CONFIG;
 }
 
 export class PhpKnowledgeAdapter extends BraceKnowledgeAdapter {
-  createImportResolver(context: CodeImportContext) { return createDeclarationImportResolver(context, "php"); }
+  readonly createImportResolver = createPhpImportResolver;
+  readonly projectManifests = [COMPOSER_MANIFEST];
   readonly parserVersion = PHP_ADAPTER_VERSION;
   readonly extensionClaims = [".php"] as const;
   readonly config = PHP_CONFIG;
@@ -1245,6 +1271,7 @@ export class PhpKnowledgeAdapter extends BraceKnowledgeAdapter {
 }
 
 export class CKnowledgeAdapter extends BraceKnowledgeAdapter {
+  readonly projectManifests = [COMPILE_COMMANDS_MANIFEST, CMAKE_MANIFEST];
   readonly createImportResolver = createCImportResolver;
   readonly parserVersion = C_ADAPTER_VERSION;
   readonly extensionClaims = [".c"] as const;
@@ -1252,6 +1279,7 @@ export class CKnowledgeAdapter extends BraceKnowledgeAdapter {
 }
 
 export class CppKnowledgeAdapter extends BraceKnowledgeAdapter {
+  readonly projectManifests = [COMPILE_COMMANDS_MANIFEST, CMAKE_MANIFEST];
   readonly createImportResolver = createCImportResolver;
   readonly parserVersion = CPP_ADAPTER_VERSION;
   readonly extensionClaims = [".cpp", ".cc", ".cxx", ".h", ".hpp", ".hh"] as const;

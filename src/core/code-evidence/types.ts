@@ -1,23 +1,24 @@
 export const CODE_EVIDENCE_INDEX_VERSION = 2 as const;
-export const TYPESCRIPT_ADAPTER_VERSION = "typescript-javascript-deterministic-v4";
-export const JAVA_ADAPTER_VERSION = "java-deterministic-v1";
+export const TYPESCRIPT_ADAPTER_VERSION = "typescript-javascript-deterministic-v5";
+export const JAVA_ADAPTER_VERSION = "java-deterministic-v2";
 export const APEX_ADAPTER_VERSION = "apex-deterministic-v1";
-export const CSHARP_ADAPTER_VERSION = "csharp-deterministic-v1";
+export const CSHARP_ADAPTER_VERSION = "csharp-deterministic-v2";
 export const GO_ADAPTER_VERSION = "go-deterministic-v1";
 export const RUST_ADAPTER_VERSION = "rust-deterministic-v1";
-export const PHP_ADAPTER_VERSION = "php-deterministic-v1";
-export const C_ADAPTER_VERSION = "c-deterministic-v2";
-export const CPP_ADAPTER_VERSION = "cpp-deterministic-v2";
+export const PHP_ADAPTER_VERSION = "php-deterministic-v2";
+export const C_ADAPTER_VERSION = "c-deterministic-v3";
+export const CPP_ADAPTER_VERSION = "cpp-deterministic-v3";
 export const PYTHON_ADAPTER_VERSION = "python-deterministic-v1";
-export const KOTLIN_ADAPTER_VERSION = "kotlin-deterministic-v1";
+export const KOTLIN_ADAPTER_VERSION = "kotlin-deterministic-v2";
 export const SFMETA_ADAPTER_VERSION = "sfmeta-deterministic-v1";
-export const RUBY_ADAPTER_VERSION = "ruby-deterministic-v1";
+export const RUBY_ADAPTER_VERSION = "ruby-deterministic-v2";
 
 export type CodeFragmentKind =
   | "module"
   | "class"
   | "function"
   | "method"
+  | "constant"
   | "route"
   | "test"
   | "comment";
@@ -57,6 +58,8 @@ export interface KnowledgeFragment {
   definition: string;
   range: CodeRange;
   imports: string[];
+  /** Optional syntax provenance on file modules; raw imports remain compatible. */
+  importStatements?: Array<{ specifier: string; kind: "require" | "require_relative" | "quote" | "angle" | "import" | "static" }>;
   references: string[];
   calls: string[];
   routes: CodeRoute[];
@@ -77,12 +80,15 @@ export interface KnowledgeAdapter {
 }
 
 export interface ProjectManifestSpec {
+  /** Literal filename or a bounded leading-star suffix, e.g. *.gemspec. */
   readonly fileName: string;
   /** Return compact parsed data. Throw for unsupported or malformed declarations. */
-  parse(content: string): unknown;
+  parse(content: string, context?: { repositoryRoot: string; manifestPath: string }): unknown;
   /** Optional direct dependencies, parsed with this spec. Repository-relative
    * paths only; the shared reader follows one level, never a recursive graph. */
   references?(value: unknown, manifestPath: string): readonly string[];
+  /** Nonfatal diagnostics for unsupported independent declarations. */
+  notices?(value: unknown): readonly string[];
 }
 
 export interface ProjectManifest {
@@ -90,6 +96,7 @@ export interface ProjectManifest {
   readonly fileName: string;
   readonly value?: unknown;
   readonly warning?: string;
+  readonly notices?: readonly string[];
   readonly references?: readonly string[];
 }
 
@@ -112,7 +119,7 @@ export interface CodeImportIssue {
   status: "ambiguous" | "unresolved";
   matchedName: string;
   candidates?: ReadonlySet<string> | readonly string[];
-  reason?: "multiple_matches" | "competing_patterns" | "not_indexed_or_unsupported";
+  reason?: "multiple_matches" | "competing_patterns" | "not_indexed_or_unsupported" | "legacy_suffix_heuristic";
 }
 export interface UnresolvedCodeImport {
   sourcePath: string;
@@ -134,7 +141,7 @@ export interface CodeImportResolutionCounts {
   resolved: number;
   ambiguous: number;
   unresolved: number;
-  /** Unambiguous members retained in an otherwise incomplete grouped specifier. */
+  /** Retained candidates in an incomplete group or an unverified legacy match. */
   partial: number;
 }
 
@@ -195,6 +202,17 @@ export interface CodeReference {
   target: KnowledgeFragment;
   relation: "call" | "reference" | "import";
   resourceUri: string;
+}
+
+/** Shared claim-selection and batch-admission bound; independent of candidate count. */
+export const RELATED_EVIDENCE_MAX_TARGETS = 8;
+
+export interface RelatedCodeEvidence {
+  resourceUri: string;
+  relation: "call" | "import";
+  direction: "incoming" | "outgoing";
+  /** Calls are lexical candidates, not compiler-proven execution edges. */
+  basis: "lexical_call" | "resolved_import";
 }
 
 export interface CodeEvidenceUpdateReport {

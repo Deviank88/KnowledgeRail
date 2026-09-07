@@ -28,6 +28,7 @@ import {
   CODE_EVIDENCE_INDEX_VERSION,
   CODE_IMPACT_MAX_ROOTS,
   CODE_IMPACT_REFERENCES_PER_ROOT,
+  RELATED_EVIDENCE_MAX_TARGETS,
   type CodeImpactTarget,
   type CodeImpactResult,
   type CodeImportDiagnostics,
@@ -117,13 +118,15 @@ function validFragment(value: unknown): value is KnowledgeFragment {
     typeof fragment.path === "string" &&
     typeof fragment.symbol === "string" &&
     typeof fragment.qualifiedName === "string" &&
-    ["module", "class", "function", "method", "route", "test", "comment"].includes(fragment.kind ?? "") &&
+    ["module", "class", "function", "method", "constant", "route", "test", "comment"].includes(fragment.kind ?? "") &&
     typeof fragment.definition === "string" &&
     Number.isInteger(fragment.range?.startLine) &&
     Number.isInteger(fragment.range?.endLine) &&
     (fragment.range?.startLine ?? 0) >= 1 &&
     (fragment.range?.endLine ?? 0) >= (fragment.range?.startLine ?? 1) &&
     isStringArray(fragment.imports) &&
+    (fragment.importStatements === undefined || (Array.isArray(fragment.importStatements) && fragment.importStatements.every((entry) =>
+      entry && typeof entry.specifier === "string" && ["require", "require_relative", "quote", "angle", "import", "static"].includes(entry.kind)))) &&
     isStringArray(fragment.references) &&
     isStringArray(fragment.calls) &&
     Array.isArray(fragment.routes) && fragment.routes.every((route) =>
@@ -603,7 +606,8 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
 
   private isProjectManifest(path: string): boolean {
     const fileName = nodePath.posix.basename(path);
-    return this.registry.registrations.some(({ adapter }) => adapter.projectManifests?.some((spec) => spec.fileName === fileName));
+    return this.registry.registrations.some(({ adapter }) => adapter.projectManifests?.some((spec) =>
+      spec.fileName.startsWith("*") ? fileName.endsWith(spec.fileName.slice(1)) : spec.fileName === fileName));
   }
 
   private async invalidateProjectStructure(before: CodeEvidenceSnapshot): Promise<CodeEvidenceUpdateReport> {
@@ -648,9 +652,38 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
     return (await this.referenceQuery(symbolId, options)).references;
   }
 
-  /** Read-only context expansion. Shares the ordinary runtime/admission policy;
-   * never rebuilds, updates source files or writes a snapshot on failure. */
-  async impact(targets: readonly CodeImpactTarget[]): Promise<CodeImpactResult> {
+  async relatedEvidence(symbolId: string): Promise<{ candidates: import("./types.js").RelatedCodeEvidence[]; truncated: boolean; generatedAt: string }> {
+    const result = (await this.relatedEvidenceBatch([symbolId])).get(symbolId)!;
+    if (result.status === "rejected") throw result.reason;
+    return result.value;
+  }
+
+  /** One snapshot and manifest refresh for a bounded batch of authored claims.
+   * Per-target failures preserve successful proposals in the same generation. */
+  async relatedEvidenceBatch(symbolIds: readonly string[]): Promise<Map<string, PromiseSettledResult<{
+    candidates: import("./types.js").RelatedCodeEvidence[]; truncated: boolean; generatedAt: string;
+  }>>> {
+    const ids = [...new Set(symbolIds)];
+    if (ids.length > RELATED_EVIDENCE_MAX_TARGETS) throw new Error(`Related evidence accepts at most ${RELATED_EVIDENCE_MAX_TARGETS} targets.`);
+    const results: Awaited<ReturnType<PersistentCodeEvidenceIndex["relatedEvidenceBatch"]>> = new Map();
+    if (!ids.length) return results;
+    await this.assertScopedSnapshot();
+    const runtime = await this.queryRuntime(false);
+    await runtime.refreshProjectStructure(this.repositoryRoot);
+    for (const id of ids) {
+      try {
+        const related = runtime.relatedEvidence(id, 9);
+        results.set(id, { status: "fulfilled", value: {
+          candidates: related.slice(0, 8).map(({ fragment, ...candidate }) => ({ ...candidate, resourceUri: codeResourceUri(fragment) })),
+          truncated: related.length > 8, generatedAt: runtime.snapshot.generatedAt,
+        } });
+      } catch (reason) { results.set(id, { status: "rejected", reason }); }
+    }
+    accountProjectStructure(this.wikiRoot, runtime);
+    return results;
+  }
+
+  private async assertScopedSnapshot(): Promise<void> {
     // Automatic task-context reads must not follow an index from another wiki.
     try {
       const [rootReal, indexReal] = await Promise.all([fs.realpath(this.wikiRoot), fs.realpath(codeEvidenceIndexFile(this.wikiRoot))]);
@@ -660,6 +693,12 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
+  }
+
+  /** Read-only context expansion. Shares the ordinary runtime/admission policy;
+   * never rebuilds, updates source files or writes a snapshot on failure. */
+  async impact(targets: readonly CodeImpactTarget[]): Promise<CodeImpactResult> {
+    await this.assertScopedSnapshot();
     const unique = [...new Map(targets.map((target) => [`${target.path}\0${target.fragmentId ?? ""}`, target])).values()];
     const requested = unique.slice(0, CODE_IMPACT_MAX_ROOTS);
     const runtime = await this.queryRuntime(false);
@@ -700,11 +739,13 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
 
   async referencesWithDiagnostics(symbolId: string, options: CodeSearchOptions = {}): Promise<{
     references: CodeReference[];
+    targetPath?: string;
     manifestWarnings: ProjectStructure["warnings"];
     importDiagnostics: CodeImportDiagnostics;
   }> {
     const { runtime, references } = await this.referenceQuery(symbolId, options);
-    return { references, manifestWarnings: structuredClone(runtime.projectStructureWarnings()),
+    return { references, targetPath: references[0]?.target.path ?? runtime.snapshot.fragments.find((fragment) => fragment.id === symbolId)?.path,
+      manifestWarnings: structuredClone(runtime.projectStructureWarnings()),
       importDiagnostics: structuredClone(runtime.importResolutionDiagnostics().diagnostics) };
   }
 

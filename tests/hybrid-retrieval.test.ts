@@ -7,6 +7,68 @@ import { invalidateWikiGraph } from "../src/core/graph-index.js";
 import { clearRuntimeWikiGraphs } from "../src/core/graph-runtime.js";
 import { retrieveWikiHybrid } from "../src/core/hybrid-retrieval.js";
 import { clearRetrievalIndexes } from "../src/core/retrieval-index.js";
+import { createRetrievalEvidenceSignals } from "../src/core/retrieval-coverage.js";
+
+test("display selection preserves specific pages with substantial query coverage below an overview", async (t) => {
+  const query = "queue draining bounded timeout pending batch";
+  const scenarios = [
+    { name: "equal signals, same type", overviewTerms: 6, specificTerms: 6, type: "concept", shown: true },
+    { name: "strict subset, same type", overviewTerms: 6, specificTerms: 5, type: "concept", shown: true },
+    { name: "strict subset, different type", overviewTerms: 6, specificTerms: 5, type: "implementation", shown: true },
+    { name: "exactly half the query signals", overviewTerms: 6, specificTerms: 3, type: "concept", shown: true },
+    { name: "low coverage remains dominated", overviewTerms: 6, specificTerms: 2, type: "concept", shown: false },
+    { name: "missing query signals still count", overviewTerms: 4, specificTerms: 2, type: "concept", shown: false },
+  ];
+  for (const scenario of scenarios) {
+    await t.test(scenario.name, async () => {
+      const root = await fs.mkdtemp(path.join(os.tmpdir(), "kr-overview-selection-"));
+      try {
+        const terms = query.split(" ");
+        await writePage(root, "concepts/Overview.md", {
+          title: terms.slice(0, scenario.overviewTerms).join(" "), type: "concept",
+          body: `Index of topics: ${terms.slice(0, scenario.overviewTerms).join(", ")}.`,
+        });
+        const specificPath = `${scenario.type === "concept" ? "concepts" : "implementations"}/Specific.md`;
+        await writePage(root, specificPath, {
+          title: "Recovery procedure", type: scenario.type,
+          body: `${terms.slice(0, scenario.specificTerms).join(" ")}. Resume processing only after the worker acknowledges completion.`,
+        });
+        for (const profile of ["precision", "balanced", "coverage"] as const) {
+          const result = await retrieveWikiHybrid({
+            wikiRoot: root, query, profile, semanticEnabled: false, maxResults: 4,
+            progressiveWidening: false, persistDerivedIndexes: false,
+          });
+          assert.deepEqual(result.coverageHits.map((hit) => hit.path), ["concepts/Overview.md", specificPath], profile);
+          const signals = result.coverageHits.map(createRetrievalEvidenceSignals(query));
+          assert.deepEqual(signals.map((set) => set.size), [scenario.overviewTerms, scenario.specificTerms], profile);
+          assert.equal(result.hits.some((hit) => hit.path === specificPath), scenario.shown, profile);
+          assert.equal(result.hits[0]?.path, "concepts/Overview.md", profile);
+        }
+      } finally {
+        clearRetrievalIndexes(); clearRuntimeWikiGraphs(); invalidateWikiGraph(root);
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    });
+  }
+});
+
+test("display selection removes strictly redundant lexical hits while preserving the full candidate pool", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "kr-display-selection-"));
+  try {
+    await writePage(root, "concepts/Specific.md", { title: "Queue drain timing", type: "concept", body: "Queue draining stops after a bounded timeout. A pending batch resumes later." });
+    await writePage(root, "concepts/Generic.md", { title: "Queue notes", type: "concept", body: "The queue also supports inbound work." });
+    const result = await retrieveWikiHybrid({ wikiRoot: root, query: "queue draining bounded timeout", semanticEnabled: false, maxResults: 4 });
+    assert.deepEqual(result.hits.map((hit) => hit.path), ["concepts/Specific.md"]);
+    assert.ok(result.coverageHits.some((hit) => hit.path === "concepts/Generic.md"));
+    const multiple = await retrieveWikiHybrid({ wikiRoot: root, query: "queue draining bounded timeout", semanticEnabled: false, maxResults: 4, coverageRequirements: { minimumSourceDiversity: 2 } });
+    assert.ok(multiple.hits.some((hit) => hit.path === "concepts/Generic.md"));
+    const contradiction = await retrieveWikiHybrid({ wikiRoot: root, query: "queue draining bounded timeout", semanticEnabled: false, maxResults: 4, coverageRequirements: { requireContradictionCheck: true } });
+    assert.ok(contradiction.hits.some((hit) => hit.path === "concepts/Generic.md"));
+  } finally {
+    clearRetrievalIndexes(); clearRuntimeWikiGraphs(); invalidateWikiGraph(root);
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 
 async function writePage(
   wikiRoot: string,

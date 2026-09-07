@@ -2,7 +2,7 @@ import { posix } from "node:path";
 import type { CodeImportContext, CodeImportResolver } from "../types.js";
 
 export function localPath(base: string, value: string): string | undefined {
-  if (/[\\?#\0]/u.test(value) || posix.isAbsolute(value)) return;
+  if (/[\\?#\0]/u.test(value) || /^[A-Za-z]:/u.test(value) || posix.isAbsolute(value)) return;
   const path = posix.normalize(posix.join(base, value));
   return path === ".." || path.startsWith("../") ? undefined : path;
 }

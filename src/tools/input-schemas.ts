@@ -87,19 +87,21 @@ export const RecoveredCodeEvidenceInputSchema = z.object({
 
 export const CodeEvidenceInputSchema = z.object({
   action: CodeActionSchema.describe(
-    "status=index;rebuild=recreate;update=refresh;remove=drop;search=find;symbol=definition;references=callers of symbol;read=URI;record_fallback=raw lookup."
+    "rebuild=recreate;search=find;symbol=definition;references=callers;read=URI;record_fallback=raw lookup."
   ),
   path: z.string().min(1).optional(),
   query: z.string().min(1).max(4_096).optional(),
   symbol: z.string().min(1).max(512).optional(),
   symbol_id: z.string().min(1).max(256).optional(),
+  request_id: z.string().max(36).optional(),
   resource_uri: z.string().startsWith("code://repo/").optional(),
   path_prefixes: z.array(z.string().min(1)).max(20).optional(),
-  kinds: z.array(z.enum(["module", "class", "function", "method", "route", "test", "comment"]))
-    .max(7).optional(),
+  kinds: z.array(z.enum(["module", "class", "function", "method", "constant", "route", "test", "comment"]))
+    .max(8).optional(),
   max_results: z.number().int().min(1).max(100).default(12),
   max_chars: z.number().int().min(1).max(50_000).default(6_000),
-  fallback_reason: z.string().min(1).max(1_024).optional(),
+  fallback_reason: z.string().min(1).max(1_024).optional()
+    .describe("no_match|ambiguous|unresolved_import|unsupported_extension;else other"),
   fallback_result_count: z.number().int().min(0).max(1_000_000).optional(),
   fallback_result_paths: z.array(z.string().min(1).max(4_096)).max(1_000).optional(),
   recovered_evidence: z.array(RecoveredCodeEvidenceInputSchema).max(100).optional(),

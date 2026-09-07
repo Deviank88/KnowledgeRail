@@ -166,7 +166,7 @@ test("adapter claims are exclusive and language extensions resolve to one owner"
   assert.equal(registry.resolve({ path: "scripts/orders.py" })?.parserVersion, PYTHON_ADAPTER_VERSION);
   assert.equal(registry.resolve({ path: "stubs/orders.pyi" })?.parserVersion, PYTHON_ADAPTER_VERSION);
   assert.equal(registry.resolve({ path: "lwc/component.js-meta.xml" })?.parserVersion,
-    "typescript-javascript-deterministic-v4");
+    "typescript-javascript-deterministic-v5");
   assert.equal(registry.resolve({ path: "objects/Invoice__c.object-meta.xml" })?.parserVersion,
     SFMETA_ADAPTER_VERSION);
   assert.equal(registry.resolve({ path: "objects/Invoice__c.validationRule-meta.xml" })?.parserVersion,
@@ -614,7 +614,7 @@ test("changing one adapter version reparses only files claimed by that adapter",
     const before = await initialIndex.snapshot();
     const java = new JavaKnowledgeAdapter();
     const javaV2: KnowledgeAdapter & { extensionClaims: readonly string[] } = {
-      parserVersion: "java-deterministic-v2",
+      parserVersion: `${JAVA_ADAPTER_VERSION}-next`,
       extensionClaims: java.extensionClaims,
       supports: (source) => java.supports(source),
       extract: (source) => java.extract(source),
@@ -638,7 +638,7 @@ test("changing one adapter version reparses only files claimed by that adapter",
       after.fragments.filter((fragment) => fragment.path.endsWith("service.ts")),
       before.fragments.filter((fragment) => fragment.path.endsWith("service.ts"))
     );
-    assert.equal(after.files.find((file) => file.path.endsWith("Service.java"))?.parserVersion, "java-deterministic-v2");
+    assert.equal(after.files.find((file) => file.path.endsWith("Service.java"))?.parserVersion, `${JAVA_ADAPTER_VERSION}-next`);
   });
 });
 
@@ -779,7 +779,7 @@ test("drift parser resolution and fallback demand are language-aware", async () 
     verdict: "fresh",
     observedRangeHash: anchor.rangeHash,
   });
-  assert.equal(evaluateCodeAnchor({ anchor, content, parserVersion: "java-deterministic-v2" }).reason, "parser_version_changed");
+  assert.equal(evaluateCodeAnchor({ anchor, content, parserVersion: `${JAVA_ADAPTER_VERSION}-next` }).reason, "parser_version_changed");
 
   await withTemporaryRoot("knowledge-rail-fallback-demand-", async (_root, wikiRoot) => {
     await assert.rejects(recordCodeGrepFallback({

@@ -15,6 +15,16 @@ function runtime(fragments: KnowledgeFragment[]): CodeQueryRuntime {
   return new CodeQueryRuntime({ version: 2, adapters: [], generatedAt: "fixture", files: [], fragments });
 }
 
+test("file extensions are not lexical module aliases, while explicit module names remain references", () => {
+  const index = runtime([
+    fragment("file", { symbol: "lib/unit.ts", qualifiedName: "lib/unit.ts", kind: "module", path: "lib/unit.ts" }),
+    fragment("noise", { references: ["ts"] }),
+    fragment("exact", { references: ["lib/unit.ts"] }),
+    fragment("user", { imports: ["../lib/unit.js"] }),
+  ]);
+  assert.deepEqual(index.references("file", {}, 100).map((hit) => [hit.source.id, hit.relation]), [["exact", "reference"], ["user", "import"]]);
+});
+
 test("symbol lookup preserves partial matches, filters, normalized separators and stable ties", () => {
   const index = runtime([
     fragment("first", { symbol: "Order", qualifiedName: "Order", range: { startLine: 80, endLine: 81 } }),

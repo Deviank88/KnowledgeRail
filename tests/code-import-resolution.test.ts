@@ -127,7 +127,7 @@ test("Python src-layout imports resolve sibling modules, dotted packages and stu
   }
 });
 
-test("Python absolute imports reject conflicts across root and importer directory without changing relative imports", async () => {
+test("Python scripts resolve their own directory and reject relative imports without a package", async () => {
   const registry = createDefaultKnowledgeAdapterRegistry();
   const files: Record<string, string> = {
     "orders.py": "value = 1\n",
@@ -149,7 +149,8 @@ test("Python absolute imports reject conflicts across root and importer director
   for (const name of Object.keys(files).filter((name) => !name.endsWith("absolute.py") && !name.endsWith("relative.py") && name !== "root_user.py")) {
     const target = fragments.find((fragment) => fragment.path === name && fragment.kind === "module");
     assert.ok(target, `Python adapter emits module ${name}`);
-    const expected = name === "orders.py" ? ["root_user.py"] : name === "src/orders.py" ? ["src/relative.py"] : [];
+    const expected = name === "orders.py" ? ["root_user.py"] :
+      ["src/orders.py", "src/package/__init__.py", "src/stub_only.pyi"].includes(name) ? ["src/absolute.py"] : [];
     assert.deepEqual(runtime.references(target.id, {}, 100).filter((hit) => hit.relation === "import")
       .map((hit) => hit.source.path), expected, `unambiguous edges to ${name}`);
   }
@@ -158,6 +159,7 @@ test("Python absolute imports reject conflicts across root and importer director
 test("Python dotted and relative imports resolve one module or package without basename guesses", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "kr-python-packages-"));
   const files: Record<string, string> = {
+    "pyproject.toml": '[tool.setuptools]\npackage-dir={""="."}\n',
     "orders.py": "def root_order():\n    return 1\n",
     "pkg/__init__.py": "package_value = 1\n",
     "pkg/orders.py": "def place_order():\n    return 2\n",

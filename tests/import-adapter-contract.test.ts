@@ -79,7 +79,7 @@ test("PHP grouped imports and aliases resolve declared classes and functions wit
   assert.deepEqual(fixture.incoming("wrong/Order.php"), []);
 });
 
-test("C/C++ imports reference literal headers, reject ambiguity and do not manufacture implementation edges", async () => {
+test("C/C++ imports use the including directory and do not manufacture root or implementation edges", async () => {
   const fixture = await project({
     "src/orders.h": "int place(void);",
     "src/orders.c": "int place(void) { return 1; }",
@@ -90,7 +90,8 @@ test("C/C++ imports reference literal headers, reject ambiguity and do not manuf
     "src/negative.cpp": '#include "ambiguous.h"\n#include "../../../orders.h"\n#include "Orders.h"\nint run() { return 1; }',
   });
   assert.deepEqual(fixture.incoming("src/orders.h"), ["src/service.c"]);
-  for (const target of ["src/orders.c", "other/orders.h", "ambiguous.h", "src/ambiguous.h"]) assert.deepEqual(fixture.incoming(target), []);
+  assert.deepEqual(fixture.incoming("src/ambiguous.h"), ["src/negative.cpp"]);
+  for (const target of ["src/orders.c", "other/orders.h", "ambiguous.h"]) assert.deepEqual(fixture.incoming(target), []);
 });
 
 test("Go package imports include every implementation file and reject conflicting source roots", async () => {

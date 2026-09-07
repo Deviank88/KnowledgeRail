@@ -6,17 +6,20 @@ import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { PersistentCodeEvidenceIndex, codeEvidenceIndexFile } from "../src/core/code-evidence/index.js";
 import { clearWorkspaceStates } from "../src/core/workspace-state.js";
+import { codeRequestLanguage } from "../src/core/code-evidence/request-telemetry.js";
 
-export async function evaluateImportResolution(runtimeRoot?: string) {
+export async function evaluateImportResolution(runtimeRoot?: string, fixtureContent?: string) {
   const runtime = runtimeRoot ? await import(pathToFileURL(path.resolve(runtimeRoot, "src/core/code-evidence/index.ts")).href) as typeof import("../src/core/code-evidence/index.js") : undefined;
   const state = runtimeRoot ? await import(pathToFileURL(path.resolve(runtimeRoot, "src/core/workspace-state.ts")).href) as typeof import("../src/core/workspace-state.js") : undefined;
   const Index = runtime?.PersistentCodeEvidenceIndex ?? PersistentCodeEvidenceIndex;
-  const bytes = await fs.readFile(new URL("fixtures/import-resolution-golden.json", import.meta.url), "utf8");
+  const bytes = fixtureContent ?? await fs.readFile(new URL("fixtures/import-resolution-golden.json", import.meta.url), "utf8");
   const fixture = JSON.parse(bytes) as { version: number; scope: string; cases: Array<{
-    id: string; files: Record<string, string>; edges: string[][]; issues: string[][];
+    id: string; split?: string; files: Record<string, string>; edges: string[][]; issues: string[][];
   }> };
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "kr-import-eval-"));
   const cases = [];
+  const fallbackByLanguage: Record<string, { served: number; fallbacks: number }> = {};
+  const byLanguage: Record<string, { expectedEdges: number; actualEdges: number; usefulEdges: number }> = {};
   try {
     for (const sample of fixture.cases) {
       const repositoryRoot = path.join(root, sample.id), wikiRoot = path.join(repositoryRoot, "wiki");
@@ -32,6 +35,12 @@ export async function evaluateImportResolution(runtimeRoot?: string) {
       let issues: string[] = [];
       for (const module of snapshot.fragments.filter((f) => f.kind === "module" && f.qualifiedName === f.path)) {
         const result = await index.referencesWithDiagnostics(module.id, { maxResults: 100 });
+        const observed = [...new Set(result.references.filter((hit) => hit.relation === "import").map((hit) => hit.source.path))].sort();
+        const wanted = [...new Set(sample.edges.filter((edge) => edge[1] === module.path).map((edge) => edge[0]!))].sort();
+        const language = codeRequestLanguage([module.path]);
+        const counts = fallbackByLanguage[language] ??= { served: 0, fallbacks: 0 };
+        counts.served++;
+        if (JSON.stringify(observed) !== JSON.stringify(wanted)) counts.fallbacks++;
         for (const hit of result.references) if (hit.relation === "import") edges.add(`${hit.source.path} -> ${hit.target.path}`);
         issues = result.importDiagnostics?.unresolvedImports.map((issue) => [issue.sourcePath, issue.matchedName, issue.status].join(" | ")) ?? [];
       }
@@ -41,13 +50,22 @@ export async function evaluateImportResolution(runtimeRoot?: string) {
       const extra = [...edges].filter((edge) => !expected.includes(edge));
       const missingIssues = expectedIssues.filter((issue) => !issues.includes(issue));
       const extraIssues = issues.filter((issue) => !expectedIssues.includes(issue));
+      for (const edge of expected) {
+        const counts = byLanguage[codeRequestLanguage([edge.split(" -> ")[0]!])] ??= { expectedEdges: 0, actualEdges: 0, usefulEdges: 0 };
+        counts.expectedEdges++; if (edges.has(edge)) counts.usefulEdges++;
+      }
+      for (const edge of edges) (byLanguage[codeRequestLanguage([edge.split(" -> ")[0]!])] ??= { expectedEdges: 0, actualEdges: 0, usefulEdges: 0 }).actualEdges++;
       assert.equal(await fs.readFile(codeEvidenceIndexFile(wikiRoot), "utf8"), before, "reference diagnostics must not rewrite the snapshot");
-      cases.push({ id: sample.id, expectedEdges: expected.length, actualEdges: edges.size, expectedIssues: expectedIssues.length,
+      cases.push({ id: sample.id, split: sample.split ?? "development", expectedEdges: expected.length, actualEdges: edges.size, expectedIssues: expectedIssues.length,
         missing, extra, missingIssues, extraIssues });
       clearWorkspaceStates();
       state?.clearWorkspaceStates();
     }
     return { version: fixture.version, fixtureSha256: createHash("sha256").update(bytes).digest("hex"), scope: fixture.scope,
+      byLanguage: Object.fromEntries(Object.entries(byLanguage).map(([language, counts]) => [language, { ...counts,
+        precision: counts.actualEdges ? counts.usefulEdges / counts.actualEdges : 1, recall: counts.expectedEdges ? counts.usefulEdges / counts.expectedEdges : 1 }])),
+      fallbackEvaluation: { scope: "offline reference requests; oracle requests fallback for missing or extra file-level import edges; not historical user telemetry",
+        byLanguage: Object.fromEntries(Object.entries(fallbackByLanguage).map(([language, counts]) => [language, { ...counts, fallbackRate: counts.fallbacks / counts.served }])) },
       cases, pass: cases.every((sample) => !sample.missing.length && !sample.extra.length && !sample.missingIssues.length && !sample.extraIssues.length) };
   } finally { clearWorkspaceStates(); state?.clearWorkspaceStates(); await fs.rm(root, { recursive: true, force: true }); }
 }

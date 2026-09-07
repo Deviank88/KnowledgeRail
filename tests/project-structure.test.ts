@@ -120,6 +120,17 @@ test("a root manifest added to a legacy project is detected on the next referenc
   assert.deepEqual(await incoming("internal/orders/create.go"), []);
 });
 
+test("Go compatibility suffix matches retain their edges with explicit unverified provenance", async (t) => {
+  const { index, snapshot, incoming } = await project(t, {
+    "internal/codec/a.go": "package codec\nfunc Encode() {}\n",
+    "main.go": 'package main\nimport "example.org/project/internal/codec"\n',
+  });
+  assert.deepEqual(await incoming("internal/codec/a.go"), ["main.go"]);
+  const result = await index().referencesWithDiagnostics(snapshot.fragments[0]!.id);
+  assert.equal(result.importDiagnostics.unresolvedImports[0]?.reason, "legacy_suffix_heuristic");
+  assert.deepEqual(result.importDiagnostics.unresolvedImports[0]?.candidates, ["internal/codec/a.go"]);
+});
+
 test("manifest parsing is lazy, shared by concurrent queries and stable for unchanged bytes", async (t) => {
   let parses = 0;
   class Counting extends GoKnowledgeAdapter {

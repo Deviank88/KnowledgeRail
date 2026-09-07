@@ -344,14 +344,15 @@ precedence, filters and ordering remain shared rules.
 | --- | --- | --- |
 | JS/TS | Relative files, runtime/source substitutions, directory indexes, declared `paths`/`baseUrl` and one local config inheritance level | Exact pattern, then longest prefix; exact runtime file first, otherwise one candidate |
 | Python | Dotted modules, relative imports, packages, `.pyi` fallback, importer siblings and regular-package source roots | One candidate across eligible roots |
-| Java/Kotlin | Qualified declarations, static/member names already extracted, aliases, package/type wildcards | Unique file for a name; explicit wildcard groups may span files |
-| C# | Qualified types and namespace contributors | Unique file for a type; namespace imports can span files |
-| PHP | Declared classes/functions, grouped clauses and aliases | Unique file per declared name |
+| Java/Kotlin | Shared qualified declarations, static owner imports, aliases, package/type wildcards | Unique file for a name; explicit wildcard groups may span files |
+| C# | Qualified types, nested namespaces and compatible partial declarations within a csproj boundary | Unique type or compatible partial group; namespace imports can span files |
+| PHP | Declared classes/functions/constants, mixed groups, aliases, PSR-4/PSR-0/classmap/files | Unique file per declared name and symbol kind |
 | Go | `go.mod` module identity plus relative package directory; legacy suffix matching only without discovered Go manifests | Non-test implementation files within the importing module's boundary |
 | Rust | `crate`, `self`, `super`, use groups, `.rs`/`mod.rs` and indexed inline modules | One file per resolved module; source crate confines lookup |
-| C/C++ | Literal include paths from importer directory and repository root | One indexed file; no guessed `.c`/`.cpp` twin |
+| C/C++ | Quoted paths from importer directory, declared compile_commands include paths or literal CMake targets | One indexed header; competing configurations ambiguous, angle includes unresolved |
 | LWC | `@salesforce/apex/Class.method`, indexed `@salesforce/schema/Object.Field`, `c/component` | One indexed declaration or conventional local bundle |
-| Ruby/custom adapters without a resolver | Original lowercase import-tail to file-stem comparison | One candidate; collisions are reported as ambiguous |
+| Ruby | require_relative and ordered literal gemspec require_paths | First supported declared load path; external gems and dynamic paths unresolved |
+| Custom adapters without a resolver | Original lowercase import-tail to file-stem comparison | One candidate; collisions are reported as ambiguous |
 
 Resolvers keep their array-returning contract. An optional synchronous
 `CodeImportContext.reportIssue` callback reports failed singular lookups or members
@@ -375,12 +376,78 @@ npm run eval:imports:gate
 node --import tsx benchmarks/import-resolution-eval.ts --gate --json=benchmarks/results/import-resolution.json
 ```
 
-The versioned fixture covers thirteen cases across JS/TS, Python, Java, Kotlin,
+The versioned fixture covers 30 development/evaluation cases across JS/TS, Python, Java, Kotlin,
 C#, PHP, Go, Rust, C/C++, Ruby and LWC/Apex. It requires exact file-level import
 edges and diagnostic outcomes, including missing/extra negatives and valid members
-of partial groups; queries must not rewrite snapshots. This gate joins the fifteen
-existing gates without relaxing their thresholds. These are hand-authored examples,
+of partial groups; queries must not rewrite snapshots. Existing gates retain their
+thresholds. These are hand-authored examples,
 not a broad measurement of language understanding or arbitrary repository layouts.
+
+The report includes edge precision/recall by source language and an offline fallback
+oracle: a reference request needs fallback when its labeled import edges are missing
+or extra. This is distinct from observed public-request telemetry. Compare the same
+fixture with `--runtime=/path/to/preserved/runtime`; historical user rates cannot be
+reconstructed when a denominator was never recorded.
+
+`npm run eval:functional-routing:gate` adds 29 scenarios over three domain stories,
+Italian/English queries, two source layouts and document/code-only projects. It
+checks displayed incoming evidence, claim provenance, stale/ambiguous/anchorless
+negatives, token disclosure and explicit acceptance of related-code proposals.
+Recorded aliases drive the lexical run. `eval:project-precision` includes this corpus
+alongside its unchanged original questions. The full suite now contains 18 gates.
+
+`npm run eval:public-manifests:gate` verifies unmodified manifest bytes from six public
+projects, pinned by Git commit, source URL and SHA-256. `public-project-manifests.json`
+contains the source bytes; `public-project-imports.json` provides controlled source
+overlays and independent expected edges/negatives. Three cases are development and
+three evaluation. Django, Symfony Console, ripgrep, Rack, chi and Flask cover actual
+manifest grammar, including unrelated sections and an unsupported Flit layout. These
+are not whole-project imports or private-user observations; source overlays are synthetic.
+
+With an embedding provider configured, run the same functional and semantic probes live:
+
+```bash
+node --import tsx benchmarks/functional-routing-eval.ts --live --json=benchmarks/results/functional-live.json
+node --import tsx benchmarks/semantic-retrieval-eval.ts --live --json=benchmarks/results/semantic-live.json
+```
+
+Live runs retain the fixture oracle and production ANN settings. The optional
+`KNOWLEDGE_RAIL_EMBEDDING_QUERY_PREFIX` affects queries only and participates in
+provider identity. Ollama qwen3-embedding:0.6b results, including the failed paraphrase
+probes, are reported in [knowledge-routing-2.8.0.md](knowledge-routing-2.8.0.md).
+The deterministic semantic quality gate retains its own pinned provider and settings.
+
+### Workspace specific page retention
+
+```bash
+node --import tsx benchmarks/workspace-selection-eval.ts --json=benchmarks/results/280-workspace-selection.json
+```
+
+The twelve questions in `fixtures/workspace-specific-pages.json` identify expected
+pages and supporting active-claim text in the real KnowledgeRail wiki. The probe
+freezes all canonical page bytes, including history, and records their SHA-256.
+It compares the current runtime with an isolated copy that bypasses exactly the
+dominance-selection call; fusion, coverage, source text and budgets stay unchanged.
+It verifies identical scored candidate pools. Three profiles and two budgets yield
+72 runs of the same twelve questions, not 72 independent questions. Runs use fixed
+W0 and explicit lexical mode to isolate selection; there is no production flag or
+change to the workspace pages.
+
+The report separates target-page retention, display-budget omissions and dominance
+removals. Other pages are not labeled irrelevant, so this is not a precision score.
+On the measured six-page workspace all expected pages already rank first. This
+check cannot establish safety when an overview outranks a specific page, and does
+not establish answer correctness, selected-passage freshness or general stability.
+Broader examples with overview/detail hierarchies remain needed. The probe is an
+exploratory check, not a new gate or a replacement for the existing held-out corpus.
+
+The deterministic regression in `tests/hybrid-retrieval.test.ts` separately exercises
+an overview ranked first and a specific page ranked second across all three profiles.
+It checks equal signals, a strict subset of the same/different type, the half-query
+boundary, low-coverage dominance and signals missing from the entire pool. Selection
+protects candidates covering at least half of all query facets/entities; ordinary
+result and token budgets still apply. See the measured precision tradeoff in the
+[follow-up report](knowledge-routing-2.8.0.md#review-follow-up--overviewdetail-coverage-guard).
 
 Measure generation construction and bounded diagnostic disclosure separately:
 
@@ -414,14 +481,14 @@ settings. Npm packages and undeclared aliases are not inferred. Remote, array,
 cyclic and deeper inheritance fail with manifest diagnostics; relative imports
 remain usable when the config is invalid.
 
-Python searches root and importer directory, so `src/cli.py` can import its
+Python searches declared setuptools roots or a script's directory, so `src/cli.py` can import its
 sibling `src/orders_cli.py`. A chain of indexed `__init__.py`/`.pyi` packages
 also identifies the importer's package source root: with `src/app/__init__.py`,
 `src/app/service.py` can import `app.orders` from `src/app/orders.py`.
 This does not expose `orders_cli` globally to root-level scripts. A shared base
 is checked once; different candidates remain unresolved. Relative imports stay
-within the known package chain (or the existing directory boundary when no
-regular-package chain is indexed). `.pyi` is only a fallback for its corresponding
+within the known package chain; no regular package means relative imports are
+unresolved. `.pyi` is only a fallback for its corresponding
 `.py`. Additional `sys.path` roots, namespace-package root inference and dynamic
 imports remain outside this contract. `from pkg import child` links the recorded
 specifier `pkg`; it does not guess that `child` is a submodule.
@@ -431,7 +498,9 @@ assumed `src/main/java` root. Duplicate qualified declarations stay unresolved
 for a direct name lookup. C# namespace imports and explicit Java/Kotlin wildcard
 imports intentionally identify groups, not a single arbitrarily chosen class.
 They describe the import scope, not proof that every declaration is used.
-Overload/type-system/accessibility analysis and unindexed constants are not added.
+Overload/type-system/accessibility analysis is not added; imported Java static members
+identify their owning class. C# partial declarations must agree in kind/arity and
+project boundary. Full Gradle/MSBuild evaluation remains outside the contract.
 
 Go indexes directory groups rather than file stems. With `module example.com/app`
 in a `go.mod`, both `internal/orders/create.go` and `internal/orders/cancel.go`
@@ -442,7 +511,8 @@ modules are not inferred as dependencies. `_test.go` files are excluded. These
 identities follow the [Go module/package model](https://go.dev/ref/mod#modules-packages-and-versions).
 `go.work`, `replace`, vendor and build-tag selection remain outside this resolver.
 Without discovered Go manifests, the previous suffix heuristic remains available
-for compatibility, including its possible false positives.
+for compatibility, including its possible false positives; `legacy_suffix_heuristic`
+diagnostics distinguish its unverified candidates from declared resolution.
 
 Adapters optionally declare `projectManifests` parsers. The shared reader discovers
 manifests along indexed file ancestors once per code generation, reads at most
@@ -460,7 +530,8 @@ Malformed, oversized and unsafe manifests produce at most 12 `manifestWarnings`
 in the MCP reference response, with `manifestWarningCount` for the total. They do
 not trigger fallback to a guessed module identity. Parser data shares the existing
 32 MiB estimated admission budget; oversized generations remain queryable without
-retention. Source snapshot schema and extraction versions are unchanged.
+retention. Source snapshot schema remains v2; Ruby/C/C++ syntax provenance and the
+TS inventory fix advance their extraction versions independently of manifest parsing.
 
 Run `npm run bench:project-structure -- --iterations=30` for Go discovery,
 known-manifest freshness, retained/released heap and incoming-map costs at roughly
@@ -471,6 +542,10 @@ the separate `knowledge_context` code-impact path. Regression coverage is in
 with a shared local base config using the same benchmark and lifecycle. Additional
 coverage is in `tests/javascript-project-structure.test.ts`, including comparisons
 with the dev dependency TypeScript compiler for unambiguous supported mappings.
+Use `--language=csharp`, `--language=ruby` or `--language=cpp` for variable-name
+project manifests, ordered gem load paths or compilation database include paths.
+Reports show the actual extracted fragment count: the C++ prototype fixture yields
+one file module per header rather than the two fragments of the other fixtures.
 
 For the actual task compiler, run `npm run bench:code-context -- --gate`.
 It uses real TS extraction output in persisted 1k/10k-fragment snapshots and measures
@@ -494,14 +569,26 @@ Related wiki metadata does not silently satisfy documentary coverage. Fixed expa
 limits set `widenable: false`; larger context budgets are suggested only for display
 omissions that can actually benefit from them.
 
-Rust uses indexed file/module conventions within the source crate. `.rs` and
+Python setuptools, Composer PSR-4 and Cargo target/workspace manifests use the same
+reader. `tests/declared-manifests.test.ts` covers literal declarations, invalid forms,
+refresh, isolation and excluded namespaces. See the [bounded language contract](../docs/guides/code-evidence-retrieval.md)
+for supported TOML/INI/JSON forms and deferred build-tool features.
+
+Rust uses declared Cargo roots or indexed file/module conventions within the source crate. `.rs` and
 `mod.rs` collisions remain unresolved; `super` cannot escape the crate.
 Use-tree expansion is bounded to 65,536 characters, depth 32 and 1,024 visited
 nodes. Arbitrary `#[path]`, conditional compilation, re-export chains and
-edition-dependent/external bare paths are not inferred. C/C++ does not infer
-compiler include directories or distinguish quote/angle syntax that the current
-string inventory does not preserve. Header references never imply a separate
-implementation-file import.
+edition-dependent/external bare paths are not inferred. C/C++ quoted includes use
+the including directory and declared compile_commands/literal CMake include paths;
+angle headers and dynamic build configuration remain unresolved. Ruby resolves literal
+`require_relative` and ordered gemspec load paths, while dynamic runtime paths remain
+unsupported. Optional module `importStatements` preserve syntax without
+changing raw import arrays. Header references never imply an implementation twin.
+
+`npm run bench:code-telemetry` isolates the cost of the bounded, atomic OS-buffered
+request counters from index/context latency. `npm run report:code-requests -- /path/to/wiki`
+prints the same query-free aggregate exposed by admin status. Recent request IDs are
+retained for correlation; no new permanent in-memory cache is added.
 
 Apex and Salesforce metadata do not emit Java-style imports. Their existing
 symbol/database reference matching still links metadata and Apex. LWC virtual
@@ -579,3 +666,24 @@ each of ten mutation/recovery scenarios. Every 1,000 operations it checks a
 admission estimates, post-GC heap, sampled heap/RSS peaks and OS process peak RSS.
 It exercises admitted and oversized snapshots and fully built lazy maps; this
 bounded local run is not a long-duration production guarantee.
+
+
+The review follow-up covers manifest field projection (including unrelated TOML
+dates/tool sections), Cargo member warnings without losing package roots, counter
+archive/recovery across concurrent processes, and one-refresh related-evidence
+batches. Python backend limits and compact schema hints are explicit in the guide.
+The corresponding regressions are in `declared-manifests.test.ts`,
+`code-request-telemetry.test.ts` and `related-code-evidence.test.ts`.
+
+```bash
+node --expose-gc --import tsx benchmarks/related-code-evidence-bench.ts --runtime=/path/to/preserved/runtime
+node --expose-gc --import tsx benchmarks/related-code-evidence-bench.ts
+```
+
+This benchmark compares eight sequential proposal queries with one batch using
+identical target IDs, snapshots and manifests. It asserts proposal content/counts,
+reports result digests and counts manifest refreshes. Timings exclude claim writes
+and resource materialization. `warmHeapBytes` is whole-process heap including loaded
+modules; it does not isolate batch allocations or prove a memory reduction when
+comparing dynamically imported runtimes. See the sixth tranche in
+`knowledge-routing-2.8.0.md` for the final measurements.

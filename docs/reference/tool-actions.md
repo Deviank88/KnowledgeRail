@@ -50,17 +50,18 @@ Actions/modes: `rebuild`, `update`, `remove`, `search`, `symbol`, `references`, 
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
 |---|---|---:|---|---|---|
-| `action` | `rebuild` &#124; `update` &#124; `remove` &#124; `search` &#124; `symbol` &#124; `references` &#124; `read` &#124; `status` &#124; `record_fallback` | yes | — | — | status=index;rebuild=recreate;update=refresh;remove=drop;search=find;symbol=definition;references=callers of symbol;read=URI;record_fallback=raw lookup. |
+| `action` | `rebuild` &#124; `update` &#124; `remove` &#124; `search` &#124; `symbol` &#124; `references` &#124; `read` &#124; `status` &#124; `record_fallback` | yes | — | — | rebuild=recreate;search=find;symbol=definition;references=callers;read=URI;record_fallback=raw lookup. |
 | `path` | string | no | — | length ≥ 1 | — |
 | `query` | string | no | — | length ≥ 1; length ≤ 4096 | — |
 | `symbol` | string | no | — | length ≥ 1; length ≤ 512 | — |
 | `symbol_id` | string | no | — | length ≥ 1; length ≤ 256 | — |
+| `request_id` | string | no | — | length ≤ 36 | — |
 | `resource_uri` | string | no | — | pattern "^code:\\/\\/repo\\/.*" | — |
 | `path_prefixes` | array<string> | no | — | items ≤ 20 | — |
-| `kinds` | array<module &#124; class &#124; function &#124; method &#124; route &#124; test &#124; comment> | no | — | items ≤ 7 | — |
+| `kinds` | array<module &#124; class &#124; function &#124; method &#124; constant &#124; route &#124; test &#124; comment> | no | — | items ≤ 8 | — |
 | `max_results` | integer | no | `12` | ≥ 1; ≤ 100 | — |
 | `max_chars` | integer | no | `6000` | ≥ 1; ≤ 50000 | — |
-| `fallback_reason` | string | no | — | length ≥ 1; length ≤ 1024 | — |
+| `fallback_reason` | string | no | — | length ≥ 1; length ≤ 1024 | no_match&#124;ambiguous&#124;unresolved_import&#124;unsupported_extension;else other |
 | `fallback_result_count` | integer | no | — | ≥ 0; ≤ 1000000 | — |
 | `fallback_result_paths` | array<string> | no | — | items ≤ 1000 | — |
 | `recovered_evidence` | array<object> | no | — | items ≤ 100 | — |
@@ -75,7 +76,7 @@ Actions/modes: `task`, `list`, `search`, `graph`.
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
 |---|---|---:|---|---|---|
-| `mode` | `task` &#124; `list` &#124; `search` &#124; `graph` | no | `"task"` | — | task=evidence/gaps; list=pages; search=passages; graph=relations/dependencies. |
+| `mode` | `task` &#124; `list` &#124; `search` &#124; `graph` | no | `"task"` | — | task=evidence/gaps;list=pages;search=passages;graph=relations/dependencies. |
 | `intent` | `understand` &#124; `implement` &#124; `modify` &#124; `debug` &#124; `review` &#124; `document` | no | `"understand"` | — | — |
 | `objective` | string | no | — | length ≥ 1; length ≤ 4096 | — |
 | `query` | string | no | — | length ≥ 1; length ≤ 4096 | — |
@@ -98,7 +99,7 @@ Actions/modes: `write`, `review`.
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
 |---|---|---:|---|---|---|
-| `action` | `write` &#124; `review` | yes | — | — | write=save Markdown; review=delivery check. |
+| `action` | `write` &#124; `review` | yes | — | — | write=save Markdown;review=delivery check. |
 | `filename` | string | yes | — | length ≥ 4; length ≤ 255; pattern "^[^\\r\\n]+\\.md$" | — |
 | `document_type` | string | yes | — | length ≥ 1; length ≤ 128; pattern "^[^\\r\\n]+$" | — |
 | `required_sections` | array<string> | no | — | items ≤ 30 | — |
@@ -119,7 +120,7 @@ Actions/modes: `plan`, `section`.
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
 |---|---|---:|---|---|---|
-| `action` | `plan` &#124; `section` | yes | — | — | plan=design outline; section=collect evidence. |
+| `action` | `plan` &#124; `section` | yes | — | — | plan=design outline;section=collect evidence. |
 | `document_type` | string | yes | — | length ≥ 1; length ≤ 128; pattern "^[^\\r\\n]+$" | — |
 | `required_sections` | array<string> | no | — | items ≤ 30 | — |
 | `diagram_mode` | `none` &#124; `mermaid` &#124; `external_asset` | no | — | — | — |
@@ -149,7 +150,7 @@ Actions/modes: `list`, `read`, `normalize`.
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
 |---|---|---:|---|---|---|
-| `action` | `list` &#124; `read` &#124; `normalize` | no | `"list"` | — | list=sources; read=open; normalize=Markdown. |
+| `action` | `list` &#124; `read` &#124; `normalize` | no | `"list"` | — | list=sources;read=open;normalize=Markdown. |
 | `category` | `client` &#124; `transcripts` &#124; `reports` &#124; `changelogs` &#124; `normalized` &#124; `deliverables` &#124; `assets` | no | — | — | — |
 | `pattern` | string | no | `"**/*"` | — | — |
 | `path` | string | no | — | — | — |
@@ -171,7 +172,7 @@ Actions/modes: `start`, `next`, `apply_claims`, `record_segment`, `source_status
 | `max_chars` | integer | no | `12000` | ≥ 1; ≤ 50000 | — |
 | `segment_max_chars` | integer | no | — | ≥ 256; ≤ 50000 | — |
 | `segment_id` | string | no | — | — | — |
-| `claims` | array<object> | no | — | items ≥ 1 | target: page_path,page_title,page_type; code_resource_uri=knowledge_code URI for code claims. Stakeholders: entity_key,role,organization,email_domain,affiliation. |
+| `claims` | array<object> | no | — | items ≥ 1 | target:page_path,page_title,page_type;code_resource_uri=knowledge_code URI. Stakeholders:entity_key,role,organization,email_domain,affiliation. |
 | `segment_status` | `irrelevant` &#124; `unresolved` &#124; `legacy_unverified` | no | — | — | — |
 | `evidence_refs` | array<string> | no | — | — | — |
 | `page_refs` | array<string> | no | — | — | — |
@@ -194,8 +195,8 @@ Actions/modes: `read`, `write`, `edit`, `move`, `delete`, `append_log`.
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
 |---|---|---:|---|---|---|
-| `action` | `read` &#124; `write` &#124; `edit` &#124; `move` &#124; `delete` &#124; `append_log` | yes | — | — | read=open; write=create; edit=replace; move=rename; delete=remove; append_log=event. |
-| `path` | string | no | — | — | Wiki .md path; leading wiki/ maps to root. |
+| `action` | `read` &#124; `write` &#124; `edit` &#124; `move` &#124; `delete` &#124; `append_log` | yes | — | — | read=open;write=create;edit=replace;move=rename;delete=remove;append_log=event. |
+| `path` | string | no | — | — | Wiki .md path; wiki/ maps to root. |
 | `resource_uri` | string | no | — | pattern "^knowledge-rail:\\/\\/page\\/.*" | — |
 | `max_chars` | integer | no | `6000` | ≥ 1; ≤ 50000 | — |
 | `content` | string | no | — | — | — |
@@ -203,7 +204,7 @@ Actions/modes: `read`, `write`, `edit`, `move`, `delete`, `append_log`.
 | `new_string` | string | no | — | — | — |
 | `replace_all` | boolean | no | `false` | — | — |
 | `old_path` | string | no | — | — | — |
-| `new_path` | string | no | — | — | Wiki-relative .md; creates dirs. |
+| `new_path` | string | no | — | — | — |
 | `dry_run` | boolean | no | `false` | — | — |
 | `entry` | string | no | — | — | — |
 | `level` | `INFO` &#124; `WARN` &#124; `ACTION` &#124; `DECISION` | no | `"ACTION"` | — | — |

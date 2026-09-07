@@ -7,6 +7,7 @@ import type {
   CodeEvidenceHit, CodeEvidenceSnapshot, CodeReference, CodeSearchOptions, KnowledgeFragment,
   CodeImportResolver, KnowledgeAdapter, ProjectStructure,
   CodeImportDiagnostics, CodeImportResolutionCounts,
+  RelatedCodeEvidence,
 } from "./types.js";
 
 export const DEFAULT_QUERY_ADAPTERS = createDefaultKnowledgeAdapterRegistry();
@@ -112,7 +113,7 @@ export class CodeQueryRuntime {
     return { diagnostics: incoming.importDiagnostics, byLanguage: incoming.importCounts };
   }
 
-  symbol(sought: string, options: CodeSearchOptions, maxResults: number): Omit<CodeEvidenceHit, "resourceUri">[] {
+  private symbolIndex(): NonNullable<CodeQueryRuntime["symbols"]> {
     if (!this.symbols) {
       const entries: SymbolEntry[] = [];
       const exact = new Map<string, SymbolEntry[]>();
@@ -128,13 +129,18 @@ export class CodeQueryRuntime {
       });
       this.symbols = { entries, exact };
     }
+    return this.symbols;
+  }
+
+  symbol(sought: string, options: CodeSearchOptions, maxResults: number): Omit<CodeEvidenceHit, "resourceUri">[] {
+    const symbols = this.symbolIndex();
     const allowed = (entry: SymbolEntry): boolean =>
       (!options.kinds || options.kinds.includes(entry.fragment.kind)) && codePathAllowed(entry.fragment.path, options.paths);
-    const hits = (this.symbols.exact.get(sought) ?? []).filter(allowed).map((entry) => ({ entry, score: 200 }));
+    const hits = (symbols.exact.get(sought) ?? []).filter(allowed).map((entry) => ({ entry, score: 200 }));
     // Partial matches still fill the result budget. Skip their scan only when
     // enough eligible exact matches already outrank every possible partial hit.
     if (hits.length < maxResults) {
-      for (const entry of this.symbols.entries) {
+      for (const entry of symbols.entries) {
         if (entry.symbol === sought || entry.qualified === sought || !allowed(entry)) continue;
         const score = entry.qualified.endsWith(`.${sought}`) ? 160
           : entry.symbol.includes(sought) || entry.qualified.includes(sought) ? 80 : 0;
@@ -211,6 +217,51 @@ export class CodeQueryRuntime {
     return this.referencesTo([target], options, maxResults);
   }
 
+  /** One hop, no new retained graph. Call names must identify one definition;
+   * candidates retain the same explicit lexical status as references. */
+  relatedEvidence(symbolId: string, maxResults: number): Array<Omit<RelatedCodeEvidence, "resourceUri"> & { fragment: KnowledgeFragment }> {
+    const incoming = this.referenceIndex();
+    const ordinal = incoming.byId.get(symbolId);
+    if (ordinal === undefined) throw new Error(`Unknown code evidence symbol id: ${symbolId}`);
+    const target = this.snapshot.fragments[ordinal]!;
+    const exactSymbols = this.symbolIndex().exact;
+    const result = new Map<string, Omit<RelatedCodeEvidence, "resourceUri"> & { fragment: KnowledgeFragment }>();
+    const add = (fragment: KnowledgeFragment, relation: "call" | "import", direction: "incoming" | "outgoing") => {
+      if (fragment.id === target.id || result.has(fragment.id)) return;
+      if (direction === "incoming" && fragment.path === target.path &&
+          fragment.range.startLine <= target.range.startLine && fragment.range.endLine >= target.range.endLine) return;
+      result.set(fragment.id, { fragment, relation, direction, basis: relation === "call" ? "lexical_call" : "resolved_import" });
+    };
+    const names = new Set([target.symbol, target.qualifiedName].map(normalizedCodeText));
+    for (const name of names) {
+      const sought = normalizedQualifiedSymbol(name);
+      const definitions = exactSymbols.get(sought) ?? [];
+      if (definitions.length !== 1 || definitions[0]!.fragment.id !== target.id) continue;
+      for (const source of incoming.calls.get(name) ?? []) add(this.snapshot.fragments[source]!, "call", "incoming");
+    }
+    // A symbol claim can navigate the module that imports its containing file.
+    for (const source of incoming.imports.get(target.path) ?? []) {
+      const fragment = this.snapshot.fragments[source]!;
+      if (fragment.kind === "module" && fragment.qualifiedName === fragment.path) add(fragment, "import", "incoming");
+    }
+    for (const call of target.calls) {
+      const name = normalizedQualifiedSymbol(call);
+      const matches = exactSymbols.get(name) ?? [];
+      if (matches.length === 1) add(matches[0]!.fragment, "call", "outgoing");
+    }
+    const importedPaths = new Set<string>();
+    for (const [path, sources] of incoming.imports) if (sources.includes(ordinal)) importedPaths.add(path);
+    if (importedPaths.size) for (const fragment of this.snapshot.fragments) {
+      if (fragment.kind === "module" && fragment.qualifiedName === fragment.path && importedPaths.has(fragment.path)) add(fragment, "import", "outgoing");
+    }
+    const best = new TopResults<NonNullable<ReturnType<typeof result.get>>>(maxResults, (a, b) =>
+      (a.relation === "call" ? 0 : 1) - (b.relation === "call" ? 0 : 1) ||
+      a.fragment.path.localeCompare(b.fragment.path) || a.fragment.range.startLine - b.fragment.range.startLine ||
+      a.fragment.id.localeCompare(b.fragment.id));
+    for (const candidate of result.values()) best.add(candidate);
+    return best.sorted();
+  }
+
   /** Batch targets share postings, deduplication and bounded ordering. Used for
    * whole-file impact without querying every declaration independently. */
   referencesTo(targets: readonly KnowledgeFragment[], options: CodeSearchOptions, maxResults: number): Omit<CodeReference, "resourceUri">[] {
@@ -221,7 +272,8 @@ export class CodeQueryRuntime {
     const targetOrdinals = targets.length > 1 ? new Set(targets.map((target) => incoming.byId.get(target.id))) : undefined;
     for (const target of targets) {
       for (const name of [normalizedCodeText(target.symbol), normalizedCodeText(target.qualifiedName),
-        normalizedCodeText(target.qualifiedName.split(".").at(-1)!), ...target.databaseRefs.map(normalizedCodeText)]) {
+        ...(target.kind === "module" && target.qualifiedName === target.path ? [] : [normalizedCodeText(target.qualifiedName.split(".").at(-1)!)]),
+        ...target.databaseRefs.map(normalizedCodeText)]) {
         if (!targetByName.has(name)) targetByName.set(name, target);
       }
       if (target.kind === "module" && !modules.has(target.path)) modules.set(target.path, target);
@@ -238,6 +290,10 @@ export class CodeQueryRuntime {
         if (ordinal === singleTarget || seen.has(ordinal) || targetOrdinals?.has(ordinal)) continue;
         const source = this.snapshot.fragments[ordinal]!;
         if (!codePathAllowed(source.path, options.paths)) continue;
+        // A module's lexical inventory includes its own declarations. Showing
+        // that enclosing module as a caller of its child is not useful impact.
+        if (source.kind === "module" && source.path === target.path &&
+            source.range.startLine <= target.range.startLine && source.range.endLine >= target.range.endLine) continue;
         seen.add(ordinal);
         best.add({ ordinal, relation, source, target });
       }

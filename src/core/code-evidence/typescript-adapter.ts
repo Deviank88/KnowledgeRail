@@ -223,13 +223,57 @@ function callsIn(masked: string): string[] {
   return unique(values);
 }
 
-function importsIn(content: string): { modules: string[]; symbols: string[] } {
+function importsIn(content: string, masked: string): { modules: string[]; symbols: string[] } {
   const modules: string[] = [];
   const symbols: string[] = [];
-  for (const match of content.matchAll(/\bimport\s+(?:type\s+)?([\s\S]*?)\s+from\s+["']([^"']+)["']|\bimport\s+["']([^"']+)["']|\brequire\s*\(\s*["']([^"']+)["']\s*\)/g)) {
-    const moduleName = match[2] ?? match[3] ?? match[4];
-    if (moduleName) modules.push(moduleName);
-    const clause = match[1];
+  const triviaEnd = (start: number): number => {
+    let position = start;
+    while (position < content.length) {
+      if (/\s/u.test(content[position]!)) { position++; continue; }
+      if (content.startsWith("/*", position)) { const end = content.indexOf("*/", position + 2); if (end < 0) return content.length; position = end + 2; continue; }
+      if (content.startsWith("//", position)) { const end = content.indexOf("\n", position + 2); if (end < 0) return content.length; position = end + 1; continue; }
+      break;
+    }
+    return position;
+  };
+  const literal = (start: number): { value: string; end: number } | undefined => {
+    const open = triviaEnd(start), quote = content[open];
+    if (quote !== '"' && quote !== "'") return;
+    for (let end = open + 1; end < content.length; end++) {
+      if (content[end] === "\n" || content[end] === "\r") return;
+      if (content[end] === "\\") { end++; continue; }
+      if (content[end] === quote) return { value: content.slice(open + 1, end), end: end + 1 };
+    }
+  };
+  for (const anchor of masked.matchAll(/\b(?:import|require)\b/gu)) {
+    let previous = anchor.index - 1;
+    while (previous >= 0 && /\s/u.test(masked[previous]!)) previous--;
+    if (masked[previous] === ".") continue;
+    const start = triviaEnd(anchor.index + anchor[0].length);
+    let module: ReturnType<typeof literal>, clause: string | undefined;
+    if (anchor[0] === "require") {
+      if (content[start] !== "(") continue;
+      module = literal(start + 1);
+      if (!module || content[triviaEnd(module.end)] !== ")") continue;
+    } else {
+      module = literal(start);
+      if (!module) {
+        // Scan visible tokens once per declaration. Quoted export names and
+        // comments may occur inside bindings; fake `from` text is masked.
+        const tokens = /[{};()]|\b(?:from|import|require|export|function|const|let|var|class)\b/gu;
+        tokens.lastIndex = start;
+        let depth = 0, token: RegExpExecArray | null;
+        while ((token = tokens.exec(masked))) {
+          if (token[0] === "{") { if (++depth > 1) break; continue; }
+          if (token[0] === "}") { if (--depth < 0) break; continue; }
+          if (depth) continue;
+          if (token[0] !== "from") break;
+          module = literal(token.index + token[0].length);
+          if (module) { clause = content.slice(start, token.index); break; }
+        }
+      }
+    }
+    if (module?.value) modules.push(module.value);
     if (clause) {
       for (const identifier of clause.match(/[A-Za-z_$][\w$]*/g) ?? []) {
         if (!KEYWORDS.has(identifier)) symbols.push(identifier);
@@ -487,7 +531,7 @@ export class TypeScriptKnowledgeAdapter implements KnowledgeAdapter {
     }
     const masked = maskNonCode(content);
     const comments = commentsIn(content);
-    const imports = importsIn(content);
+    const imports = importsIn(content, masked);
     const isLwcComponent = isLwcComponentSource(path, content, masked);
     const candidates: Candidate[] = [{
       kind: "module",

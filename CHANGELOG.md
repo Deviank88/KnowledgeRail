@@ -6,23 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-09-07
+
 ### Fixed
 
+- Recognize complete long identifiers and inferred artifact headings in retrieval coverage without accepting identifier prefixes or weakening explicit page-type requirements. Remove strictly dominated lexical candidates from display only below half of all query signals, preserving substantial specific-page coverage beneath an overview. Retain the full coverage pool, semantic/graph evidence, source diversity and explicit artifact-chain widening.
+- Keep C/C++ file extensions out of lexical module aliases so an import is not misreported as a generic reference. Preserve Java/Kotlin interoperability and static-owner imports, nested C#/PHP namespace scopes and compatible C# partial declarations within one project boundary. Java, Kotlin, C# and PHP extraction advance to v2.
+- Scope TOML reads to relevant declaration fields so unrelated tool grammar does not disable Python/Cargo resolution. Keep valid Cargo package roots and literal members when workspace member globs or invalid member values require warnings.
+- Recover corrupt request counters under the workspace lock, preserving the original file in an archive and starting a distinct counting period. Preserve future formats and files outside the recovery contract; warnings identify the counter path.
+- Resolve Python imports from declared setuptools roots or verified package/script boundaries; exclude implicit namespace and undeclared repository-root guesses. Resolve Ruby relative paths and C/C++ quoted headers without unrelated stems, system-header guesses or implementation twins.
+- Exclude fixture/template/comment text from the TS/JS import inventory and avoid showing an enclosing file module as its own declaration's caller. TS/JS extraction advances to v5, Ruby to v2 and C/C++ to v3; raw import arrays and snapshot v2 remain compatible through optional syntax provenance.
 - Stop legacy basename import collisions from creating several definite edges. Preserve explicit namespace/package groups and custom resolver arrays; surface ambiguous choices separately.
 - Preserve TypeScript/JavaScript declarations and function bodies after expression-position regex literals containing quotes, backticks or braces. Keep division operators visible and preserve UTF-16 offsets for supplementary Unicode characters. The TypeScript adapter advances to v4; refresh existing code indexes and revalidate affected anchors.
 - Keep superseded anchor drift in the audit ledger while excluding it from page staleness using current claim status, including supersession after the last drift check. Active, ambiguous and contradicted claims still flag drift.
 
 ### Added
 
+- Read Python setuptools and Cargo target/workspace declarations through the existing confined manifest reader and a bounded dependency-free TOML subset. Composer supports PSR-4, PSR-0, classmap, files and literal exclusions, including PHP constants and mixed grouped imports.
+- Resolve literal Ruby gemspec require_paths in order, preserving require_relative independently. Read confined C/C++ compilation database include directories and bounded literal CMake target declarations without executing code. Discover bounded *.gemspec and *.csproj declarations through the shared manifest reader.
+- Propose up to eight direct code neighbors when recording anchored claims, with relation, direction, provenance and URI. Candidates are response-only; further claims require explicit author action.
+- Count public code requests and linked fallbacks per workspace/language. Return request IDs, deduplicate correlated fallbacks, expose aggregates in admin status and a local report, and keep unknown/expired events separate. New aggregates contain no query text or source paths; counters use atomic OS-buffered writes.
+- Extend the import oracle to 30 development/evaluation fixtures and add 29 functional routing scenarios covering domain aliases, layout changes, documents/code-only projects and unreliable anchors. Add a separate gate using unchanged manifest bytes from six public projects pinned by commit and SHA-256, with controlled source overlays. Keep existing quality thresholds and prior language oracles unchanged.
 - Expose bounded `unresolvedImports` in code reference responses, with matched names, reasons and candidate paths. Sample twelve issues per indexed generation and four candidates per issue; mark truncation and snapshot scope explicitly. Task context warns about incomplete import resolution without inventing an indexing GAP. Keep per-language-family inventory counts internal and reuse adapter callbacks, memoization and cache admission; ordinary reference callers avoid copying diagnostics.
-- Add an import edge/diagnostic gate covering thirteen source/manifest fixtures, including partially resolvable groups, known ambiguities and negative edges; retain all existing quality thresholds.
 - Let adapters declare bounded project-manifest readers. Go now uses `go.mod` module identities and nested module boundaries where manifests are available; external imports with matching directory suffixes no longer create local edges in those projects. Invalid manifests return bounded reference diagnostics.
 - Refresh known manifests on reference queries without reparsing sources. Discover new nested manifests on index rebuild or `knowledge_code action="update"` for the manifest path. Parsed manifest retention participates in the existing per-project cache admission budget.
 - Resolve declared JS/TS `paths` and `baseUrl` from JSONC configs, with exact-pattern and longest-prefix precedence, ordered targets and one local `extends` level. Reuse the common confined reader for dependencies, refreshing changed references and pruning removed dependencies. Preserve relative option origins and child-map replacement.
 - Add bounded code impact to `knowledge_context`: repository source paths, paths named in the task and selected active anchored claims yield code roots, incoming candidates and related wiki links. Reuse the existing runtime through a read-only API; absent or invalid indexes yield a GAP without automatic rebuild. Full and compact responses expose the same resources.
+- Add opt-in live semantic and functional-routing evaluations, plus a query-only embedding instruction prefix through KNOWLEDGE_RAIL_EMBEDDING_QUERY_PREFIX. The prefix participates in provider identity and leaves document embeddings unchanged.
 
 ### Changed
 
+- Compile Python/Composer literal glob filters once per manifest with a shared matcher that avoids exponential regex backtracking. Preserve Go's no-manifest suffix fallback with explicit legacy_suffix_heuristic diagnostics.
+- Refresh the code snapshot and manifest structure once for a batch of related-evidence proposals, preserving per-target errors and response caps. Document compact action hints and expose normalized fallback reasons in the input schema while retaining free-text compatibility.
 - Reuse stable bounded result selection for incoming references, preserving relation priority, path filters, test preference and ties.
 - Add manifest freshness, isolation and memory-admission regressions and a dedicated structure benchmark. Repair the project-precision fixture's obsolete source pointer without changing its questions, document bodies or expected results.
 - Make the project knowledge maintenance script explicitly supersede its own prior source revisions and verify every current claim link, while preserving and reporting older anchors that still show drift.
@@ -30,7 +45,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Known limitations
 
-- Manifest support covers `go.mod`, `tsconfig.json` and `jsconfig.json`. JS/TS uses nearest-config boundaries; project references, include/exclude ownership, package/bundler resolution, remote/multiple/deeper inheritance remain outside the contract. `rootDir` does not create import identities. Manifest-free Go projects retain the previous suffix heuristic; `go.work`, `replace`, vendor and build tags are not resolved. Code impact inherits adapter limitations and uses the indexed generation, not a live call graph. Import diagnostics describe recognized ambiguity; unresolved imports do not distinguish all external, unsupported and unindexed cases. Custom resolvers remain responsible for their returned groups; single-match Ruby path guesses and C/C++ quote/angle handling remain limited.
+- Lexical dominance selection remains under observation for specific pages covering less than half the query signals; higher-coverage pages are protected from dominance, subject to ordinary display budgets. Deterministic overview/detail regressions do not establish general answer quality. A relevant unsupported CMake declaration discards all CMake roots/targets from its file, preserving local quoted includes; broad real-CMake coverage is not established. Changing the embedding query prefix triggers full document re-embedding at the next synchronization despite identical document inputs.
+- Manifest support is bounded to literal declarations and indexed files. Installed dependencies, full build-tool evaluation, MSBuild/Gradle ownership, dynamic Ruby paths, compiler macros/system headers, transitive CMake configuration, Rust cfg/path attributes/re-exports and TS project/package/bundler resolution remain unsupported. Compilation databases are discovered at indexed ancestors/root, not arbitrary build directories.
+- Ollama qwen3-embedding:0.6b passes the 29 recorded-alias functional scenarios but does not recover either of the two paraphrase-only probes with production ANN thresholds. A query instruction prefix reduces no-benefit token growth from six queries to one (+2 estimated tokens) in the final run; it does not establish general semantic accuracy. Public manifest overlays are not full-project or user-population evaluation. Request rates count correlated reported fallback use; expired, unknown and unreported events cannot reconstruct historical user rates. The legacy fallback journal is unchanged.
+
+- Python layout manifests currently support setuptools only. Poetry/Hatch/Flit/PDM declarations are not interpreted: package-boundary/script-directory resolution still works, but tests or scripts outside the package can miss absolute imports from repository-root modules or separate source trees. Implicit namespace packages and runtime sys.path additions remain unsupported.
+- Go without a discovered go.mod still uses the legacy directory-suffix heuristic and can produce false positives. Import diagnostics do not yet distinguish every external, unsupported and unindexed cause. TypeScript rootDir does not define import identity or aliases.
+- Manifest projection preserves unrelated balanced values, but ambiguous lexical boundaries (such as unterminated multiline strings) still prevent safe declaration discovery. Cargo workspace member globs are diagnosed without expanding them.
+
 
 ## [2.7.4] - 2026-09-05
 
@@ -361,7 +383,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Initial local-first MCP server with persistent evidence-backed knowledge, bounded retrieval, document workflows, and eight public `knowledge_*` tools.
 - Multi-workspace loopback HTTP gateway, opaque per-chat bindings, desktop adapter, and portable npm/npx distribution.
 
-[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.7.3...HEAD
+[Unreleased]: https://github.com/Deviank88/KnowledgeRail/compare/v2.8.0...HEAD
+[2.8.0]: https://github.com/Deviank88/KnowledgeRail/compare/v2.7.4...v2.8.0
+[2.7.4]: https://github.com/Deviank88/KnowledgeRail/compare/v2.7.3...v2.7.4
 [2.7.3]: https://github.com/Deviank88/KnowledgeRail/compare/v2.7.2...v2.7.3
 [2.7.2]: https://github.com/Deviank88/KnowledgeRail/compare/v2.7.1...v2.7.2
 [2.7.1]: https://github.com/Deviank88/KnowledgeRail/compare/v2.7.0...v2.7.1

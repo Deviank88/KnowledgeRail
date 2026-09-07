@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "scope": "Hand-authored source/manifest fixtures with explicit import-edge oracles; not a population-wide language benchmark.",
   "cases": [
     {
@@ -10,8 +10,20 @@
         "unique/Unrelated.kt": "package acme\nfun place() {}",
         "use.kt": "import acme.Order as Invoice\nimport acme.place\nfun run() {}"
       },
-      "edges": [["use.kt", "unique/Unrelated.kt"]],
-      "issues": [["use.kt", "acme.Order", "ambiguous"]]
+      "edges": [
+        [
+          "use.kt",
+          "unique/Unrelated.kt"
+        ]
+      ],
+      "issues": [
+        [
+          "use.kt",
+          "acme.Order",
+          "ambiguous"
+        ]
+      ],
+      "split": "development"
     },
     {
       "id": "lwc-virtual-import-duplicate-apex-method",
@@ -21,8 +33,20 @@
         "odd/Billing.cls": "public class Billing {\n @AuraEnabled\n public static void save() {}\n}",
         "use.js": "import load from '@salesforce/apex/Orders.load';\nimport save from '@salesforce/apex/Billing.save';"
       },
-      "edges": [["use.js", "odd/Billing.cls"]],
-      "issues": [["use.js", "@salesforce/apex/Orders.load", "ambiguous"]]
+      "edges": [
+        [
+          "use.js",
+          "odd/Billing.cls"
+        ]
+      ],
+      "issues": [
+        [
+          "use.js",
+          "@salesforce/apex/Orders.load",
+          "ambiguous"
+        ]
+      ],
+      "split": "development"
     },
     {
       "id": "java-declared-group-and-duplicate-type",
@@ -33,8 +57,28 @@
         "Group.java": "import acme.*;\npublic class Group {}",
         "Single.java": "import acme.Dup;\npublic class Single {}"
       },
-      "edges": [["Group.java", "odd/One.java"], ["Group.java", "a/Dup.java"], ["Group.java", "b/Dup.java"]],
-      "issues": [["Single.java", "acme.Dup", "ambiguous"]]
+      "edges": [
+        [
+          "Group.java",
+          "odd/One.java"
+        ],
+        [
+          "Group.java",
+          "a/Dup.java"
+        ],
+        [
+          "Group.java",
+          "b/Dup.java"
+        ]
+      ],
+      "issues": [
+        [
+          "Single.java",
+          "acme.Dup",
+          "ambiguous"
+        ]
+      ],
+      "split": "development"
     },
     {
       "id": "csharp-namespace-and-ambiguous-alias",
@@ -45,8 +89,24 @@
         "b/Dup.cs": "namespace Other;\npublic class Dup {}",
         "Consumer.cs": "using Acme;\nusing Alias = Other.Dup;\npublic class Consumer {}"
       },
-      "edges": [["Consumer.cs", "odd/A.cs"], ["Consumer.cs", "odd/B.cs"]],
-      "issues": [["Consumer.cs", "Other.Dup", "ambiguous"]]
+      "edges": [
+        [
+          "Consumer.cs",
+          "odd/A.cs"
+        ],
+        [
+          "Consumer.cs",
+          "odd/B.cs"
+        ]
+      ],
+      "issues": [
+        [
+          "Consumer.cs",
+          "Other.Dup",
+          "ambiguous"
+        ]
+      ],
+      "split": "development"
     },
     {
       "id": "php-partial-group-keeps-valid-member",
@@ -56,8 +116,25 @@
         "b/Dup.php": "<?php\nnamespace Acme;\nclass Dup {}",
         "Consumer.php": "<?php\nuse Acme\\{A, Dup, Missing};\nclass Consumer {}"
       },
-      "edges": [["Consumer.php", "A.php"]],
-      "issues": [["Consumer.php", "Acme\\Dup", "ambiguous"], ["Consumer.php", "Acme\\Missing", "unresolved"]]
+      "edges": [
+        [
+          "Consumer.php",
+          "A.php"
+        ]
+      ],
+      "issues": [
+        [
+          "Consumer.php",
+          "Acme\\Dup",
+          "ambiguous"
+        ],
+        [
+          "Consumer.php",
+          "Acme\\Missing",
+          "unresolved"
+        ]
+      ],
+      "split": "development"
     },
     {
       "id": "python-root-conflict-and-relative",
@@ -66,8 +143,25 @@
         "odd/orders.py": "value = 2\n",
         "odd/use.py": "import orders\nfrom .orders import value\nimport external_vendor\n"
       },
-      "edges": [["odd/use.py", "odd/orders.py"]],
-      "issues": [["odd/use.py", "orders", "ambiguous"], ["odd/use.py", "external_vendor", "unresolved"]]
+      "edges": [
+        [
+          "odd/use.py",
+          "odd/orders.py"
+        ]
+      ],
+      "issues": [
+        [
+          "odd/use.py",
+          ".orders",
+          "unresolved"
+        ],
+        [
+          "odd/use.py",
+          "external_vendor",
+          "unresolved"
+        ]
+      ],
+      "split": "development"
     },
     {
       "id": "javascript-relative-ambiguity-and-explicit-extension",
@@ -76,8 +170,25 @@
         "unit.tsx": "export const value = 2;",
         "use.ts": "import './unit'; import './unit.ts'; import 'node:fs';"
       },
-      "edges": [["use.ts", "unit.ts"]],
-      "issues": [["use.ts", "./unit", "ambiguous"], ["use.ts", "node:fs", "unresolved"]]
+      "edges": [
+        [
+          "use.ts",
+          "unit.ts"
+        ]
+      ],
+      "issues": [
+        [
+          "use.ts",
+          "./unit",
+          "ambiguous"
+        ],
+        [
+          "use.ts",
+          "node:fs",
+          "unresolved"
+        ]
+      ],
+      "split": "development"
     },
     {
       "id": "javascript-manifest-ties-and-ordered-fallback",
@@ -89,8 +200,25 @@
         "amb.tsx": "export const value = 4;",
         "use.ts": "import '@tie/Thingend'; import '@fallback'; import '@blocked';"
       },
-      "edges": [["use.ts", "one.ts"]],
-      "issues": [["use.ts", "@tie/*, @tie/*end", "ambiguous"], ["use.ts", "@blocked", "ambiguous"]]
+      "edges": [
+        [
+          "use.ts",
+          "one.ts"
+        ]
+      ],
+      "issues": [
+        [
+          "use.ts",
+          "@tie/*, @tie/*end",
+          "ambiguous"
+        ],
+        [
+          "use.ts",
+          "@blocked",
+          "ambiguous"
+        ]
+      ],
+      "split": "development"
     },
     {
       "id": "go-declared-package-multiple-files",
@@ -100,8 +228,24 @@
         "strange/orders/b.go": "package orders\nfunc B() {}",
         "main.go": "package main\nimport (\n\"example.com/app/strange/orders\"\n\"external.com/strange/orders\"\n)"
       },
-      "edges": [["main.go", "strange/orders/a.go"], ["main.go", "strange/orders/b.go"]],
-      "issues": [["main.go", "external.com/strange/orders", "unresolved"]]
+      "edges": [
+        [
+          "main.go",
+          "strange/orders/a.go"
+        ],
+        [
+          "main.go",
+          "strange/orders/b.go"
+        ]
+      ],
+      "issues": [
+        [
+          "main.go",
+          "external.com/strange/orders",
+          "unresolved"
+        ]
+      ],
+      "split": "development"
     },
     {
       "id": "go-legacy-suffix-collision",
@@ -111,7 +255,14 @@
         "main.go": "package main\nimport \"example.com/internal/orders\""
       },
       "edges": [],
-      "issues": [["main.go", "internal/orders", "ambiguous"]]
+      "issues": [
+        [
+          "main.go",
+          "internal/orders",
+          "ambiguous"
+        ]
+      ],
+      "split": "development"
     },
     {
       "id": "rust-partial-group-and-module-collision",
@@ -121,8 +272,20 @@
         "dup.rs": "pub struct Dup {}",
         "dup/mod.rs": "pub struct Dup {}"
       },
-      "edges": [["lib.rs", "good.rs"]],
-      "issues": [["lib.rs", "crate::dup::Dup", "ambiguous"]]
+      "edges": [
+        [
+          "lib.rs",
+          "good.rs"
+        ]
+      ],
+      "issues": [
+        [
+          "lib.rs",
+          "crate::dup::Dup",
+          "ambiguous"
+        ]
+      ],
+      "split": "development"
     },
     {
       "id": "cpp-literal-header-conflict-no-twin",
@@ -132,8 +295,14 @@
         "odd/unit.cpp": "int value() { return 1; }",
         "odd/use.cpp": "#include \"unit.h\"\nint run() { return 0; }"
       },
-      "edges": [],
-      "issues": [["odd/use.cpp", "unit.h", "ambiguous"]]
+      "edges": [
+        [
+          "odd/use.cpp",
+          "odd/unit.h"
+        ]
+      ],
+      "issues": [],
+      "split": "development"
     },
     {
       "id": "ruby-legacy-stem-collision",
@@ -143,7 +312,420 @@
         "use.rb": "require 'orders'\n"
       },
       "edges": [],
-      "issues": [["use.rb", "orders", "ambiguous"]]
+      "issues": [
+        [
+          "use.rb",
+          "orders",
+          "unresolved"
+        ]
+      ],
+      "split": "development"
+    },
+    {
+      "id": "python-declared-module-root",
+      "split": "evaluation",
+      "files": {
+        "pyproject.toml": "[tool.setuptools]\npackage-dir={\"\"=\"business/runtime\"}\npy-modules=[\"invoice\"]\n",
+        "business/runtime/invoice.py": "def reverse():\n return 1\n",
+        "other/invoice.py": "def wrong():\n return 2\n",
+        "main.py": "import invoice\nimport external_invoice\n"
+      },
+      "edges": [
+        [
+          "main.py",
+          "business/runtime/invoice.py"
+        ]
+      ],
+      "issues": [
+        [
+          "main.py",
+          "external_invoice",
+          "unresolved"
+        ]
+      ]
+    },
+    {
+      "id": "python-cfg-package-name",
+      "split": "evaluation",
+      "files": {
+        "setup.cfg": "[options]\npackages=app\npackage_dir=\n app=unusual\n",
+        "unusual/__init__.py": "value=1\n",
+        "unusual/operation.py": "value=2\n",
+        "entry.py": "import app.operation\nimport unusual.operation\n"
+      },
+      "edges": [
+        [
+          "entry.py",
+          "unusual/operation.py"
+        ]
+      ],
+      "issues": [
+        [
+          "entry.py",
+          "unusual.operation",
+          "unresolved"
+        ]
+      ]
+    },
+    {
+      "id": "python-invalid-manifest",
+      "split": "evaluation",
+      "files": {
+        "pyproject.toml": "[tool.setuptools]\npackage-dir={\"\"=\"../external\"}\n",
+        "orders.py": "value=1\n",
+        "use.py": "import orders\n"
+      },
+      "edges": [],
+      "issues": [
+        [
+          "use.py",
+          "orders",
+          "unresolved"
+        ]
+      ]
+    },
+    {
+      "id": "composer-declared-psr4",
+      "split": "evaluation",
+      "files": {
+        "composer.json": "{\"autoload\": {\"psr-4\": {\"Billing\\\\\": \"odd/\"}}, \"autoload-dev\": {\"psr-4\": {\"Spec\\\\\": \"checks/\"}}}",
+        "odd/Invoice.php": "<?php\nnamespace Billing;\nclass Invoice {}",
+        "wrong/Invoice.php": "<?php\nnamespace Billing;\nclass Invoice {}",
+        "checks/Oracle.php": "<?php\nnamespace Spec;\nclass Oracle {}",
+        "run.php": "<?php\nuse Billing\\Invoice;\nuse Spec\\Oracle;\nuse Vendor\\Invoice;"
+      },
+      "edges": [
+        [
+          "run.php",
+          "odd/Invoice.php"
+        ],
+        [
+          "run.php",
+          "checks/Oracle.php"
+        ]
+      ],
+      "issues": [
+        [
+          "run.php",
+          "Vendor\\Invoice",
+          "unresolved"
+        ]
+      ]
+    },
+    {
+      "id": "composer-malformed",
+      "split": "evaluation",
+      "files": {
+        "composer.json": "{\"autoload\":",
+        "Order.php": "<?php\nnamespace App;\nclass Order {}",
+        "run.php": "<?php\nuse App\\Order;"
+      },
+      "edges": [],
+      "issues": [
+        [
+          "run.php",
+          "App\\Order",
+          "unresolved"
+        ]
+      ]
+    },
+    {
+      "id": "cargo-custom-bin",
+      "split": "evaluation",
+      "files": {
+        "Cargo.toml": "[package]\nname=\"credit-cli\"\n[[bin]]\nname=\"credit\"\npath=\"program/start.rs\"\n",
+        "program/start.rs": "use crate::policy::limit;\nuse external::policy::limit;\nfn main() {}",
+        "program/policy.rs": "pub fn limit() {}",
+        "wrong/policy.rs": "pub fn limit() {}"
+      },
+      "edges": [
+        [
+          "program/start.rs",
+          "program/policy.rs"
+        ]
+      ],
+      "issues": [
+        [
+          "program/start.rs",
+          "external::policy::limit",
+          "unresolved"
+        ]
+      ]
+    },
+    {
+      "id": "cargo-missing-target",
+      "split": "evaluation",
+      "files": {
+        "Cargo.toml": "[package]\nname=\"credit\"\n[lib]\npath=\"missing/root.rs\"\n",
+        "src/lib.rs": "use crate::policy::limit;",
+        "src/policy.rs": "pub fn limit() {}"
+      },
+      "edges": [],
+      "issues": [
+        [
+          "src/lib.rs",
+          "crate::policy::limit",
+          "unresolved"
+        ]
+      ]
+    },
+    {
+      "id": "ruby-relative-exact-and-missing",
+      "split": "evaluation",
+      "files": {
+        "business/row.rb": "def reverse\n 1\nend",
+        "other/row.rb": "def unrelated\n 2\nend",
+        "business/run.rb": "require_relative 'row.rb'\nrequire_relative '../missing/row'\nrequire 'row'\n"
+      },
+      "edges": [
+        [
+          "business/run.rb",
+          "business/row.rb"
+        ]
+      ],
+      "issues": [
+        [
+          "business/run.rb",
+          "row",
+          "unresolved"
+        ],
+        [
+          "business/run.rb",
+          "../missing/row",
+          "unresolved"
+        ]
+      ]
+    },
+    {
+      "id": "cpp-quoted-system-no-twin",
+      "split": "evaluation",
+      "files": {
+        "orders.h": "int other();",
+        "business/orders.h": "int reverse();",
+        "business/orders.cpp": "int reverse(){ return 1; }",
+        "business/run.cpp": "#include \"orders.h\"\n#include <orders.h>\n#include \"absent.h\"\nint main() {}"
+      },
+      "edges": [
+        [
+          "business/run.cpp",
+          "business/orders.h"
+        ]
+      ],
+      "issues": [
+        [
+          "business/run.cpp",
+          "<orders.h>",
+          "unresolved"
+        ],
+        [
+          "business/run.cpp",
+          "absent.h",
+          "unresolved"
+        ]
+      ]
+    },
+    {
+      "id": "typescript-fixture-text-inventory",
+      "split": "evaluation",
+      "files": {
+        "unit.ts": "export const value=1;",
+        "decoy.ts": "export const other=2;",
+        "run.ts": "const fixture = `import \"./decoy\"; require(\"./decoy\")`;\n/* import \"./decoy\"; */\nimport \"./unit\";\n"
+      },
+      "edges": [
+        [
+          "run.ts",
+          "unit.ts"
+        ]
+      ],
+      "issues": []
+    },
+    {
+      "id": "jvm-mixed-static-and-gradle-collision",
+      "split": "evaluation",
+      "files": {
+        "a/Types.java": "package joint;\npublic class Value {}\nclass Extra {}\n",
+        "b/Port.kt": "package joint\nclass Port {}\n",
+        "a/Flags.java": "package joint;\npublic class Flags {\npublic static final int LIMIT=1;\n}\n",
+        "one/Copy.kt": "package duplicate\nclass Copy {}\n",
+        "two/Copy.java": "package duplicate;\npublic class Copy {}\n",
+        "run.java": "import joint.Port;\nimport joint.Extra;\nimport static joint.Flags.LIMIT;\nimport duplicate.Copy;\n",
+        "run.kt": "import joint.Value\n"
+      },
+      "edges": [
+        [
+          "run.java",
+          "b/Port.kt"
+        ],
+        [
+          "run.java",
+          "a/Types.java"
+        ],
+        [
+          "run.java",
+          "a/Flags.java"
+        ],
+        [
+          "run.kt",
+          "a/Types.java"
+        ]
+      ],
+      "issues": [
+        [
+          "run.java",
+          "duplicate.Copy",
+          "ambiguous"
+        ]
+      ]
+    },
+    {
+      "id": "csharp-partial-nested-and-conflicting-types",
+      "split": "evaluation",
+      "files": {
+        "App.csproj": "<Project Sdk=\"Microsoft.NET.Sdk\" />",
+        "a.cs": "namespace Outer {\nnamespace Inner {\npublic partial class Part {}\npublic class Conflict {}\n}\n}\n",
+        "b.cs": "namespace Outer.Inner;\npublic partial class Part {}\npublic class Conflict {}\n",
+        "run.cs": "using P = Outer.Inner.Part;\nusing C = Outer.Inner.Conflict;\n"
+      },
+      "edges": [
+        [
+          "run.cs",
+          "a.cs"
+        ],
+        [
+          "run.cs",
+          "b.cs"
+        ]
+      ],
+      "issues": [
+        [
+          "run.cs",
+          "Outer.Inner.Conflict",
+          "ambiguous"
+        ]
+      ]
+    },
+    {
+      "id": "composer-classmap-files-psr0",
+      "split": "evaluation",
+      "files": {
+        "composer.json": "{\"autoload\": {\"classmap\": [\"odd/\"], \"files\": [\"boot.php\"], \"psr-0\": {\"Old_\": \"legacy\"}}}",
+        "odd/A.php": "<?php namespace Mixed;\nclass A {}\n",
+        "boot.php": "<?php namespace Mixed;\nconst LIMIT=3;\nfunction run() {}\n",
+        "legacy/Old/Type.php": "<?php\nclass Old_Type {}\n",
+        "run.php": "<?php\nuse Mixed\\{A, function run, const LIMIT};\nuse Old_Type;\nuse const Mixed\\MISSING;\n"
+      },
+      "edges": [
+        [
+          "run.php",
+          "odd/A.php"
+        ],
+        [
+          "run.php",
+          "boot.php"
+        ],
+        [
+          "run.php",
+          "legacy/Old/Type.php"
+        ]
+      ],
+      "issues": [
+        [
+          "run.php",
+          "Mixed\\MISSING",
+          "unresolved"
+        ]
+      ]
+    },
+    {
+      "id": "cpp-compile-directories",
+      "split": "development",
+      "files": {
+        "compile_commands.json": "[{\"directory\": \".\", \"file\": \"src/run.cpp\", \"arguments\": [\"c++\", \"-Iodd\", \"-Isecond\"]}]",
+        "src/run.cpp": "#include \"unit.h\"\n#include <unit.h>\n",
+        "odd/unit.h": "int unit();\n",
+        "second/unit.h": "int other();\n"
+      },
+      "edges": [
+        [
+          "src/run.cpp",
+          "odd/unit.h"
+        ]
+      ],
+      "issues": [
+        [
+          "src/run.cpp",
+          "<unit.h>",
+          "unresolved"
+        ]
+      ]
+    },
+    {
+      "id": "cpp-cmake-target-roots",
+      "split": "development",
+      "files": {
+        "CMakeLists.txt": "add_library(core src/run.cpp)\ntarget_include_directories(core PRIVATE odd)\n",
+        "src/run.cpp": "#include \"unit.h\"\n",
+        "src/other.cpp": "#include \"unit.h\"\n",
+        "odd/unit.h": "int unit();\n"
+      },
+      "edges": [
+        [
+          "src/run.cpp",
+          "odd/unit.h"
+        ]
+      ],
+      "issues": [
+        [
+          "src/other.cpp",
+          "unit.h",
+          "unresolved"
+        ]
+      ]
+    },
+    {
+      "id": "ruby-gemspec-load-paths",
+      "split": "development",
+      "files": {
+        "example.gemspec": "Gem::Specification.new do |s|\ns.require_paths = %w[odd]\nend\n",
+        "odd/unit.rb": "module Unit\nend\n",
+        "lib/unit.rb": "module Other\nend\n",
+        "test/run.rb": "require 'unit'\nrequire 'external'\n"
+      },
+      "edges": [
+        [
+          "test/run.rb",
+          "odd/unit.rb"
+        ]
+      ],
+      "issues": [
+        [
+          "test/run.rb",
+          "external",
+          "unresolved"
+        ]
+      ]
+    },
+    {
+      "id": "go-legacy-explicit-provenance",
+      "split": "development",
+      "files": {
+        "internal/codec/unit.go": "package codec\nfunc Encode() {}\n",
+        "main.go": "package main\nimport \"example.org/legacy/internal/codec\"\n"
+      },
+      "edges": [
+        [
+          "main.go",
+          "internal/codec/unit.go"
+        ]
+      ],
+      "issues": [
+        [
+          "main.go",
+          "example.org/legacy/internal/codec",
+          "unresolved"
+        ]
+      ]
     }
   ]
 }

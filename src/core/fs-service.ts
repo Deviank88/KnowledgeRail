@@ -19,7 +19,7 @@ async function fsyncDirectory(directory: string): Promise<void> {
   }
 }
 
-async function atomicWrite(absPath: string, data: string | Buffer): Promise<void> {
+async function atomicWrite(absPath: string, data: string | Buffer, durable = true): Promise<void> {
   await ensureDir(nodePath.dirname(absPath));
   const tempPath = nodePath.join(
     nodePath.dirname(absPath),
@@ -29,11 +29,11 @@ async function atomicWrite(absPath: string, data: string | Buffer): Promise<void
   try {
     handle = await fs.open(tempPath, "wx", 0o600);
     await handle.writeFile(data);
-    await handle.sync();
+    if (durable) await handle.sync();
     await handle.close();
     handle = undefined;
     await fs.rename(tempPath, absPath);
-    await fsyncDirectory(nodePath.dirname(absPath));
+    if (durable) await fsyncDirectory(nodePath.dirname(absPath));
   } catch (err: unknown) {
     await handle?.close().catch(() => undefined);
     await fs.unlink(tempPath).catch(() => undefined);
@@ -41,8 +41,8 @@ async function atomicWrite(absPath: string, data: string | Buffer): Promise<void
   }
 }
 
-export async function atomicWriteText(absPath: string, content: string): Promise<void> {
-  await withKeyedLock(absPath, () => atomicWrite(absPath, content));
+export async function atomicWriteText(absPath: string, content: string, options: { durable?: boolean } = {}): Promise<void> {
+  await withKeyedLock(absPath, () => atomicWrite(absPath, content, options.durable ?? true));
 }
 
 export async function atomicWriteBuffer(absPath: string, content: Buffer): Promise<void> {

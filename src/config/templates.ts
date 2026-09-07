@@ -284,6 +284,7 @@ Standard markdown links for external URLs:
 2. Run \`knowledge_ingest action="start"\` on the normalized file and follow its \`nextAction\`.
 3. The guided cycle is \`next → apply_claims\`: \`apply_claims\` records, links, validates, and synthesizes Evidence IR before updating canonical pages.
    When a claim explains implemented behavior, find the relevant class or function with \`knowledge_code\` and pass its indexed URI as \`target.code_resource_uri\`. The knowledge page then exposes a direct code link backed by a captured anchor. Omit code targets for claims without relevant code evidence; check drift before relying on an older implementation claim.
+   \`relatedEvidence\` contains at most eight proposed code neighbors. Open and verify useful candidates before explicitly recording further claims; no proposal is automatically accepted. Call candidates are lexical, not compiler-proven.
 4. A segment without useful claims may be classified only with an allowed state and explicit reason.
 5. Use \`knowledge_ingest action="source_status"\` to inspect coverage and gaps.
 6. Finalize a source only when the state proposes \`action="finalize"\` after complete coverage.

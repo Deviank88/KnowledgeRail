@@ -207,7 +207,7 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
             })),
           })),
         });
-        return textResult([
+        return structuredTextResult([
           "Evidence recorded before synthesis.",
           `Created: ${result.created}; reused: ${result.reused}.`,
           ...result.anchorWarnings.map((warning) => `Anchor warning: ${warning}`),
@@ -215,7 +215,8 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
             `- ${claim.id} [${claim.kind}/${claim.origin}/${claim.status}] ${claim.sourceUri}#${claim.segmentId}`
           ),
           "Use action=link before synthesis.",
-        ].join("\n"));
+        ].join("\n"), { claims: result.claims, created: result.created, reused: result.reused,
+          ...(result.relatedEvidence ? { relatedEvidence: result.relatedEvidence } : {}) });
       }
 
       if (action === "link") {

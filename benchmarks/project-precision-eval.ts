@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
+import { evaluateFunctionalRouting } from "./functional-routing-eval.js";
 
 interface Page { id: string; source?: string; anchor?: string; body: string; synthetic?: boolean }
 interface Case { id: string; split: string; query: string; expected: string[]; gap: boolean; heading?: string; excerpt?: string; contradictionCheck?: boolean; maxResults?: number }
@@ -74,7 +75,8 @@ try {
     expectedImports, imports, recall: usefulImports.length / expectedImports.length, precision: imports.length ? usefulImports.length / imports.length : 0,
     dynamicPythonImportRecovered: snapshot.fragments.some((fragment) => fragment.path === "src/dynamic.py" && fragment.imports.includes("hidden_module")),
     knownLimit: "The Python adapter does not resolve importlib.import_module string targets." };
-  const report = { version: fixture.version, fixtureSha256: createHash("sha256").update(bytes).digest("hex"), provenance: fixture.provenance, syntheticPageCount: fixture.pages.filter((p) => p.synthetic).length, codeReferences, summaries, cases };
+  const functionalRouting = runtimeRoot === "." ? await evaluateFunctionalRouting() : { status: "separate_current_runtime_corpus" };
+  const report = { version: fixture.version, fixtureSha256: createHash("sha256").update(bytes).digest("hex"), provenance: fixture.provenance, syntheticPageCount: fixture.pages.filter((p) => p.synthetic).length, codeReferences, summaries, cases, functionalRouting };
   const output = process.argv.find((v) => v.startsWith("--json="))?.slice(7) ?? "benchmarks/results/274-project-precision.json";
   await fs.writeFile(output, JSON.stringify(report, null, 2) + "\n");
   console.log(JSON.stringify(summaries, null, 2));

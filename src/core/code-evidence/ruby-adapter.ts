@@ -1,4 +1,6 @@
 import { extractRubyKeywordBlocks } from "./keyword-block-engine.js";
+import { createRubyImportResolver } from "./import-resolution/ruby.js";
+import { GEMSPEC_MANIFEST } from "./import-resolution/ruby-config.js";
 import {
   RUBY_ADAPTER_VERSION,
   type CodeSource,
@@ -14,8 +16,10 @@ function supportedRubyPath(path: string): boolean {
 }
 
 export class RubyKnowledgeAdapter implements KnowledgeAdapter {
+  readonly projectManifests = [GEMSPEC_MANIFEST];
   readonly parserVersion = RUBY_ADAPTER_VERSION;
   readonly extensionClaims = RUBY_EXTENSION_CLAIMS;
+  readonly createImportResolver = createRubyImportResolver;
 
   supports(source: Pick<CodeSource, "path">): boolean {
     return supportedRubyPath(source.path);

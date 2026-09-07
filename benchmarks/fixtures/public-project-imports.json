@@ -1,0 +1,67 @@
+{
+  "cases": [
+    {
+      "repository": "django/django", "split": "development",
+      "files": {
+        "django/__init__.py": "VERSION = 5\n",
+        "django/unit.py": "def work():\n    return 1\n",
+        "unlisted/__init__.py": "VALUE = 1\n",
+        "unlisted/unit.py": "def other():\n    return 1\n",
+        "tests/run.py": "import django.unit\nimport unlisted.unit\n"
+      },
+      "edges": [["tests/run.py", "django/unit.py"]],
+      "issues": [["tests/run.py", "unlisted.unit", "unresolved"]]
+    },
+    {
+      "repository": "symfony/console", "split": "development",
+      "files": {
+        "Helper/Unit.php": "<?php namespace Symfony\\Component\\Console\\Helper;\nclass Unit {}\n",
+        "wrong/Unit.php": "<?php namespace Symfony\\Component\\Console\\Helper;\nclass Unit {}\n",
+        "run.php": "<?php\nuse Symfony\\Component\\Console\\Helper\\Unit;\nuse External\\Unit;\n"
+      },
+      "edges": [["run.php", "Helper/Unit.php"]],
+      "issues": [["run.php", "External\\Unit", "unresolved"]]
+    },
+    {
+      "repository": "rack/rack", "split": "development",
+      "files": {
+        "lib/rack/unit.rb": "module Rack\nmodule Unit\nend\nend\n",
+        "wrong/rack/unit.rb": "module Rack\nmodule Unit\nend\nend\n",
+        "test/run.rb": "require 'rack/unit'\nrequire 'external_gem'\n"
+      },
+      "edges": [["test/run.rb", "lib/rack/unit.rb"]],
+      "issues": [["test/run.rb", "external_gem", "unresolved"]]
+    },
+    {
+      "repository": "BurntSushi/ripgrep", "split": "evaluation",
+      "files": {
+        "crates/core/main.rs": "mod unit;\nuse crate::unit::work;\nfn main() {}\n",
+        "crates/core/unit.rs": "pub fn work() {}\n",
+        "unrelated/unit.rs": "pub fn work() {}\n"
+      },
+      "edges": [["crates/core/main.rs", "crates/core/unit.rs"]], "issues": []
+    },
+    {
+      "repository": "go-chi/chi", "split": "evaluation",
+      "files": {
+        "middleware/unit.go": "package middleware\nfunc Unit() {}\n",
+        "middleware/other.go": "package middleware\nfunc Other() {}\n",
+        "middleware/unit_test.go": "package middleware\nfunc TestUnit() {}\n",
+        "example/run.go": "package main\nimport \"github.com/go-chi/chi/v5/middleware\"\nimport \"github.com/external/chi/v5/middleware\"\n"
+      },
+      "edges": [["example/run.go", "middleware/unit.go"], ["example/run.go", "middleware/other.go"]],
+      "issues": [["example/run.go", "github.com/external/chi/v5/middleware", "unresolved"]]
+    },
+    {
+      "repository": "pallets/flask", "split": "evaluation",
+      "files": {
+        "src/flask/__init__.py": "VERSION = 3\n",
+        "src/flask/unit.py": "def work():\n    return 1\n",
+        "src/flask/run.py": "import flask.unit\n",
+        "tests/run.py": "import flask.unit\n"
+      },
+      "edges": [["src/flask/run.py", "src/flask/unit.py"]],
+      "issues": [["tests/run.py", "flask.unit", "unresolved"]]
+    }
+  ]
+}

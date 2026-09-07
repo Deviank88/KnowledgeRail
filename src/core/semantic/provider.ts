@@ -8,6 +8,8 @@ export interface OpenAiCompatibleEmbeddingOptions {
   modelVersion?: string;
   apiKey?: string;
   timeoutMs?: number;
+  /** Optional asymmetric query format required by some embedding models. */
+  queryPrefix?: string;
 }
 
 interface EmbeddingResponse {
@@ -63,6 +65,7 @@ export class OpenAiCompatibleEmbeddingProvider implements EmbeddingProvider {
   private readonly endpoint: URL;
   private readonly apiKey?: string;
   private readonly timeoutMs: number;
+  private readonly queryPrefix: string;
 
   constructor(options: OpenAiCompatibleEmbeddingOptions) {
     const model = options.model.normalize("NFKC").trim();
@@ -74,12 +77,15 @@ export class OpenAiCompatibleEmbeddingProvider implements EmbeddingProvider {
       throw new Error("Embedding model version must contain 1-256 printable characters.");
     }
     this.endpoint = embeddingEndpoint(options.baseUrl);
+    this.queryPrefix = options.queryPrefix ?? "";
+    if (this.queryPrefix.length > 1_024 || this.queryPrefix.includes("\0")) throw new Error("Embedding query prefix must contain at most 1,024 characters without NUL.");
     this.apiKey = options.apiKey?.trim() || undefined;
     this.timeoutMs = positiveInteger(options.timeoutMs ?? 30_000, "Embedding timeout", 120_000);
     const dimensions = positiveInteger(options.dimensions, "Embedding dimensions", 8_192);
     const endpointFingerprint = createHash("sha256")
       .update(this.endpoint.origin)
       .update(this.endpoint.pathname)
+      .update(this.queryPrefix ? `\0query-prefix:${this.queryPrefix}` : "")
       .digest("hex")
       .slice(0, 12);
     this.descriptor = {
@@ -123,11 +129,11 @@ export class OpenAiCompatibleEmbeddingProvider implements EmbeddingProvider {
   }
 
   embedQueries(texts: readonly string[]): Promise<readonly (readonly number[])[]> {
-    return this.embed(texts);
+    return this.embed(this.queryPrefix ? texts.map((text) => this.queryPrefix + inputText(text)) : texts);
   }
 
   async embedQuery(text: string): Promise<readonly number[]> {
-    return (await this.embed([text]))[0]!;
+    return (await this.embedQueries([text]))[0]!;
   }
 }
 
@@ -156,5 +162,6 @@ export function configuredEmbeddingProvider(): EmbeddingProvider | null {
     modelVersion: process.env["KNOWLEDGE_RAIL_EMBEDDING_MODEL_VERSION"],
     apiKey: process.env["KNOWLEDGE_RAIL_EMBEDDING_API_KEY"],
     timeoutMs: envInteger("KNOWLEDGE_RAIL_EMBEDDING_TIMEOUT_MS"),
+    queryPrefix: process.env["KNOWLEDGE_RAIL_EMBEDDING_QUERY_PREFIX"],
   });
 }

@@ -1,6 +1,6 @@
 {
   "name": "knowledge-rail",
-  "version": "2.7.4",
+  "version": "2.8.0",
   "mcpName": "io.github.Deviank88/knowledge-rail",
   "description": "Local-first MCP 2.0 server for persistent, evidence-backed project knowledge and task context",
   "license": "Apache-2.0",
@@ -53,6 +53,7 @@
     "bench:code-query": "node --expose-gc --import tsx benchmarks/code-query-bench.ts",
     "bench:project-structure": "node --expose-gc --import tsx benchmarks/project-structure-bench.ts",
     "bench:code-context": "node --expose-gc --import tsx benchmarks/code-context-bench.ts",
+    "bench:code-telemetry": "node --import tsx benchmarks/code-request-telemetry-bench.ts",
     "bench:startup": "node --import tsx benchmarks/startup-bench.ts",
     "bench:restart": "node --expose-gc --import tsx benchmarks/restart-checkpoint-bench.ts",
     "bench:warm-start": "node --expose-gc --import tsx benchmarks/warm-start-e2e.ts",
@@ -100,6 +101,7 @@
     "eval:tool-surface:gate": "tsx benchmarks/tool-surface-baseline-gate.ts",
     "eval:gates": "node scripts/run-quality-gates.mjs",
     "eval:imports:gate": "node --import tsx benchmarks/import-resolution-eval.ts --gate",
+    "eval:functional-routing:gate": "node --import tsx benchmarks/functional-routing-eval.ts --gate",
     "eval:project-precision": "node --import tsx benchmarks/project-precision-eval.ts",
     "release:verify": "node scripts/verify-release.mjs",
     "release:verify:published": "node scripts/verify-published-release.mjs",
@@ -107,9 +109,11 @@
     "docs:generate": "node --import tsx scripts/generate-tool-reference.ts",
     "dogfood:self-wiki": "node --import tsx scripts/dogfood-self-wiki.ts",
     "dogfood:import-knowledge": "node --import tsx scripts/record-import-knowledge.ts",
+    "report:code-requests": "node --import tsx scripts/code-request-report.ts",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "eval:public-manifests:gate": "node --import tsx benchmarks/public-project-manifests-eval.ts --gate"
   },
   "engines": {
     "node": ">=22.12.0"

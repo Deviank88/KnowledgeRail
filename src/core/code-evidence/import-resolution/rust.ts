@@ -1,6 +1,8 @@
 import { posix } from "node:path";
 import type { CodeImportContext, CodeImportResolver } from "../types.js";
 import { addName, uniqueImport } from "./paths.js";
+import { nearestProjectManifest } from "../project-structure.js";
+import type { CargoConfig } from "./rust-config.js";
 
 function moduleBase(path: string): string {
   return /\/(?:lib|main|mod)\.rs$/u.test(`/${path}`) ? posix.dirname(path) : path.slice(0, -3);
@@ -43,34 +45,49 @@ function usePaths(raw: string): string[] {
 
 export function createRustImportResolver(context: CodeImportContext): CodeImportResolver {
   const { paths, fragmentsByPath } = context;
+  const owner = (source: string) => context.structure && nearestProjectManifest(context.structure, source, "Cargo.toml");
+  const declaredRoots = new Set<string>();
+  for (const manifest of context.structure?.manifests.values() ?? []) if (manifest.fileName === "Cargo.toml" && !manifest.warning) {
+    for (const root of (manifest.value as CargoConfig).roots) declaredRoots.add(posix.join(posix.dirname(manifest.path), root));
+  }
+  const baseOf = (path: string) => declaredRoots.has(path) ? posix.dirname(path) : moduleBase(path);
   const modules = new Map<string, Set<string>>();
   for (const path of paths) {
     if (!path.endsWith(".rs")) continue;
-    addName(modules, moduleBase(path), path);
+    addName(modules, baseOf(path), path);
     const inline = (fragmentsByPath.get(path) ?? []).filter((fragment) =>
       fragment.kind === "module" && fragment.qualifiedName !== path
     ).sort((left, right) => left.range.startLine - right.range.startLine || right.range.endLine - left.range.endLine);
     const parents: typeof inline = [];
     for (const fragment of inline) {
       while (parents.length && parents.at(-1)!.range.endLine < fragment.range.endLine) parents.pop();
-      addName(modules, posix.join(moduleBase(path), ...parents.map((parent) => parent.symbol), fragment.symbol), path);
+      addName(modules, posix.join(baseOf(path), ...parents.map((parent) => parent.symbol), fragment.symbol), path);
       parents.push(fragment);
     }
   }
-  const crateRoot = (source: string): string => {
+  const crateRoot = (source: string): string | undefined => {
+    const manifest = owner(source);
+    if (manifest) {
+      if (manifest.warning) return;
+      const roots = [...declaredRoots].filter((root) => owner(root)?.path === manifest.path && paths.has(root) &&
+        (source === root || source.startsWith(`${posix.dirname(root)}/`)));
+      const directories = [...new Set(roots.map((root) => posix.dirname(root)))].sort((a, b) => b.length - a.length);
+      return directories[0];
+    }
     let directory = posix.dirname(source);
     while (directory !== ".") {
-      if (paths.has(`${directory}/lib.rs`) || paths.has(`${directory}/main.rs`) || posix.basename(directory) === "src") return directory;
+      if (paths.has(`${directory}/lib.rs`) || paths.has(`${directory}/main.rs`)) return directory;
       directory = posix.dirname(directory);
     }
     return ".";
   };
   return (source, specifier) => {
     const root = crateRoot(source);
+    if (root === undefined) return [];
     const result = new Set<string>();
     for (const value of usePaths(specifier)) {
       const parts = value.split("::");
-      let base = moduleBase(source);
+      let base = baseOf(source);
       if (parts[0] === "crate") { base = root; parts.shift(); }
       else if (parts[0] === "self") parts.shift();
       else if (parts[0] === "super") {
@@ -87,7 +104,7 @@ export function createRustImportResolver(context: CodeImportContext): CodeImport
         const candidates = modules.get(posix.join(base, ...parts.slice(0, count)));
         if (!candidates) continue;
         matched = true;
-        for (const path of uniqueImport(context, value, candidates)) result.add(path);
+        for (const path of uniqueImport(context, value, [...candidates].filter((path) => owner(path)?.path === owner(source)?.path))) result.add(path);
         break;
       }
       if (!matched) uniqueImport(context, value, []);

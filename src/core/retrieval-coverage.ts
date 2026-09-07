@@ -192,17 +192,31 @@ function compactIdentifier(value: string): string {
   return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
-function identifierAliases(hits: readonly RetrievalHit[]): Set<string> {
+function identifierAliases(hits: readonly RetrievalHit[], wanted: ReadonlySet<string>): Set<string> {
   const aliases = new Set<string>();
+  if (!wanted.size) return aliases;
   for (const hit of hits) {
-    const rawTokens = searchableHitText(hit).normalize("NFKC").toLocaleLowerCase("en-US")
-      .match(/[\p{L}\p{N}]+/gu) ?? [];
-    for (let index = 0; index < rawTokens.length; index++) {
-      let value = "";
-      for (let width = 0; width < 3 && index + width < rawTokens.length; width++) {
-        value += rawTokens[index + width]!;
-        if (value.length >= 2) aliases.add(value);
+    const text = searchableHitText(hit).normalize("NFKC").toLocaleLowerCase("en-US");
+    // Keep only requested aliases and stop once they are all covered. Streaming
+    // three-token windows preserve prose matches without allocating every n-gram
+    // of every body. Full identifiers retain arbitrarily many delimited segments.
+    let previous = "", beforePrevious = "";
+    for (const match of text.matchAll(/[\p{L}\p{N}]+/gu)) {
+      const token = match[0];
+      for (const value of [token, previous + token, beforePrevious + previous + token]) {
+        if (value.length >= 2 && wanted.has(value)) aliases.add(value);
       }
+      if (aliases.size === wanted.size) return aliases;
+      beforePrevious = previous; previous = token;
+    }
+    // Accept undelimited tokens in the scan too, so a long literal cannot cause
+    // repeated failed starts while looking for its first delimiter.
+    for (const match of text.matchAll(/[\p{L}\p{N}]+(?:[-_./:#]+[\p{L}\p{N}]+)*/gu)) {
+      const token = match[0];
+      if (!/[-_./:#]/u.test(token)) continue;
+      const value = compactIdentifier(token);
+      if (wanted.has(value)) aliases.add(value);
+      if (aliases.size === wanted.size) return aliases;
     }
   }
   return aliases;
@@ -234,6 +248,33 @@ function lexicalCoverage(text: string, queryTerms: readonly string[]): number {
     tokens.has(term) || tokens.has(stemSearchTerm(term))
   ).length;
   return matched / queryTerms.length;
+}
+
+export interface RetrievalEvidenceSignals {
+  (hit: RetrievalHit): Set<string>;
+  /** All query facets and entities, including those absent from retrieved pages. */
+  readonly querySignalCount: number;
+}
+
+/** Request-local reuse between display selection and full/display coverage. Retain
+ * only matched query signals, never another body/token index or workspace cache. */
+export function createRetrievalEvidenceSignals(query: string): RetrievalEvidenceSignals {
+  const terms = relevantQueryTerms(query), entities = extractQueryEntities(query);
+  const wanted = new Set(entities.map(compactIdentifier));
+  const matched = new Map<RetrievalHit, Set<string>>();
+  const forHit = (hit: RetrievalHit): Set<string> => {
+    const retained = matched.get(hit);
+    if (retained) return retained;
+    const text = searchableHitText(hit), aliases = identifierAliases([hit], wanted);
+    const tokens = new Set(tokenizeSearchText(text).flatMap((term) => [term, stemSearchTerm(term)]));
+    const signals = new Set([
+      ...terms.filter((term) => tokens.has(term) || tokens.has(stemSearchTerm(term))).map((term) => `facet:${term}`),
+      ...entities.filter((entity) => aliases.has(compactIdentifier(entity))).map((entity) => `entity:${entity}`),
+    ]);
+    matched.set(hit, signals);
+    return signals;
+  };
+  return Object.assign(forHit, { querySignalCount: terms.length + entities.length });
 }
 
 function typeSemanticText(pageType: string): string {
@@ -397,6 +438,8 @@ export function assessRetrievalCoverage(params: {
   hits: readonly RetrievalHit[];
   /** Budget-limited subset returned to the caller. Defaults to the full set. */
   displayHits?: readonly RetrievalHit[];
+  /** Same-query, attempt-local signals shared with display selection. */
+  evidenceSignals?: (hit: RetrievalHit) => ReadonlySet<string>;
   graphResult: SeededGraphQueryResult;
   requirements?: RetrievalCoverageRequirements;
   coverageMode?: RetrievalCoverageMode;
@@ -408,28 +451,29 @@ export function assessRetrievalCoverage(params: {
   const mode = params.coverageMode ?? "lexical";
   const concepts = coverageConcepts(params.query, requirements);
   const semanticScores = semanticScoresByConcept(params.semanticScores ?? []);
+  const evidenceSignals = params.evidenceSignals ?? createRetrievalEvidenceSignals(params.query);
 
   const snapshot = (hits: readonly RetrievalHit[]): CoverageSnapshot => {
     const paths = new Set(hits.map((hit) => hit.path));
-    const candidateText = hits.map(searchableHitText).join(" ");
+    const signals = new Set(hits.flatMap((hit) => [...evidenceSignals(hit)]));
     const passageText = hits.map((hit) => `${hit.heading} ${hit.excerpt}`).join(" ");
     const facetConcepts = concepts.filter((concept) => concept.kind === "facet");
     const semanticFacetCoverage = (text: string, scope: "page" | "passage"): number => {
       if (facetConcepts.length === 0) return 1;
-      const lexicalTerms = new Set(tokenizeSearchText(text).flatMap((term) => [term, stemSearchTerm(term)]));
+      const lexicalTerms = scope === "passage" ? new Set(tokenizeSearchText(text).flatMap((term) => [term, stemSearchTerm(term)])) : undefined;
       const matched = facetConcepts.filter((concept) =>
         (scope === "page"
           ? semanticConceptCovered(concept.id, paths, semanticScores, SEMANTIC_FACET_THRESHOLD)
           : semanticPassageConceptCovered(concept.id, hits, semanticScores, SEMANTIC_FACET_THRESHOLD)) ||
-        lexicalTerms.has(concept.value) || lexicalTerms.has(stemSearchTerm(concept.value))
+        (scope === "page" ? signals.has(`facet:${concept.value}`) : lexicalTerms!.has(concept.value) || lexicalTerms!.has(stemSearchTerm(concept.value)))
       ).length;
       return matched / facetConcepts.length;
     };
     const facetCoverage = queryTerms.length === 0
       ? 1
       : mode === "semantic"
-        ? semanticFacetCoverage(candidateText, "page")
-        : lexicalCoverage(candidateText, queryTerms);
+        ? semanticFacetCoverage("", "page")
+        : queryTerms.filter((term) => signals.has(`facet:${term}`)).length / queryTerms.length;
     // Broad task queries intentionally span multiple evidence passages. The
     // aggregate is bounded by selected pages rather than by one passage.
     const passageCoverage = hits.length === 0
@@ -439,10 +483,9 @@ export function assessRetrievalCoverage(params: {
       : mode === "semantic"
         ? semanticFacetCoverage(passageText, "passage")
         : lexicalCoverage(passageText, queryTerms);
-    const aliases = identifierAliases(hits);
     const entityConcepts = concepts.filter((concept) => concept.kind === "entity");
     const missingEntities = entityConcepts.filter((concept) => {
-      const lexicalMatch = aliases.has(compactIdentifier(concept.value));
+      const lexicalMatch = signals.has(`entity:${concept.value}`);
       return !lexicalMatch && !(
         mode === "semantic" &&
         semanticConceptCovered(concept.id, paths, semanticScores, SEMANTIC_ENTITY_THRESHOLD)
@@ -450,7 +493,12 @@ export function assessRetrievalCoverage(params: {
     }).map((concept) => concept.value);
     const typeConcepts = concepts.filter((concept) => concept.kind === "type");
     const missingTypes = typeConcepts.filter((concept) => {
-      const classifiedMatch = hits.some((hit) => hitSatisfiesRequiredType(hit, concept.value));
+      const explicitType = params.requirements?.requiredPageTypes?.includes(concept.value);
+      const headingPattern = !explicitType && REQUIRED_TYPE_PATTERNS.find(([type]) => type === concept.value)?.[1];
+      const classifiedMatch = hits.some((hit) => hitSatisfiesRequiredType(hit, concept.value) ||
+        // An inferred artifact may live in a section of a broader document.
+        // Explicit page-type filters and incidental body mentions remain strict.
+        (headingPattern && headingPattern.test(hit.heading)));
       return !classifiedMatch && !(
         mode === "semantic" &&
         semanticConceptCovered(concept.id, paths, semanticScores, SEMANTIC_ARTIFACT_THRESHOLD)

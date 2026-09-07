@@ -10,6 +10,7 @@ import { clearRetrievalIndexes, getWikiPageRecords } from "../src/core/retrieval
 import { PersistentSemanticIndex } from "../src/core/semantic/index.js";
 import { LshAnnEngine } from "../src/core/semantic/lsh-engine.js";
 import type { EmbeddingProvider } from "../src/core/semantic/types.js";
+import { configuredEmbeddingProvider } from "../src/core/semantic/provider.js";
 import {
   loadHybridFixture,
   materializeHybridFixture,
@@ -210,7 +211,8 @@ function evaluationQueries(
 }
 
 export async function evaluateSemanticRetrieval(
-  fixturePath = DEFAULT_SEMANTIC_FIXTURE
+  fixturePath = DEFAULT_SEMANTIC_FIXTURE,
+  liveProvider?: EmbeddingProvider
 ): Promise<SemanticRetrievalReport> {
   const fixture = JSON.parse(await fs.readFile(fixturePath, "utf8")) as SemanticGoldenFixture;
   const baseFixturePath = path.resolve(path.dirname(fixturePath), fixture.baseFixture);
@@ -218,8 +220,8 @@ export async function evaluateSemanticRetrieval(
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-semantic-eval-"));
   const wikiRoot = path.join(root, "wiki");
   const reports: SemanticQueryReport[] = [];
-  const provider = new GoldenEmbeddingProvider();
-  const engine = new LshAnnEngine({
+  const provider = liveProvider ?? new GoldenEmbeddingProvider();
+  const engine = new LshAnnEngine(liveProvider ? { dimensions: provider.descriptor.dimensions } : {
     dimensions: DIMENSIONS,
     tables: 12,
     bitsPerTable: 16,
@@ -250,6 +252,7 @@ export async function evaluateSemanticRetrieval(
         maxResults: base.k,
         profile: "balanced",
         progressiveWidening: false,
+        semanticEnabled: false,
         ...base.boundedBudget,
       });
       const baselineMs = performance.now() - baselineStart;
@@ -351,7 +354,10 @@ export async function evaluateSemanticRetrieval(
 
 async function main(): Promise<void> {
   const fixturePath = path.resolve(argValue("fixture") ?? DEFAULT_SEMANTIC_FIXTURE);
-  const report = await evaluateSemanticRetrieval(fixturePath);
+  const live = process.argv.includes("--live");
+  const provider = live ? configuredEmbeddingProvider() : undefined;
+  if (live && !provider) throw new Error("Configure an embedding provider before --live evaluation.");
+  const report = await evaluateSemanticRetrieval(fixturePath, provider ?? undefined);
   const outputPath = argValue("json");
   if (outputPath) {
     const resolved = path.resolve(outputPath);

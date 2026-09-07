@@ -97,7 +97,7 @@ async function releaseOwnedLock(lockPath: string, nonce: string, handle: fs.File
 export async function withFileLock<T>(
   key: string,
   operation: () => Promise<T>,
-  options: { lockDirectory: string }
+  options: { lockDirectory: string; syncLockFile?: boolean }
 ): Promise<T> {
   await ensureDir(options.lockDirectory);
   const lockPath = nodePath.join(options.lockDirectory, lockName(key));
@@ -116,7 +116,7 @@ export async function withFileLock<T>(
           acquiredAt: new Date().toISOString(),
         };
         await handle.writeFile(`${JSON.stringify(record)}\n`, "utf8");
-        await handle.sync();
+        if (options.syncLockFile !== false) await handle.sync();
         heldFileLocks.set(lockPath, nonce);
         break;
       } catch (error: unknown) {
@@ -142,10 +142,11 @@ export async function withFileLock<T>(
 export async function withWikiFileLock<T>(
   wikiRoot: string,
   key: string,
-  operation: () => Promise<T>
+  operation: () => Promise<T>,
+  options: { syncLockFile?: boolean } = {}
 ): Promise<T> {
   const lockDirectory = await resolveRealWithin(wikiRoot, ".knowledge-rail/locks");
-  return withFileLock(key, operation, { lockDirectory });
+  return withFileLock(key, operation, { lockDirectory, ...options });
 }
 
 export function keyedLockCount(): number {

@@ -5,7 +5,7 @@ import { safeResolveWithin } from "../paths.js";
 import { captureCodeAnchor } from "../code-evidence/code-anchor.js";
 import { PersistentCodeEvidenceIndex } from "../code-evidence/index.js";
 import { parseCodeResourceUri } from "../code-evidence/resource-uri.js";
-import type { CodeAnchor } from "../code-evidence/types.js";
+import { RELATED_EVIDENCE_MAX_TARGETS, type CodeAnchor, type RelatedCodeEvidence } from "../code-evidence/types.js";
 import { readSourceCoverageLedger } from "./coverage-ledger.js";
 import {
   createEvidenceClaim,
@@ -65,7 +65,8 @@ export async function recordEvidenceClaims(params: {
   segmentId: string;
   claims: readonly EvidenceClaimInput[];
   userEmailDomain?: string | null;
-}): Promise<{ claims: EvidenceClaim[]; created: number; reused: number; anchorWarnings: string[] }> {
+}): Promise<{ claims: EvidenceClaim[]; created: number; reused: number; anchorWarnings: string[];
+  relatedEvidence?: { candidates: Array<RelatedCodeEvidence & { claimId: string; targetResourceUri: string }>; truncated: boolean; warnings: string[] } }> {
   if (params.claims.length === 0) throw new Error("At least one evidence claim is required.");
   const ledger = await readSourceCoverageLedger(params.wikiRoot, params.sourceUri);
   if (!ledger) throw new Error("Source coverage is unknown; plan the source before extracting evidence.");
@@ -209,7 +210,36 @@ export async function recordEvidenceClaims(params: {
       reason: "evidence_ir_link_pending",
     },
   });
-  return { claims: result.claims, created: result.created, reused: result.reused, anchorWarnings };
+  // Proposals are response-only. They never mutate claim relations, anchors or
+  // synthesis; the author must materialize and explicitly record useful evidence.
+  const eligible = result.claims.filter((claim) => claim.status === "active" && claim.codeAnchor && claim.target?.codeResourceUri);
+  let relatedEvidence: Awaited<ReturnType<typeof recordEvidenceClaims>>["relatedEvidence"];
+  if (eligible.length) {
+    relatedEvidence = { candidates: [], truncated: eligible.length > RELATED_EVIDENCE_MAX_TARGETS, warnings: [] };
+    const index = new PersistentCodeEvidenceIndex({ repositoryRoot, wikiRoot: params.wikiRoot });
+    const targets: Array<{ claimId: string; targetResourceUri: string; fragmentId: string }> = [];
+    const unavailable = (claimId: string) => relatedEvidence!.warnings.push(`Related code candidates unavailable for ${claimId}; the recorded claim is preserved.`);
+    for (const claim of eligible.slice(0, RELATED_EVIDENCE_MAX_TARGETS)) {
+      try {
+        const targetResourceUri = claim.target!.codeResourceUri!;
+        const parsed = parseCodeResourceUri(targetResourceUri, { allowWorkspaceBinding: false });
+        targets.push({ claimId: claim.id, targetResourceUri, fragmentId: parsed.fragmentId });
+      } catch { unavailable(claim.id); }
+    }
+    try {
+      const proposals = await index.relatedEvidenceBatch(targets.map((target) => target.fragmentId));
+      for (const { claimId, targetResourceUri, fragmentId } of targets) {
+        const proposal = proposals.get(fragmentId)!;
+        if (proposal.status === "rejected") { unavailable(claimId); continue; }
+        relatedEvidence.truncated ||= proposal.value.truncated;
+        for (const candidate of proposal.value.candidates) {
+          if (relatedEvidence.candidates.length === 8) { relatedEvidence.truncated = true; break; }
+          relatedEvidence.candidates.push({ ...candidate, claimId, targetResourceUri });
+        }
+      }
+    } catch { for (const target of targets) unavailable(target.claimId); }
+  }
+  return { claims: result.claims, created: result.created, reused: result.reused, anchorWarnings, ...(relatedEvidence ? { relatedEvidence } : {}) };
 }
 
 export async function backfillEvidenceCodeAnchors(wikiRoot: string): Promise<{

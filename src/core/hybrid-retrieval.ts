@@ -2,6 +2,7 @@ import * as nodePath from "node:path";
 import { readWikiPageRecord } from "./page-record.js";
 import {
   assessRetrievalCoverage,
+  createRetrievalEvidenceSignals,
   estimateRetrievalContextTokens,
   extractQueryEntities,
   semanticCoverageQueries,
@@ -31,6 +32,7 @@ import type {
   SynchronizableSemanticIndex,
 } from "./semantic/types.js";
 import { registerWorkspaceState } from "./workspace-state.js";
+import { selectLexicalEvidence } from "./retrieval-selection.js";
 
 export type RetrievalWideningLevel = 0 | 1 | 2 | 3;
 
@@ -137,6 +139,7 @@ export interface HybridRetrievalParams {
 }
 
 interface AttemptResult {
+  evidenceSignals: ReturnType<typeof createRetrievalEvidenceSignals>;
   hits: HybridRetrievalHit[];
   coverageHits: HybridRetrievalHit[];
   lexicalHits: RetrievalHit[];
@@ -650,8 +653,10 @@ async function retrieveAttempt(params: {
     if (b.path === exactAnchorPath && a.path !== exactAnchorPath) return 1;
     return b.score - a.score || a.path.localeCompare(b.path);
   });
-  const hits = limitHitsByBudget(fused, maxResults, budget);
+  const evidenceSignals = createRetrievalEvidenceSignals(request.query);
+  const hits = limitHitsByBudget(selectLexicalEvidence(request.query, fused, request.coverageRequirements, evidenceSignals), maxResults, budget);
   return {
+    evidenceSignals,
     hits,
     coverageHits: fused,
     lexicalHits,
@@ -709,6 +714,7 @@ async function assessAttemptCoverage(
     query: request.query,
     hits: result.coverageHits,
     displayHits: result.hits,
+    evidenceSignals: result.evidenceSignals,
     graphResult: result.graphResult,
     requirements: request.coverageRequirements,
     coverageMode,

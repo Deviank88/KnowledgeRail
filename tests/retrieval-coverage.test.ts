@@ -7,6 +7,7 @@ import { parseWikiPageRecord } from "../src/core/page-record.js";
 import type { RetrievalHit } from "../src/core/retrieval-index.js";
 import {
   assessRetrievalCoverage,
+  createRetrievalEvidenceSignals,
   extractQueryEntities,
   semanticCoverageQueries,
 } from "../src/core/retrieval-coverage.js";
@@ -66,6 +67,37 @@ function graphResult(): SeededGraphQueryResult {
 function selectedPassage(hit: RetrievalHit) {
   return hit.record.passages.find((passage) => passage.heading === hit.heading);
 }
+
+test("query signal counts share facet and entity matching, independent of retrieved coverage", () => {
+  const signals = createRetrievalEvidenceSignals("Explain WORKER_POOL_MAX_PENDING_JOB_COUNT queue timeout queue");
+  const partial = hit(1, "A queue uses WORKER_POOL_MAX_PENDING_JOB_COUNT.");
+  assert.equal(signals.querySignalCount, 3, "duplicate facets and entity components must not inflate the denominator");
+  assert.deepEqual([...signals(partial)].sort(), ["entity:WORKER_POOL_MAX_PENDING_JOB_COUNT", "facet:queue"]);
+  assert.equal(signals(partial), signals(partial), "selection and coverage reuse the same per-hit signals");
+  assert.equal(signals(hit(2, "WORKER_POOL_MAX_PENDING_JOB_COUNT queue timeout")).size, signals.querySignalCount);
+  assert.equal(createRetrievalEvidenceSignals("the and").querySignalCount, 0);
+});
+
+test("coverage preserves complete long technical identifiers without matching prefixes", () => {
+  const query = "Explain WORKER_POOL_MAX_PENDING_JOB_COUNT";
+  const coverage = (body: string) => assessRetrievalCoverage({ query, hits: [hit(1, body)], graphResult: graphResult() });
+  assert.deepEqual(coverage("Set WORKER_POOL_MAX_PENDING_JOB_COUNT to 12.").unresolvedEntities, []);
+  assert.deepEqual(coverage("Set WORKER_POOL_MAX_PENDING_JOB_COUNT_EXTRA to 12.").unresolvedEntities, ["WORKER_POOL_MAX_PENDING_JOB_COUNT"]);
+  assert.deepEqual(coverage("Set WORKER_POOL_MAX_PENDING to 12.").unresolvedEntities, ["WORKER_POOL_MAX_PENDING_JOB_COUNT"]);
+});
+
+test("inferred artifacts accept a selected section while explicit types remain strict", () => {
+  const query = "retry decision";
+  const evidence = hit(1, "Retry after a bounded delay.", { title: "Retry decision" });
+  const coverage = (hits: RetrievalHit[], requiredPageTypes?: string[]) => assessRetrievalCoverage({
+    query, hits, graphResult: graphResult(), requirements: { requiredPageTypes },
+  });
+  assert.deepEqual(coverage([evidence]).unresolvedRelations, []);
+  assert.deepEqual(coverage([evidence], ["decision"]).unresolvedRelations, ["required_type:decision"]);
+  assert.deepEqual(coverage([hit(2, "Consult the retry decision elsewhere.")]).unresolvedRelations, ["required_type:decision"]);
+  const selected = assessRetrievalCoverage({ query, hits: [evidence], displayHits: [], graphResult: graphResult() });
+  assert.ok(selected.budgetLimitedGaps.includes("required_type:decision"));
+});
 
 test("entity extraction ignores task verbs and ordinary slash-separated prose", () => {
   const entities = extractQueryEntities(

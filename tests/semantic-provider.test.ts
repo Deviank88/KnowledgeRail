@@ -2,6 +2,25 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { OpenAiCompatibleEmbeddingProvider } from "../src/core/semantic/provider.js";
 
+test("asymmetric query prefixes preserve document inputs and separate provider identities", async () => {
+  const previousFetch = globalThis.fetch, inputs: string[][] = [];
+  globalThis.fetch = async (_input, init) => {
+    const values = (JSON.parse(String(init?.body)) as { input: string[] }).input;
+    inputs.push(values);
+    return new Response(JSON.stringify({ data: values.map((_value, index) => ({ index, embedding: [1, 0] })) }));
+  };
+  try {
+    const options = { baseUrl: "http://127.0.0.1:11434/v1", model: "embedding", dimensions: 2 };
+    const provider = new OpenAiCompatibleEmbeddingProvider({ ...options, queryPrefix: "Instruct: retrieve passages\nQuery: " });
+    await provider.embedDocuments(["Document"]);
+    await provider.embedQueries(["first", "second"]);
+    await provider.embedQuery("third");
+    assert.deepEqual(inputs, [["Document"], ["Instruct: retrieve passages\nQuery: first", "Instruct: retrieve passages\nQuery: second"], ["Instruct: retrieve passages\nQuery: third"]]);
+    assert.notEqual(provider.descriptor.id, new OpenAiCompatibleEmbeddingProvider(options).descriptor.id);
+    await assert.rejects(() => provider.embedQuery("  "), /input/);
+  } finally { globalThis.fetch = previousFetch; }
+});
+
 test("OpenAI-compatible provider supports local endpoints without provider-specific request fields", async () => {
   const previousFetch = globalThis.fetch;
   let requestedUrl = "";

@@ -33,7 +33,7 @@ function candidatesFor(paths: Iterable<string>, registry: KnowledgeAdapterRegist
     let directory = posix.dirname(path);
     while (true) {
       for (const spec of specs) {
-        if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(spec.fileName)) throw new Error("Invalid adapter manifest filename.");
+        if (!/^(?:[A-Za-z0-9][A-Za-z0-9._-]*|\*\.[A-Za-z0-9_-]+)$/u.test(spec.fileName)) throw new Error("Invalid adapter manifest filename.");
         candidates.set(posix.join(directory, spec.fileName), spec);
       }
       if (directory === ".") break;
@@ -60,12 +60,15 @@ export class ProjectStructureReader {
   private records = new Map<string, RecordState>();
   private current?: ProjectStructure;
   private pending?: Promise<ProjectStructure>;
+  private patterns: Candidate[];
   /** Conservative admission estimate; not a V8 heap measurement. */
   estimatedBytes = 0;
 
   constructor(repositoryRoot: string, paths: Iterable<string>, registry: KnowledgeAdapterRegistry) {
     this.repositoryRoot = resolve(repositoryRoot);
     this.candidates = candidatesFor(paths, registry);
+    this.patterns = this.candidates.filter(({ spec }) => spec.fileName.startsWith("*"));
+    this.candidates = this.candidates.filter(({ spec }) => !spec.fileName.startsWith("*"));
   }
 
   load(): Promise<ProjectStructure> {
@@ -114,7 +117,9 @@ export class ProjectStructureReader {
       const hash = digest(bytes);
       let manifest: ProjectManifest;
       try {
-        const value = spec.parse(bytes.toString("utf8"));
+        const value = spec.parse(bytes.toString("utf8"), { repositoryRoot: this.repositoryRoot, manifestPath: path });
+        const notices = spec.notices?.(value);
+        if (notices && (notices.length > 12 || notices.some((reason) => typeof reason !== "string" || reason.length > 256))) throw new Error("Invalid manifest notices.");
         const references = spec.references?.(value, path);
         if (references) {
           if (references.length > 32) throw new Error("Too many direct manifest references.");
@@ -126,7 +131,8 @@ export class ProjectStructureReader {
             }
           }
         }
-        manifest = { path, fileName: spec.fileName, value, ...(references?.length ? { references: [...new Set(references)] } : {}) };
+        manifest = { path, fileName: spec.fileName, value, ...(notices?.length ? { notices: [...new Set(notices)] } : {}),
+          ...(references?.length ? { references: [...new Set(references)] } : {}) };
       }
       catch { manifest = { path, fileName: spec.fileName, warning: "invalid_manifest" }; }
       return { fingerprint, digest: hash, manifest, valueEstimatedBytes: Buffer.byteLength(JSON.stringify(manifest), "utf8") * 4 };
@@ -141,8 +147,31 @@ export class ProjectStructureReader {
   }
 
   private async refresh(): Promise<ProjectStructure> {
-    if (this.candidates.length === 0) return this.current ??= { identity: digest(""), manifests: new Map(), warnings: [] };
+    if (this.candidates.length === 0 && this.patterns.length === 0) return this.current ??= { identity: digest(""), manifests: new Map(), warnings: [] };
     const rootReal = await fs.realpath(this.repositoryRoot);
+    const discovered = await mapConcurrent(this.patterns, MANIFEST_READ_CONCURRENCY, async (candidate) => {
+      const directory = posix.dirname(candidate.path), found: Candidate[] = [];
+      try {
+        const absolute = directory === "." ? rootReal : await fs.realpath(safeResolveWithin(this.repositoryRoot, directory));
+        const within = relative(rootReal, absolute);
+        if (within === ".." || within.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) || isAbsolute(within)) throw new Error("outside_repository");
+        const handle = await fs.opendir(absolute);
+        let entries = 0;
+        for await (const entry of handle) {
+          if (++entries > 16_384 || found.length >= 32) throw new Error("manifest_discovery_limit");
+          if (entry.name.endsWith(candidate.spec.fileName.slice(1))) found.push({ path: posix.join(directory, entry.name), spec: candidate.spec });
+        }
+        return { candidate, found };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return { candidate, found };
+        return { candidate, found: [], warning: (error as Error).message === "manifest_discovery_limit" ? "manifest_discovery_limit" : "unreadable_manifest" };
+      }
+    });
+    const discoveredCandidates = new Map(this.candidates.map((candidate) => [candidate.path, candidate]));
+    for (const { found } of discovered) for (const candidate of found) discoveredCandidates.set(candidate.path, candidate);
+    this.candidates = [...discoveredCandidates.values()].sort((a, b) => a.path.localeCompare(b.path));
+    // New nested boundaries are discovered on source update, as for literal names.
+    this.patterns = discovered.filter(({ candidate, found, warning }) => posix.dirname(candidate.path) === "." || found.length || warning).map(({ candidate }) => candidate);
     const records = await mapConcurrent(this.candidates, MANIFEST_READ_CONCURRENCY, (candidate) => this.read(candidate, rootReal));
     const tracked: Candidate[] = [];
     const nextRecords = new Map<string, RecordState>();
@@ -175,10 +204,14 @@ export class ProjectStructureReader {
     });
     this.candidates = tracked;
     this.records = nextRecords;
+    for (const { candidate, warning } of discovered) if (warning) nextRecords.set(candidate.path, {
+      fingerprint: "", digest: warning,
+      manifest: { path: candidate.path, fileName: candidate.spec.fileName, warning },
+    });
     this.estimatedBytes = [...nextRecords].reduce((total, [path, record]) => {
       return total + 512 + path.length * 4 + record.fingerprint.length * 2 +
         (record.valueEstimatedBytes ?? 0);
-    }, 0);
+    }, this.patterns.reduce((bytes, candidate) => bytes + 128 + candidate.path.length * 4, 0));
     const orderedRecords = [...nextRecords].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
     const hash = createHash("sha256");
     for (const [path, record] of orderedRecords) if (record.manifest) hash.update(`${path}\0${record.digest}\0`);
@@ -193,6 +226,7 @@ export class ProjectStructureReader {
       }
       manifests.set(manifest.path, manifest);
       if (manifest.warning) warnings.push({ path: manifest.path, reason: manifest.warning });
+      for (const reason of manifest.notices ?? []) warnings.push({ path: manifest.path, reason });
     }
     return this.current = { identity, manifests, warnings };
   }
@@ -201,7 +235,11 @@ export class ProjectStructureReader {
 export function nearestProjectManifest(structure: ProjectStructure, source: string, fileName: string): ProjectManifest | undefined {
   let directory = posix.dirname(source);
   while (true) {
-    const manifest = structure.manifests.get(posix.join(directory, fileName));
+    const matches = fileName.startsWith("*") ? [...structure.manifests.values()].filter((manifest) =>
+      manifest.fileName === fileName && posix.dirname(manifest.path) === directory) : [];
+    const manifest = fileName.startsWith("*")
+      ? matches.length > 1 ? { path: posix.join(directory, fileName), fileName, warning: "ambiguous_manifest" } : matches[0]
+      : structure.manifests.get(posix.join(directory, fileName));
     if (manifest || directory === ".") return manifest;
     directory = posix.dirname(directory);
   }

@@ -12,6 +12,7 @@ import { getWikiRoot, wikiDir } from "../core/paths.js";
 import { errorResult } from "./helpers.js";
 import { toolName } from "../mcp/tool-names.js";
 import { CodeEvidenceInputSchema } from "./input-schemas.js";
+import { codeRequestLanguage, codeRequestSummary, recordCodeRequest, recordCodeRequestFallback } from "../core/code-evidence/request-telemetry.js";
 
 function linkForHit(hit: CodeEvidenceHit): ResourceLink {
   return {
@@ -66,6 +67,7 @@ export function registerCodeEvidenceTools(
       query,
       symbol,
       symbol_id,
+      request_id,
       resource_uri,
       path_prefixes,
       kinds,
@@ -117,12 +119,15 @@ export function registerCodeEvidenceTools(
           const summary = hits.length === 0
             ? "No indexed code evidence matched. A coverage controller may authorize a diagnostic fallback; record it if used."
             : hits.map(hitText).join("\n");
+          const request = await recordCodeRequest(wikiRoot, codeRequestLanguage(path_prefixes ?? []) !== "unknown" ? path_prefixes! : hits.map((hit) => hit.fragment.path), hits.length > 0)
+            .then((requestId) => ({ requestId })).catch(() => ({ telemetryWarning: "Code request counts unavailable; check .knowledge-rail/code-request-counts.json in this workspace." }));
           return {
             content: modern
               ? [{ type: "text" as const, text: summary }, ...hits.map(linkForHit)]
               : [{ type: "text" as const, text: summary }],
             structuredContent: {
               action,
+              ...request,
               hits: hits.map((hit) => ({
                 score: hit.score,
                 matchedTerms: hit.matchedTerms,
@@ -134,7 +139,9 @@ export function registerCodeEvidenceTools(
         }
         if (action === "references") {
           if (!symbol_id) throw new Error("action=references requires symbol_id.");
-          const { references, manifestWarnings: warnings, importDiagnostics } = await index.referencesWithDiagnostics(symbol_id, options);
+          const { references, targetPath, manifestWarnings: warnings, importDiagnostics } = await index.referencesWithDiagnostics(symbol_id, options);
+          const request = await recordCodeRequest(wikiRoot, targetPath ? [targetPath] : [], references.length > 0)
+            .then((requestId) => ({ requestId })).catch(() => ({ telemetryWarning: "Code request counts unavailable; check .knowledge-rail/code-request-counts.json in this workspace." }));
           const manifestDiagnostics = warnings.length ? { manifestWarnings: warnings.slice(0, 12), manifestWarningCount: warnings.length } : {};
           let summary = references.length === 0
             ? "No indexed incoming references matched."
@@ -150,7 +157,7 @@ export function registerCodeEvidenceTools(
             content: modern
               ? [{ type: "text" as const, text: summary }, ...references.map(linkForReference)]
               : [{ type: "text" as const, text: summary }],
-            structuredContent: { action, symbolId: symbol_id, references, ...manifestDiagnostics,
+            structuredContent: { action, ...request, symbolId: symbol_id, references, ...manifestDiagnostics,
               ...(importDiagnostics.unresolvedImports.length ? importDiagnostics : {}) },
           };
         }
@@ -182,6 +189,8 @@ export function registerCodeEvidenceTools(
             resultCount: fallback_result_count,
             resultPaths: fallback_result_paths,
           });
+          const requestTelemetry = await recordCodeRequestFallback(wikiRoot, request_id, fallback_reason)
+            .catch(() => ({ warning: "Code fallback counts unavailable; check .knowledge-rail/code-request-counts.json in this workspace." }));
           const recovery = recovered_evidence?.length
             ? await recordKnowledgeRecoveryUsage({
               wikiRoot,
@@ -201,14 +210,15 @@ export function registerCodeEvidenceTools(
               (recovery
                 ? ` Knowledge debt: ${recovery.events.length} event(s), ${recovery.metrics.knowledgeRecoveryPending} pending.`
                 : " No recovered evidence was declared as used.") }],
-            structuredContent: { action, event, recovery },
+            structuredContent: { action, event, recovery, requestTelemetry },
           };
         }
 
-        const [snapshot, fallbackEvents, fallbackDemand] = await Promise.all([
+        const [snapshot, fallbackEvents, fallbackDemand, requestTelemetry] = await Promise.all([
           index.snapshot(),
           readCodeGrepFallbackEvents(wikiRoot),
           codeGrepFallbackDemand(wikiRoot),
+          codeRequestSummary(wikiRoot).catch(() => ({ warning: "Code request counts unavailable; check .knowledge-rail/code-request-counts.json in this workspace." })),
         ]);
         const status = {
           version: snapshot.version,
@@ -218,6 +228,7 @@ export function registerCodeEvidenceTools(
           indexedFragments: snapshot.fragments.length,
           recordedGrepFallbacks: fallbackEvents.length,
           fallbackDemand,
+          requestTelemetry,
         };
         return {
           content: [{ type: "text" as const, text:

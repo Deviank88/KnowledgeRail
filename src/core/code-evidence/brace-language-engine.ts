@@ -36,7 +36,8 @@ export interface BraceLanguageConfig {
   lineCommentsAreDoc?: boolean;
   testPath(path: string): boolean;
   candidates(context: BraceExtractionContext): BraceCandidate[];
-  imports(content: string): string[];
+  imports(content: string, masked?: string): string[];
+  importStatements?(content: string, masked: string): NonNullable<KnowledgeFragment["importStatements"]>;
   configKeys?(content: string): string[];
   databaseRefs?(content: string): string[];
 }
@@ -660,7 +661,8 @@ export function extractBraceLanguage(source: CodeSource, config: BraceLanguageCo
       end: comment.end,
     });
   }
-  const imports = unique(config.imports(source.content));
+  const importStatements = config.importStatements?.(source.content, detailed.masked);
+  const imports = unique(importStatements?.map((entry) => entry.specifier) ?? config.imports(source.content, detailed.masked));
   const fileConfigKeys = unique(config.configKeys?.(source.content) ?? []);
   const fileDatabaseRefs = unique(config.databaseRefs?.(source.content) ?? []);
   const fileIsTest = config.testPath(source.path);
@@ -695,6 +697,7 @@ export function extractBraceLanguage(source: CodeSource, config: BraceLanguageCo
       definition: candidate.definition ?? definitionLine(source.content, candidate.start),
       range: { startLine, endLine },
       imports,
+      ...(importStatements && candidate.kind === "module" && candidate.qualifiedName === source.path ? { importStatements } : {}),
       references,
       calls,
       routes: candidate.routes ?? [],

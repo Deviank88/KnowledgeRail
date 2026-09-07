@@ -472,9 +472,10 @@ function visibleMatch(masked: string, match: RegExpMatchArray, token: RegExp): b
 }
 
 function importsIn(content: string, masked: string): string[] {
-  return unique([...content.matchAll(/^\s*(?:require|require_relative)\s*\(?\s*["']([^"']+)["']/gmu)]
+  return unique([...content.matchAll(/^\s*(require|require_relative)\s*\(?\s*["']([^"'\\\r\n]+)["']/gmu)]
     .filter((match) => visibleMatch(masked, match, /\brequire(?:_relative)?\b/u))
-    .map((match) => match[1]!));
+    .filter((match) => !match[2]!.includes("#{"))
+    .map((match) => `${match[1]}:${match[2]}`));
 }
 
 function configKeysIn(content: string, masked: string): string[] {
@@ -523,6 +524,8 @@ function attrReferences(content: string, masked: string): string[] {
 export function extractRubyKeywordBlocks(source: CodeSource): KnowledgeFragment[] {
   const detailed = maskRubySourceDetailed(source.content);
   const fileImports = importsIn(source.content, detailed.masked);
+  const importStatements = fileImports.map((value) => ({ specifier: value.slice(value.indexOf(":") + 1),
+    kind: value.startsWith("require_relative:") ? "require_relative" as const : "require" as const }));
   const fileConfigKeys = configKeysIn(source.content, detailed.masked);
   const fileDatabaseRefs = databaseRefsIn(source.content, detailed.masked);
   const moduleCandidate: RubyCandidate = {
@@ -556,7 +559,8 @@ export function extractRubyKeywordBlocks(source: CodeSource): KnowledgeFragment[
       kind: candidate.kind,
       definition: candidate.definition ?? definitionLine(source.content, candidate.start),
       range: { startLine, endLine },
-      imports: fileImports,
+      imports: unique(importStatements.map((entry) => entry.specifier)),
+      ...(candidate.kind === "module" && candidate.qualifiedName === source.path ? { importStatements } : {}),
       references,
       calls,
       routes: candidate.routes ?? [],
