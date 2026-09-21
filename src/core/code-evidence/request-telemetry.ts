@@ -5,6 +5,7 @@ import { join, posix, relative } from "node:path";
 import { atomicWriteText } from "../fs-service.js";
 import { withWikiFileLock } from "../lock-service.js";
 import { wikiMetaDir } from "../manifest-service.js";
+import { defaultParserVersionForPath } from "./adapter-registry.js";
 
 const LANGUAGES = ["typescript-javascript", "python", "java", "kotlin", "csharp", "php", "c", "cpp", "rust", "go", "ruby", "apex", "sfmeta", "unsupported", "mixed", "unknown"] as const;
 type Language = typeof LANGUAGES[number];
@@ -30,19 +31,12 @@ const emptyCounts = (): Counts => ({ served: 0, matched: 0, fallbacks: 0,
 export const codeRequestTelemetryFile = (wikiRoot: string): string => join(wikiMetaDir(wikiRoot), "code-request-counts.json");
 
 export function codeRequestLanguage(paths: readonly string[]): Language {
-  const extensionLanguage: Record<string, Language> = { ts: "typescript-javascript", tsx: "typescript-javascript", mts: "typescript-javascript", cts: "typescript-javascript",
-    js: "typescript-javascript", jsx: "typescript-javascript", mjs: "typescript-javascript", cjs: "typescript-javascript", py: "python", pyi: "python", java: "java",
-    kt: "kotlin", kts: "kotlin", cs: "csharp", php: "php", c: "c", h: "cpp", cpp: "cpp", hpp: "cpp", cc: "cpp", hh: "cpp", cxx: "cpp", hxx: "cpp",
-    rs: "rust", go: "go", rb: "ruby", rake: "ruby", cls: "apex", trigger: "apex" };
   const languages = new Set<Language>();
   for (const path of paths) {
     const normalized = path.replace(/\\/gu, "/").toLowerCase();
-    if (normalized.endsWith(".js-meta.xml")) languages.add("typescript-javascript");
-    else if (normalized.endsWith("-meta.xml")) languages.add("sfmeta");
-    else {
-      const extension = posix.extname(normalized).slice(1);
-      if (extension) languages.add(extensionLanguage[extension] ?? "unsupported");
-    }
+    const family = defaultParserVersionForPath(normalized)?.split("-deterministic-")[0] as Language | undefined;
+    if (family && LANGUAGES.includes(family)) languages.add(family);
+    else if (posix.extname(normalized)) languages.add("unsupported");
   }
   return languages.size > 1 ? "mixed" : [...languages][0] ?? "unknown";
 }

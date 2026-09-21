@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 2,
   "scope": "Hand-authored source/manifest fixtures with explicit import-edge oracles; not a population-wide language benchmark.",
   "cases": [
     {
@@ -181,14 +181,14 @@
           "use.ts",
           "./unit",
           "ambiguous"
-        ],
-        [
-          "use.ts",
-          "node:fs",
-          "unresolved"
         ]
       ],
-      "split": "development"
+      "split": "development",
+      "counts": {
+        "typescript-javascript": {
+          "platform": 1
+        }
+      }
     },
     {
       "id": "javascript-manifest-ties-and-ordered-fallback",
@@ -726,6 +726,400 @@
           "unresolved"
         ]
       ]
+    },
+    {
+      "id": "sf-declared-metadata-and-causes",
+      "split": "evaluation",
+      "files": {
+        "sfdx-project.json": "{\"packageDirectories\": [{\"path\": \"pkg\"}]}",
+        "pkg/lwc/view/view.js": "import \"@salesforce/label/c.Title\"; import \"@salesforce/resourceUrl/Logo\"; import \"@salesforce/messageChannel/Changed__c\"; import \"@salesforce/schema/Item__c\"; import \"@salesforce/label/c.Missing\"; import \"lwc\"; import \"lightning/uiRecordApi\";",
+        "pkg/labels/Custom.labels-meta.xml": "<CustomLabels><labels><fullName>Title</fullName></labels></CustomLabels>",
+        "pkg/staticresources/Logo.resource-meta.xml": "<StaticResource><contentType>image/png</contentType></StaticResource>",
+        "pkg/messageChannels/Changed.messageChannel-meta.xml": "<LightningMessageChannel><masterLabel>Changed</masterLabel></LightningMessageChannel>",
+        "pkg/objects/Item__c/Item__c.object-meta.xml": "<CustomObject><label>Item</label></CustomObject>"
+      },
+      "edges": [
+        [
+          "pkg/lwc/view/view.js",
+          "pkg/labels/Custom.labels-meta.xml"
+        ],
+        [
+          "pkg/lwc/view/view.js",
+          "pkg/staticresources/Logo.resource-meta.xml"
+        ],
+        [
+          "pkg/lwc/view/view.js",
+          "pkg/messageChannels/Changed.messageChannel-meta.xml"
+        ],
+        [
+          "pkg/lwc/view/view.js",
+          "pkg/objects/Item__c/Item__c.object-meta.xml"
+        ]
+      ],
+      "issues": [
+        [
+          "pkg/lwc/view/view.js",
+          "@salesforce/label/c.Missing",
+          "unresolved"
+        ]
+      ],
+      "reasons": [],
+      "counts": {
+        "typescript-javascript": {
+          "platform": 2,
+          "resolved": 4,
+          "unresolved": 1
+        }
+      }
+    },
+    {
+      "id": "poetry-backend-roots",
+      "split": "evaluation",
+      "files": {
+        "pyproject.toml": "[tool.poetry]\npackages=[{include=\"unit\",from=\"odd\"}]",
+        "tests/run.py": "import unit.value\nimport hidden.value",
+        "odd/unit/__init__.py": "",
+        "odd/unit/value.py": "VALUE = 1",
+        "odd/hidden/__init__.py": "",
+        "odd/hidden/value.py": "VALUE = 2"
+      },
+      "edges": [
+        [
+          "tests/run.py",
+          "odd/unit/value.py"
+        ]
+      ],
+      "issues": [
+        [
+          "tests/run.py",
+          "hidden.value",
+          "unresolved"
+        ]
+      ],
+      "reasons": [],
+      "counts": {}
+    },
+    {
+      "id": "hatch-backend-roots",
+      "split": "evaluation",
+      "files": {
+        "pyproject.toml": "[tool.hatch.build.targets.wheel]\npackages=[\"odd/unit\"]",
+        "tests/run.py": "import unit.value\nimport hidden.value",
+        "odd/unit/__init__.py": "",
+        "odd/unit/value.py": "VALUE = 1",
+        "odd/hidden/__init__.py": "",
+        "odd/hidden/value.py": "VALUE = 2"
+      },
+      "edges": [
+        [
+          "tests/run.py",
+          "odd/unit/value.py"
+        ]
+      ],
+      "issues": [
+        [
+          "tests/run.py",
+          "hidden.value",
+          "unresolved"
+        ]
+      ],
+      "reasons": [],
+      "counts": {}
+    },
+    {
+      "id": "flit-backend-roots",
+      "split": "evaluation",
+      "files": {
+        "pyproject.toml": "[build-system]\nbuild-backend=\"flit_core.buildapi\"\n[project]\nname=\"unit\"",
+        "tests/run.py": "import unit.value\nimport hidden.value",
+        "src/unit/__init__.py": "",
+        "src/unit/value.py": "VALUE = 1",
+        "src/hidden/__init__.py": "",
+        "src/hidden/value.py": "VALUE = 2"
+      },
+      "edges": [
+        [
+          "tests/run.py",
+          "src/unit/value.py"
+        ]
+      ],
+      "issues": [
+        [
+          "tests/run.py",
+          "hidden.value",
+          "unresolved"
+        ]
+      ],
+      "reasons": [],
+      "counts": {}
+    },
+    {
+      "id": "pdm-backend-roots",
+      "split": "evaluation",
+      "files": {
+        "pyproject.toml": "[tool.pdm.build]\npackage-dir=\"odd\"\nincludes=[\"odd/unit\"]",
+        "tests/run.py": "import unit.value\nimport hidden.value",
+        "odd/unit/__init__.py": "",
+        "odd/unit/value.py": "VALUE = 1",
+        "odd/hidden/__init__.py": "",
+        "odd/hidden/value.py": "VALUE = 2"
+      },
+      "edges": [
+        [
+          "tests/run.py",
+          "odd/unit/value.py"
+        ]
+      ],
+      "issues": [
+        [
+          "tests/run.py",
+          "hidden.value",
+          "unresolved"
+        ]
+      ],
+      "reasons": [],
+      "counts": {}
+    },
+    {
+      "id": "rust-path-workspace-and-dependencies",
+      "split": "evaluation",
+      "files": {
+        "Cargo.toml": "[workspace]\nmembers=[\"crates/*\"]",
+        "crates/unit/Cargo.toml": "[package]\nname=\"unit\"\n[dependencies]\nserde=\"1\"",
+        "crates/unit/src/lib.rs": "#[path=\"storage.rs\"]\npub mod data;\nuse serde::Serialize;",
+        "crates/unit/src/storage.rs": "pub struct Value {}",
+        "crates/unit/src/data.rs": "pub struct Wrong {}"
+      },
+      "edges": [
+        [
+          "crates/unit/src/lib.rs",
+          "crates/unit/src/storage.rs"
+        ]
+      ],
+      "issues": [],
+      "reasons": [],
+      "counts": {
+        "rust": {
+          "external_dependency": 1,
+          "resolved": 1
+        }
+      }
+    },
+    {
+      "id": "js-workspace-exports-and-hidden",
+      "split": "evaluation",
+      "files": {
+        "package.json": "{\"workspaces\": [\"units/*\"], \"imports\": {\"#value\": \"./value.ts\"}, \"dependencies\": {\"external\": \"1\"}}",
+        "main.ts": "import \"unit\"; import \"unit/private\"; import \"#value\"; import \"external\";",
+        "value.ts": "export const value=1;",
+        "units/lib/package.json": "{\"name\": \"unit\", \"exports\": {\".\": \"./main.ts\"}}",
+        "units/lib/main.ts": "export const value=1;",
+        "units/lib/private.ts": "export const hidden=1;"
+      },
+      "edges": [
+        [
+          "main.ts",
+          "value.ts"
+        ],
+        [
+          "main.ts",
+          "units/lib/main.ts"
+        ]
+      ],
+      "issues": [
+        [
+          "main.ts",
+          "unit/private",
+          "unresolved"
+        ]
+      ],
+      "reasons": [],
+      "counts": {
+        "typescript-javascript": {
+          "external_dependency": 1,
+          "resolved": 2,
+          "unresolved": 1
+        }
+      }
+    },
+    {
+      "id": "verified-unindexed-cause",
+      "split": "evaluation",
+      "files": {
+        "main.ts": "import \"./data.json\"; import \"./missing.json\";",
+        "data.json": "{}"
+      },
+      "edges": [],
+      "issues": [
+        [
+          "main.ts",
+          "./data.json",
+          "unresolved"
+        ],
+        [
+          "main.ts",
+          "./missing.json",
+          "unresolved"
+        ]
+      ],
+      "reasons": [
+        [
+          "main.ts",
+          "./data.json",
+          "unresolved",
+          "not_indexed"
+        ],
+        [
+          "main.ts",
+          "./missing.json",
+          "unresolved",
+          "not_indexed_or_unsupported"
+        ]
+      ],
+      "counts": {}
+    },
+    {
+      "id": "go-workspace-replacement",
+      "split": "evaluation",
+      "files": {
+        "go.work": "use (\n./app\n./lib\n)",
+        "app/go.mod": "module demo/app\nreplace demo/old => ../lib",
+        "lib/go.mod": "module demo/lib",
+        "app/main.go": "package main\nimport \"demo/old\"\nimport \"demo/lib\"",
+        "lib/lib.go": "package lib\nfunc Value() {}"
+      },
+      "edges": [
+        [
+          "app/main.go",
+          "lib/lib.go"
+        ]
+      ],
+      "issues": [],
+      "reasons": [],
+      "counts": {}
+    },
+    {
+      "id": "cmake-independent-declaration",
+      "split": "evaluation",
+      "files": {
+        "CMakeLists.txt": "set(INC inc)\nadd_library(main main.cpp)\ntarget_include_directories(main PRIVATE ${INC})\nadd_library(other ${UNKNOWN})",
+        "main.cpp": "#include \"unit.hpp\"",
+        "inc/unit.hpp": "struct Unit {};"
+      },
+      "edges": [
+        [
+          "main.cpp",
+          "inc/unit.hpp"
+        ]
+      ],
+      "issues": [],
+      "reasons": [],
+      "counts": {}
+    },
+    {
+      "id": "csharp-compile-remove",
+      "split": "evaluation",
+      "files": {
+        "Directory.Build.props": "<Project><ItemGroup><Compile Remove=\"excluded/**/*.cs\" /></ItemGroup></Project>",
+        "main.cs": "using Sample;\nclass Main {}",
+        "good.cs": "namespace Sample;\nclass Value {}",
+        "excluded/wrong.cs": "namespace Sample;\nclass Hidden {}"
+      },
+      "edges": [
+        [
+          "main.cs",
+          "good.cs"
+        ]
+      ],
+      "issues": [],
+      "reasons": [],
+      "counts": {}
+    },
+    {
+      "id": "ruby-path-gem",
+      "split": "evaluation",
+      "files": {
+        "Gemfile": "gem \"local\", path: \"local\"",
+        "local/local.gemspec": "Gem::Specification.new do |s|\ns.require_paths = ['odd']\nend",
+        "local/odd/value.rb": "class Value\nend",
+        "main.rb": "require 'value'"
+      },
+      "edges": [
+        [
+          "main.rb",
+          "local/odd/value.rb"
+        ]
+      ],
+      "issues": [],
+      "reasons": [],
+      "counts": {}
+    },
+    {
+      "id": "dynamic-specifier-causes",
+      "split": "evaluation",
+      "files": {
+        "main.js": "const lazy = import(moduleName);\nconst value = require(moduleName);"
+      },
+      "edges": [],
+      "issues": [
+        [
+          "main.js",
+          "dynamic import at line 1",
+          "unresolved"
+        ],
+        [
+          "main.js",
+          "dynamic require at line 2",
+          "unresolved"
+        ]
+      ],
+      "reasons": [
+        [
+          "main.js",
+          "dynamic import at line 1",
+          "unresolved",
+          "unsupported_syntax"
+        ],
+        [
+          "main.js",
+          "dynamic require at line 2",
+          "unresolved",
+          "unsupported_syntax"
+        ]
+      ],
+      "counts": {
+        "typescript-javascript": {
+          "unresolved": 2,
+          "resolved": 0
+        }
+      }
+    },
+    {
+      "id": "js-conditions-in-one-source",
+      "split": "evaluation",
+      "files": {
+        "package.json": "{\"name\":\"local\",\"exports\":{\"import\":\"./esm.ts\",\"require\":\"./cjs.ts\"}}",
+        "main.ts": "import \"local\"; require(\"local\");",
+        "esm.ts": "export const value = 1;",
+        "cjs.ts": "export const value = 2;"
+      },
+      "edges": [
+        [
+          "main.ts",
+          "esm.ts"
+        ],
+        [
+          "main.ts",
+          "cjs.ts"
+        ]
+      ],
+      "issues": [],
+      "counts": {
+        "typescript-javascript": {
+          "resolved": 1,
+          "ambiguous": 0
+        }
+      }
     }
   ]
 }

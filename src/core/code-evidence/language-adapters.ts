@@ -1,11 +1,15 @@
 import { createDeclarationImportResolver, CSHARP_PROJECT_MANIFEST } from "./import-resolution/declarations.js";
 import { createCImportResolver } from "./import-resolution/c-family.js";
 import { COMPILE_COMMANDS_MANIFEST, CMAKE_MANIFEST } from "./import-resolution/c-config.js";
-import { createGoImportResolver, GO_MODULE_MANIFEST } from "./import-resolution/go.js";
+import { createGoImportResolver, GO_MODULE_MANIFEST, GO_WORKSPACE_MANIFEST } from "./import-resolution/go.js";
 import { createRustImportResolver } from "./import-resolution/rust.js";
 import { CARGO_MANIFEST } from "./import-resolution/rust-config.js";
 import { COMPOSER_MANIFEST, createPhpImportResolver } from "./import-resolution/php-config.js";
 import { namespaceScopes } from "./namespace-scopes.js";
+import { SALESFORCE_MANIFEST, APEX_STATUS_MANIFEST, applyApexStatuses } from "./import-resolution/salesforce-config.js";
+import { attachRustDeclarations } from "./import-resolution/rust-declarations.js";
+import { createSalesforceReferenceResolver } from "./import-resolution/salesforce.js";
+import { CSHARP_BUILD_PROPS, GRADLE_MANIFESTS, MAVEN_MANIFEST } from "./import-resolution/build-boundaries.js";
 import {
   annotationTextBefore,
   braceDepthAt,
@@ -648,7 +652,7 @@ function apexCandidates(context: BraceExtractionContext): BraceCandidate[] {
       end: matchingBrace(context.masked, open),
       definition: definitionLine(context.content, start),
       routes,
-      databaseRefs: [objectName, ...apexDatabaseRefs(context.content.slice(start, matchingBrace(context.masked, open)))],
+      databaseRefs: apexDatabaseRefs(context.content.slice(open, matchingBrace(context.masked, open))),
     });
   }
   return candidates;
@@ -663,6 +667,8 @@ const APEX_CONFIG: BraceLanguageConfig = {
   imports: () => [],
   configKeys: () => [],
   databaseRefs: apexDatabaseRefs,
+  callsSource: (masked) => masked.replace(/\btrigger\s+\w+\s+on\s+\w+\s*\([^)]*\)/giu,
+    (header) => header.replace(/[^\r\n]/gu, " ")),
 };
 
 function csharpCandidates(context: BraceExtractionContext): BraceCandidate[] {
@@ -1214,6 +1220,7 @@ abstract class BraceKnowledgeAdapter implements KnowledgeAdapter {
 }
 
 export class JavaKnowledgeAdapter extends BraceKnowledgeAdapter {
+  readonly projectManifests = [...GRADLE_MANIFESTS, MAVEN_MANIFEST];
   createImportResolver(context: CodeImportContext) { return createDeclarationImportResolver(context, "java"); }
   readonly parserVersion = JAVA_ADAPTER_VERSION;
   readonly extensionClaims = [".java"] as const;
@@ -1221,6 +1228,7 @@ export class JavaKnowledgeAdapter extends BraceKnowledgeAdapter {
 }
 
 export class KotlinKnowledgeAdapter extends BraceKnowledgeAdapter {
+  readonly projectManifests = [...GRADLE_MANIFESTS, MAVEN_MANIFEST];
   createImportResolver(context: CodeImportContext) { return createDeclarationImportResolver(context, "kotlin"); }
   readonly parserVersion = KOTLIN_ADAPTER_VERSION;
   readonly extensionClaims = [".kt", ".kts"] as const;
@@ -1228,13 +1236,24 @@ export class KotlinKnowledgeAdapter extends BraceKnowledgeAdapter {
 }
 
 export class ApexKnowledgeAdapter extends BraceKnowledgeAdapter {
+  readonly projectManifests = [SALESFORCE_MANIFEST, APEX_STATUS_MANIFEST];
+  readonly enrichSourceMetadata = applyApexStatuses;
+  readonly createReferenceResolver = createSalesforceReferenceResolver;
   readonly parserVersion = APEX_ADAPTER_VERSION;
   readonly extensionClaims = [".cls", ".trigger"] as const;
   readonly config = APEX_CONFIG;
+  override async extract(source: CodeSource): Promise<KnowledgeFragment[]> {
+    const fragments = await super.extract(source);
+    const declared = fragments.filter((fragment) => fragment.kind === "route" && fragment.qualifiedName.startsWith("trigger:"));
+    for (const trigger of declared) trigger.declaredReferences = [`schema:${trigger.qualifiedName.split(":").at(-1)!}`];
+    const module = fragments.find((fragment) => fragment.kind === "module" && fragment.qualifiedName === source.path);
+    if (module && declared.length) module.declaredReferences = [...new Set(declared.flatMap((fragment) => fragment.declaredReferences!))];
+    return fragments;
+  }
 }
 
 export class CSharpKnowledgeAdapter extends BraceKnowledgeAdapter {
-  readonly projectManifests = [CSHARP_PROJECT_MANIFEST];
+  readonly projectManifests = [CSHARP_PROJECT_MANIFEST, CSHARP_BUILD_PROPS];
   createImportResolver(context: CodeImportContext) { return createDeclarationImportResolver(context, "csharp"); }
   readonly parserVersion = CSHARP_ADAPTER_VERSION;
   readonly extensionClaims = [".cs"] as const;
@@ -1242,7 +1261,7 @@ export class CSharpKnowledgeAdapter extends BraceKnowledgeAdapter {
 }
 
 export class GoKnowledgeAdapter extends BraceKnowledgeAdapter {
-  readonly projectManifests = [GO_MODULE_MANIFEST];
+  readonly projectManifests = [GO_MODULE_MANIFEST, GO_WORKSPACE_MANIFEST];
   readonly createImportResolver = createGoImportResolver;
   readonly parserVersion = GO_ADAPTER_VERSION;
   readonly extensionClaims = [".go"] as const;
@@ -1255,6 +1274,9 @@ export class RustKnowledgeAdapter extends BraceKnowledgeAdapter {
   readonly parserVersion = RUST_ADAPTER_VERSION;
   readonly extensionClaims = [".rs"] as const;
   readonly config = RUST_CONFIG;
+  override async extract(source: CodeSource): Promise<KnowledgeFragment[]> {
+    return attachRustDeclarations(source, await super.extract(source));
+  }
 }
 
 export class PhpKnowledgeAdapter extends BraceKnowledgeAdapter {

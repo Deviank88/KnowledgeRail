@@ -1,5 +1,6 @@
 import { createJavaScriptImportResolver } from "./import-resolution/javascript.js";
 import { JAVASCRIPT_PROJECT_MANIFESTS } from "./import-resolution/javascript-config.js";
+import { SALESFORCE_MANIFEST } from "./import-resolution/salesforce-config.js";
 import { createHash } from "node:crypto";
 import {
   TYPESCRIPT_ADAPTER_VERSION,
@@ -223,9 +224,10 @@ function callsIn(masked: string): string[] {
   return unique(values);
 }
 
-function importsIn(content: string, masked: string): { modules: string[]; symbols: string[] } {
+function importsIn(content: string, masked: string): { modules: string[]; symbols: string[]; statements: NonNullable<KnowledgeFragment["importStatements"]>; unsupported: string[] } {
   const modules: string[] = [];
   const symbols: string[] = [];
+  const statements: NonNullable<KnowledgeFragment["importStatements"]> = [], unsupported: string[] = [];
   const triviaEnd = (start: number): number => {
     let position = start;
     while (position < content.length) {
@@ -251,10 +253,13 @@ function importsIn(content: string, masked: string): { modules: string[]; symbol
     if (masked[previous] === ".") continue;
     const start = triviaEnd(anchor.index + anchor[0].length);
     let module: ReturnType<typeof literal>, clause: string | undefined;
-    if (anchor[0] === "require") {
+    if (anchor[0] === "require" || content[start] === "(") {
       if (content[start] !== "(") continue;
       module = literal(start + 1);
-      if (!module || content[triviaEnd(module.end)] !== ")") continue;
+      if (!module || content[triviaEnd(module.end)] !== ")") {
+        unsupported.push(`dynamic ${anchor[0]} at line ${lineNumberAt(content, anchor.index)}`);
+        continue;
+      }
     } else {
       module = literal(start);
       if (!module) {
@@ -273,14 +278,17 @@ function importsIn(content: string, masked: string): { modules: string[]; symbol
         }
       }
     }
-    if (module?.value) modules.push(module.value);
+    if (module?.value) {
+      modules.push(module.value);
+      statements.push({ specifier: module.value, kind: anchor[0] === "require" ? "require" : "import" });
+    }
     if (clause) {
       for (const identifier of clause.match(/[A-Za-z_$][\w$]*/g) ?? []) {
         if (!KEYWORDS.has(identifier)) symbols.push(identifier);
       }
     }
   }
-  return { modules: unique(modules), symbols: unique(symbols) };
+  return { modules: unique(modules), symbols: unique(symbols), statements, unsupported };
 }
 
 function routesIn(content: string): Array<{ route: CodeRoute; start: number; end: number }> {
@@ -499,7 +507,7 @@ function addTestCandidates(content: string, masked: string, path: string, candid
 
 export class TypeScriptKnowledgeAdapter implements KnowledgeAdapter {
   readonly createImportResolver = createJavaScriptImportResolver;
-  readonly projectManifests = JAVASCRIPT_PROJECT_MANIFESTS;
+  readonly projectManifests = [...JAVASCRIPT_PROJECT_MANIFESTS, SALESFORCE_MANIFEST];
   readonly parserVersion = TYPESCRIPT_ADAPTER_VERSION;
   readonly extensionClaims = TYPESCRIPT_EXTENSION_CLAIMS;
 
@@ -605,6 +613,10 @@ export class TypeScriptKnowledgeAdapter implements KnowledgeAdapter {
         definition: candidate.definition,
         range: { startLine, endLine },
         imports: imports.modules,
+        ...(candidate.kind === "module" ? {
+          ...(imports.statements.length ? { importStatements: imports.statements } : {}),
+          ...(imports.unsupported.length ? { unsupportedImports: imports.unsupported } : {}),
+        } : {}),
         references,
         calls,
         routes: fragmentRoutes,

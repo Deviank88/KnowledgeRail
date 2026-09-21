@@ -9,7 +9,7 @@ import { pagePathsByClaim, type EvidenceIrStore } from "../core/ingestion/eviden
 import type { KnowledgeGap } from "./context-manifest.js";
 import { wikiPageUri } from "./resource-uri.js";
 
-export interface CodeImpactRef { uri: string; path: string; symbol: string }
+export interface CodeImpactRef { uri: string; path: string; symbol: string; deploymentStatus?: KnowledgeFragment["deploymentStatus"] }
 export interface CodeImpactRoot extends CodeImpactRef {
   origin: "changed_path" | "task_path" | "claim";
   claimId?: string;
@@ -60,7 +60,8 @@ export function taskCodePaths(text: string): string[] {
 function codeRef(fragment: KnowledgeFragment): CodeImpactRef | undefined {
   const uri = codeResourceUri(fragment);
   try { parseCodeResourceUri(uri); } catch { return; }
-  return { uri, path: fragment.path, symbol: fragment.symbol };
+  return { uri, path: fragment.path, symbol: fragment.symbol,
+    ...(fragment.deploymentStatus ? { deploymentStatus: fragment.deploymentStatus } : {}) };
 }
 
 export async function expandCodeImpact(params: {
@@ -118,7 +119,7 @@ export async function expandCodeImpact(params: {
   });
   if (result.manifestWarnings.length) fields.codeWarnings = [...(fields.codeWarnings ?? []), ...result.manifestWarnings.slice(0, 3).map((warning) => `${warning.path}: ${warning.reason}`)];
   if (result.importDiagnostics?.unresolvedImports.length) fields.codeWarnings = [...(fields.codeWarnings ?? []),
-    "Some indexed imports are ambiguous or unresolved (possibly external/unsupported). Incoming candidates may be incomplete; knowledge_code references exposes bounded snapshot-wide diagnostics. This does not imply an indexing failure."];
+    `Some indexed imports are ambiguous or unresolved: ${[...new Set(result.importDiagnostics.unresolvedImports.map((issue) => issue.reason))].join(", ")}. Incoming candidates may be incomplete; knowledge_code references exposes snapshot-wide examples and inventory counts.`];
   fields.codeTruncated = result.omittedRoots > 0 || result.relationsTruncated || result.manifestWarnings.length > 3;
   const relatedIds = new Map<string, string>();
   const relatedFiles = new Map<string, string>();

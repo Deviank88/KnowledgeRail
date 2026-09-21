@@ -1,18 +1,78 @@
 {
-  "version": 1,
+  "version": 2,
   "provenance": "Manually authored questions for the existing KnowledgeRail wiki; expected specific pages and supporting text fixed before running retrieval. This is an exploratory workspace check, not a held-out or user-population corpus. Other returned pages are not labeled irrelevant.",
   "cases": [
-    { "id": "python-renamed", "query": "come si risolvono import relativi nei package rinominati e negli stub Python", "expected": "implementations/ImportPaths.md", "supportingText": "package-dir setuptools dichiarati" },
-    { "id": "python-external-tests", "query": "perché i test esterni non raggiungono i moduli con Poetry", "expected": "implementations/ImportPaths.md", "supportingText": "Poetry, Hatch, Flit e PDM non forniscono ancora mapping" },
-    { "id": "composer-autoload", "query": "come vengono risolti namespace classmap costanti e autoload dei progetti Composer", "expected": "implementations/ImportDeclarations.md", "supportingText": "Composer legge autoload e autoload-dev con PSR-4, PSR-0, classmap, files" },
-    { "id": "csharp-partials", "query": "quali parti partial vengono unite quando ci sono progetti C# concorrenti", "expected": "implementations/ImportDeclarations.md", "supportingText": "Parti partial compatibili si uniscono soltanto con lo stesso confine csproj" },
-    { "id": "go-boundary", "query": "come evitare falsi collegamenti Go con suffissi uguali e moduli annidati", "expected": "implementations/ImportGoRust.md", "supportingText": "import esterni con suffisso uguale e confini di moduli annidati non vengono confusi" },
-    { "id": "cargo-globs", "query": "cosa succede alle root Cargo valide quando i membri workspace contengono glob", "expected": "implementations/ImportGoRust.md", "supportingText": "Glob o membri workspace invalidi producono avvisi senza cancellare le root valide" },
-    { "id": "manifest-discovery", "query": "come scopriamo manifest annidati nuovi senza riestrarre sorgenti", "expected": "implementations/ImportRuntime.md", "supportingText": "nuovi manifest annidati richiedono update o rebuild" },
-    { "id": "manifest-memory", "query": "quale budget ammette i dati dei manifest nella cache del workspace", "expected": "implementations/ImportRuntime.md", "supportingText": "dati analizzati e cache restano nel budget del workspace" },
-    { "id": "lwc-links", "query": "come si collegano componenti LWC ai metodi Apex e ai campi schema", "expected": "implementations/ImportSalesforce.md", "supportingText": "LWC risolve @salesforce/apex/Orders.load verso la dichiarazione del metodo Apex" },
-    { "id": "sfdx-metadata", "query": "quali metadata SFDX vengono estratti per oggetti e campi", "expected": "implementations/ImportSalesforce.md", "supportingText": "estrae metadata SFDX e riferimenti a oggetti/campi" },
-    { "id": "counter-recovery", "query": "come si recuperano contatori di fallback corrotti senza mescolare periodi", "expected": "implementations/CodeKnowledgeLinks.md", "supportingText": "viene archiviato sotto lock e apre un nuovo periodo di conteggio" },
-    { "id": "superseded-drift", "query": "come si evita che gli anchor superseded rendano obsolete le pagine", "expected": "implementations/CodeKnowledgeLinks.md", "supportingText": "non marca obsoleta una pagina soltanto per evidenze superseded" }
+    {
+      "id": "python-renamed",
+      "query": "come si risolvono import relativi nei package rinominati e negli stub Python",
+      "expected": "implementations/ImportPaths.md",
+      "supportingText": "package e stub da root dichiarate setuptools, Poetry, Hatch, Flit e PDM"
+    },
+    {
+      "id": "python-external-tests",
+      "query": "come raggiungono i test esterni i package dichiarati con Poetry",
+      "expected": "implementations/ImportPaths.md",
+      "supportingText": "Test esterni raggiungono soltanto layout supportati e dichiarati"
+    },
+    {
+      "id": "composer-autoload",
+      "query": "come vengono risolti namespace classmap costanti e autoload dei progetti Composer",
+      "expected": "implementations/ImportDeclarations.md",
+      "supportingText": "Composer legge autoload e autoload-dev con PSR-4, PSR-0, classmap, files"
+    },
+    {
+      "id": "csharp-partials",
+      "query": "quali parti partial vengono unite quando ci sono progetti C# concorrenti",
+      "expected": "implementations/ImportDeclarations.md",
+      "supportingText": "Parti partial compatibili si uniscono soltanto con lo stesso confine csproj"
+    },
+    {
+      "id": "go-boundary",
+      "query": "come evitare falsi collegamenti Go con suffissi uguali e moduli annidati",
+      "expected": "implementations/ImportGoRust.md",
+      "supportingText": "Workspace e sostituzioni non rendono importabili moduli nascosti"
+    },
+    {
+      "id": "cargo-globs",
+      "query": "cosa succede alle root Cargo valide quando i membri workspace contengono glob",
+      "expected": "implementations/ImportGoRust.md",
+      "supportingText": "Rust combina root Cargo e glob semplici dei workspace"
+    },
+    {
+      "id": "manifest-discovery",
+      "query": "come scopriamo manifest annidati nuovi senza riestrarre sorgenti",
+      "expected": "implementations/ImportRuntime.md",
+      "supportingText": "nuovi confini annidati, membri glob e sidecar Apex richiedono update o rebuild"
+    },
+    {
+      "id": "manifest-memory",
+      "query": "quale budget ammette i dati dei manifest nella cache del workspace",
+      "expected": "implementations/ImportRuntime.md",
+      "supportingText": "La cache per progetto conserva il limite di 32 MiB"
+    },
+    {
+      "id": "lwc-links",
+      "query": "come si collegano componenti LWC ai metodi Apex e ai campi schema",
+      "expected": "implementations/ImportSalesforce.md",
+      "supportingText": "LWC risolve Apex, schema oggetti/campi, label, static resource"
+    },
+    {
+      "id": "sfdx-metadata",
+      "query": "quali metadata SFDX vengono estratti per oggetti e campi",
+      "expected": "implementations/ImportSalesforce.md",
+      "supportingText": "SalesforceMetadataKnowledgeAdapter estrae entità SFDX"
+    },
+    {
+      "id": "counter-recovery",
+      "query": "come si recuperano contatori di fallback corrotti senza mescolare periodi",
+      "expected": "implementations/CodeKnowledgeLinks.md",
+      "supportingText": "viene archiviato sotto lock e apre un nuovo periodo di conteggio"
+    },
+    {
+      "id": "superseded-drift",
+      "query": "come si evita che gli anchor superseded rendano obsolete le pagine",
+      "expected": "implementations/CodeKnowledgeLinks.md",
+      "supportingText": "non marca obsoleta una pagina soltanto per evidenze superseded"
+    }
   ]
 }

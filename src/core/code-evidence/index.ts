@@ -13,6 +13,7 @@ import { readFileSafe } from "../utils.js";
 import { registerWorkspaceState, touchWorkspaceState } from "../workspace-state.js";
 import {
   CodeQueryRuntime,
+  type CodeGenerationCache,
   DEFAULT_QUERY_ADAPTERS,
   codePathAllowed,
   normalizedCodeText,
@@ -57,6 +58,9 @@ interface QueryCacheState {
   pending?: Promise<CodeQueryRuntime>;
   estimatedBytes: number;
   snapshotEstimatedBytes: number;
+  metadataIdentity?: string;
+  metadataRegistry?: KnowledgeAdapterRegistry;
+  generationCache: CodeGenerationCache;
 }
 const queryStates = new Map<string, QueryCacheState>();
 const CODE_IGNORES = [
@@ -125,9 +129,18 @@ function validFragment(value: unknown): value is KnowledgeFragment {
     (fragment.range?.startLine ?? 0) >= 1 &&
     (fragment.range?.endLine ?? 0) >= (fragment.range?.startLine ?? 1) &&
     isStringArray(fragment.imports) &&
+    (fragment.unsupportedImports === undefined || isStringArray(fragment.unsupportedImports)) &&
+    (fragment.deploymentStatus === undefined || ["Active", "Inactive", "Deleted"].includes(fragment.deploymentStatus)) &&
+    (fragment.moduleDeclarations === undefined || (Array.isArray(fragment.moduleDeclarations) && fragment.moduleDeclarations.every((entry) =>
+      entry && typeof entry.name === "string" && (entry.path === undefined || typeof entry.path === "string") &&
+      (entry.conditional === undefined || typeof entry.conditional === "boolean") &&
+      (entry.unsupported === undefined || typeof entry.unsupported === "boolean")))) &&
+    (fragment.reexports === undefined || (Array.isArray(fragment.reexports) && fragment.reexports.every((entry) =>
+      entry && typeof entry.name === "string" && typeof entry.target === "string"))) &&
     (fragment.importStatements === undefined || (Array.isArray(fragment.importStatements) && fragment.importStatements.every((entry) =>
       entry && typeof entry.specifier === "string" && ["require", "require_relative", "quote", "angle", "import", "static"].includes(entry.kind)))) &&
     isStringArray(fragment.references) &&
+    (fragment.declaredReferences === undefined || isStringArray(fragment.declaredReferences)) &&
     isStringArray(fragment.calls) &&
     Array.isArray(fragment.routes) && fragment.routes.every((route) =>
       route && typeof route.method === "string" && typeof route.path === "string" &&
@@ -207,11 +220,11 @@ async function discardCorruptSnapshot(
 async function writeSnapshot(wikiRoot: string, snapshot: CodeEvidenceSnapshot): Promise<void> {
   await atomicWriteText(codeEvidenceIndexFile(wikiRoot), `${JSON.stringify(snapshot, null, 2)}\n`);
   const state = queryStates.get(nodePath.resolve(wikiRoot));
-  if (state) forgetQueryRuntime(state);
+  if (state) { state.generationCache = { estimatedBytes: 0 }; state.metadataIdentity = undefined; forgetQueryRuntime(state); }
 }
 
 function forgetQueryRuntime(state: QueryCacheState): void {
-  state.estimatedBytes = 0;
+  state.estimatedBytes = state.generationCache.estimatedBytes + (state.generationCache.projectEstimatedBytes ?? 0) + (state.generationCache.incomingEstimatedBytes ?? 0);
   state.snapshotEstimatedBytes = 0;
   state.runtime = undefined;
   state.identity = undefined;
@@ -220,7 +233,7 @@ function forgetQueryRuntime(state: QueryCacheState): void {
 function queryState(wikiRoot: string): QueryCacheState {
   let state = queryStates.get(wikiRoot);
   if (!state) {
-    state = { estimatedBytes: 0, snapshotEstimatedBytes: 0 };
+    state = { estimatedBytes: 0, snapshotEstimatedBytes: 0, generationCache: { estimatedBytes: 0 } };
     queryStates.set(wikiRoot, state);
     const registered = state;
     registerWorkspaceState(wikiRoot, "code-evidence-query", () => {
@@ -255,6 +268,9 @@ async function loadQueryRuntime(
   const root = nodePath.resolve(requestedRoot);
   const state = queryState(root);
   const before = await querySnapshotIdentity(root);
+  if (state.metadataIdentity !== before?.identity || state.metadataRegistry !== registry) {
+    state.generationCache = { estimatedBytes: 0 }; state.metadataIdentity = before?.identity; state.metadataRegistry = registry;
+  }
   if (before && state.runtime && state.identity === before.identity && state.runtime.registry === registry) return state.runtime;
   if (state.pending) {
     await state.pending;
@@ -271,7 +287,10 @@ async function loadQueryRuntime(
       const after = await querySnapshotIdentity(root);
       if (!after) return new CodeQueryRuntime(emptySnapshot(adapters), registry);
       if (identity.identity === after.identity) {
-        const runtime = new CodeQueryRuntime(snapshot, registry);
+        if (state.metadataIdentity !== after.identity) {
+          state.generationCache = { estimatedBytes: 0 }; state.metadataIdentity = after.identity;
+        }
+        const runtime = new CodeQueryRuntime(snapshot, registry, state.generationCache);
         // Include an allowance for parsed objects and the lazy symbol/reference
         // maps. This is an admission estimate, not V8 heap accounting.
         const estimatedBytes = after.size * 4 + snapshot.fragments.length * 512;
@@ -306,7 +325,11 @@ export function getCodeQueryCacheDiagnostics(wikiRoot: string): { cached: boolea
 
 function accountProjectStructure(wikiRoot: string, runtime: CodeQueryRuntime): void {
   const state = queryStates.get(wikiRoot);
-  if (state?.runtime !== runtime) return;
+  if (!state) return;
+  if (state.runtime !== runtime) {
+    if (!state.runtime) state.estimatedBytes = state.generationCache.estimatedBytes + (state.generationCache.projectEstimatedBytes ?? 0) + (state.generationCache.incomingEstimatedBytes ?? 0);
+    return;
+  }
   const estimatedBytes = state.snapshotEstimatedBytes + runtime.projectStructureEstimatedBytes();
   if (estimatedBytes > MAX_QUERY_CACHE_ESTIMATED_BYTES) forgetQueryRuntime(state);
   else state.estimatedBytes = estimatedBytes;
@@ -453,6 +476,15 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
     return readCodeEvidenceSnapshot(this.wikiRoot, this.registry.roster());
   }
 
+  /** Read-only generation inventory for evaluations and aggregate reports. */
+  async importDiagnostics(): Promise<CodeImportDiagnostics> {
+    const runtime = await this.queryRuntime(false);
+    await runtime.refreshProjectStructure(this.repositoryRoot);
+    const diagnostics = structuredClone(runtime.importResolutionDiagnostics().diagnostics);
+    accountProjectStructure(this.wikiRoot, runtime);
+    return diagnostics;
+  }
+
   private async queryRuntime(repair = true): Promise<CodeQueryRuntime> {
     let runtime: CodeQueryRuntime;
     try {
@@ -467,6 +499,8 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
     if (runtime.snapshot.files.length > 0 && !sameAdapterRoster(runtime.snapshot.adapters, this.registry.roster())) {
       throw new Error("Code evidence adapter roster changed; rebuild the index to refresh only affected languages.");
     }
+    await runtime.refreshSourceMetadata(this.repositoryRoot);
+    accountProjectStructure(this.wikiRoot, runtime);
     return runtime;
   }
 
@@ -607,7 +641,8 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
   private isProjectManifest(path: string): boolean {
     const fileName = nodePath.posix.basename(path);
     return this.registry.registrations.some(({ adapter }) => adapter.projectManifests?.some((spec) =>
-      spec.fileName.startsWith("*") ? fileName.endsWith(spec.fileName.slice(1)) : spec.fileName === fileName));
+      spec.companion ? spec.companion.extensions.some((extension) => path.endsWith(extension + spec.companion!.suffix))
+        : spec.fileName.startsWith("*") ? fileName.endsWith(spec.fileName.slice(1)) : spec.fileName === fileName));
   }
 
   private async invalidateProjectStructure(before: CodeEvidenceSnapshot): Promise<CodeEvidenceUpdateReport> {

@@ -42,7 +42,7 @@ remain visible limitations; see [module reference coverage](benchmarks/README.md
 | Java | `.java` | Classes, interfaces, enums, records, methods, Javadoc, JUnit markers, Spring routes, imports. |
 | Kotlin | `.kt`, `.kts` | Classes, objects and companions, top-level/member/extension functions, properties, KDoc, JUnit/Kotest markers, Spring and literal Ktor routes. |
 | Apex | `.cls`, `.trigger` | Classes, methods, tests, REST resources, trigger events, and static SOQL/SOSL object references. |
-| Salesforce metadata | `.object-meta.xml`, `.field-meta.xml`, `.validationRule-meta.xml`, `.flow-meta.xml`, `.permissionset-meta.xml` | SFDX objects, fields, validation rules, flows, permission sets, formulas, calls, and Apex-compatible database references. |
+| Salesforce metadata | `.object-meta.xml`, `.field-meta.xml`, `.validationRule-meta.xml`, `.flow-meta.xml`, `.permissionset-meta.xml`, `.labels-meta.xml`, `.resource-meta.xml`, `.messageChannel-meta.xml`; `.page`, `.component`, `.cmp`, `.app` | SFDX entities, formulas and database references; literal Aura/Visualforce controllers and extensions. |
 | C# | `.cs` | Namespaces, types, methods, properties, XML docs, test attributes, ASP.NET controller and minimal-API routes; nested quoted strings inside interpolations are masked without losing following code. |
 | Go | `.go` | Functions, receiver methods, structs/interfaces, Go doc comments, tests, imports, and common router calls. |
 | Rust | `.rs` | Functions, types, traits, modules, `impl` methods, tests, imports, and `macro_rules!` names. |
@@ -59,23 +59,25 @@ The extractors are intentionally conservative. LWC HTML templates, Java anonymou
 Use `knowledge_code action="references"` with the indexed module's `symbol_id`
 to retrieve import edges. The adapter's `imports` list records source specifiers;
 a returned `import` relation is the resolver's connection to a module in this
-project. JS/TS uses unambiguous relative paths, supported extension substitutions,
-and declared `paths`/`baseUrl` from the nearest `tsconfig.json` or `jsconfig.json`,
-including one local `extends` level. Python resolves absolute dotted names from both the repository
-root and the importing file's directory, so `src/cli.py` can import its sibling
-`src/orders_cli.py`. Package `__init__.py` and relative imports are supported;
-conflicting candidates remain unresolved. A verified regular-package chain also
-supplies Python's source root. Java/Kotlin/PHP use declared qualified names;
-C# namespaces and Go package directories can identify several contributing files.
-Go uses `go.mod` identities and nested module boundaries when available. Known
-manifests are checked on reference queries; newly added nested manifests require
-`knowledge_code action="update" path="<directory>/go.mod"` or an index rebuild.
-Projects without discovered Go manifests retain suffix matching for compatibility.
-C/C++ links the included header, and Rust resolves supported crate/module paths.
-LWC can link Apex methods, schema declarations and local component bundles.
-These static rules do not execute build tools or resolve arbitrary external
-packages. Ruby and custom adapters without a resolver retain stem matching,
-including its false positives and missing load-path checks.
+project. The unreleased extensions add declared Python backend layouts, JS/TS project
+ownership and local package exports, Rust module attributes and workspace globs,
+and literal build-tool boundaries. Common manifest readers and bounded lookup
+structures are reused across adapters; build tools and installed dependencies are
+never executed or loaded.
+
+LWC links Apex, schema, labels, static resources, message channels and local bundles
+within declared Salesforce project boundaries. Platform modules are counted
+separately. Literal trigger and Visualforce/Aura references reach indexed objects
+and Apex classes; inactive/deleted Apex remains searchable with its deployment status.
+`unresolvedImports` distinguishes verified unindexed paths and unsupported syntax,
+while declared external dependencies have a separate inventory count. These counts
+are separate from the observed request/fallback rate. See the
+[supported declarations and limits](docs/guides/code-evidence-retrieval.md).
+
+Known manifests refresh on reference queries. New nested manifests, workspace members
+and Apex status companions require an explicit code update or rebuild. Projects
+without discovered Go manifests retain the diagnosed suffix fallback. Custom adapters
+without a resolver retain legacy stem matching.
 An empty reference list does not prove that a module is unused. Inspect the
 extracted specifier and use a qualified `symbol` lookup or read the source when
 an import edge is missing; treat heuristic edges as candidates to verify.

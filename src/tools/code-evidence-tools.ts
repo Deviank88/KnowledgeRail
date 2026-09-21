@@ -40,6 +40,7 @@ function hitText(hit: CodeEvidenceHit): string {
     `${hit.fragment.path}:${hit.fragment.range.startLine}-${hit.fragment.range.endLine}`,
     `score=${hit.score.toFixed(2)}`,
     hit.fragment.definition,
+    hit.fragment.deploymentStatus ? `deploymentStatus=${hit.fragment.deploymentStatus}` : "",
     `resource=${hit.resourceUri}`,
     hit.fragment.calls.length > 0 ? `calls=${hit.fragment.calls.join(", ")}` : "",
     hit.fragment.routes.length > 0
@@ -152,13 +153,13 @@ export function registerCodeEvidenceTools(
           if (warnings.length) summary += `\nProject manifest warning(s): ${warnings.length}; ${warnings.slice(0, 12).map((warning) => `${warning.path}: ${warning.reason}`).join(", ")}.`;
           if (importDiagnostics.unresolvedImports.length) summary +=
             `\nImport diagnostics (indexed snapshot, not target-specific): ${importDiagnostics.unresolvedImports.length} examples` +
-            `${importDiagnostics.unresolvedImportsTruncated ? ", truncated" : ""}. Ambiguity requires a choice; unresolved may mean external, unsupported or absent from the index. Rebuilding alone may not resolve it.`;
+            `${importDiagnostics.unresolvedImportsTruncated ? ", truncated" : ""}. Reasons: ${[...new Set(importDiagnostics.unresolvedImports.map((issue) => issue.reason))].join(", ")}. Rebuilding alone may not resolve it.`;
           return {
             content: modern
               ? [{ type: "text" as const, text: summary }, ...references.map(linkForReference)]
               : [{ type: "text" as const, text: summary }],
             structuredContent: { action, ...request, symbolId: symbol_id, references, ...manifestDiagnostics,
-              ...(importDiagnostics.unresolvedImports.length ? importDiagnostics : {}) },
+              ...(importDiagnostics.importResolutionCounts || importDiagnostics.unresolvedImports.length ? importDiagnostics : {}) },
           };
         }
         if (action === "read") {

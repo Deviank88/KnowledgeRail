@@ -21,7 +21,7 @@ export async function evaluateFunctionalRouting(options: { live?: boolean } = {}
   if (options.live && !provider) throw new Error("Configure an embedding provider before --live evaluation.");
   const bytes = await fs.readFile(new URL("fixtures/functional-routing-golden.json", import.meta.url), "utf8");
   const fixture = JSON.parse(bytes) as { version: number; provenance: string; domains: Array<{
-    id: string; title: string; claim: string; queries: Array<{ split: string; text: string }>;
+    id: string; title: string; claim: string; language?: string; queries: Array<{ split: string; text: string }>;
   }> };
   const root = await fs.mkdtemp(join(tmpdir(), "kr-functional-eval-"));
   // A deterministic lexical run must not silently call a developer's provider.
@@ -31,14 +31,17 @@ export async function evaluateFunctionalRouting(options: { live?: boolean } = {}
   const cases = [];
   const relatedClaims = [];
   try {
-    for (const [domainIndex, domain] of fixture.domains.entries()) for (const layout of ["flat", "relocated"]) {
+    for (const [domainIndex, domain] of fixture.domains.entries()) for (const layout of domain.language === "salesforce" ? ["force-app", "renamed-package"] : ["flat", "relocated"]) {
       const repositoryRoot = join(root, domain.id, layout), wikiRoot = join(repositoryRoot, "wiki");
-      const target = layout === "flat" ? "a.ts" : "unusual/component/x1.ts";
-      const caller = layout === "flat" ? "b.ts" : "ports/front/z9.ts";
+      const salesforce = domain.language === "salesforce";
+      const target = salesforce ? `${layout}/main/default/classes/RuleHandler.cls` : layout === "flat" ? "a.ts" : "unusual/component/x1.ts";
+      const caller = salesforce ? `${layout}/main/default/lwc/entry/entry.js` : layout === "flat" ? "b.ts" : "ports/front/z9.ts";
       const specifier = layout === "flat" ? "./a.js" : "../../unusual/component/x1.js";
       const symbol = `op${domainIndex}`;
-      for (const [name, content] of Object.entries({ [target]: `export function ${symbol}() { return 5; }`,
-        [caller]: `import { ${symbol} } from "${specifier}";\nexport function start${domainIndex}() { return ${symbol}(); }`,
+      const targetContent = (value: number) => salesforce ? `public class RuleHandler {\n @AuraEnabled\n public static Integer ${symbol}() { return ${value}; }\n}` : `export function ${symbol}() { return ${value}; }`;
+      for (const [name, content] of Object.entries({ [target]: targetContent(5),
+        [caller]: salesforce ? `import ${symbol} from "@salesforce/apex/RuleHandler.${symbol}";\nexport function start${domainIndex}() { return ${symbol}(); }` : `import { ${symbol} } from "${specifier}";\nexport function start${domainIndex}() { return ${symbol}(); }`,
+        ...(salesforce ? { "sfdx-project.json": JSON.stringify({ packageDirectories: [{ path: layout }] }) } : {}),
         "decoy.ts": 'import "@external/component";\nexport function unrelated() { return 8; }',
       })) { await fs.mkdir(dirname(join(repositoryRoot, name)), { recursive: true }); await fs.writeFile(join(repositoryRoot, name), content); }
       const index = new PersistentCodeEvidenceIndex({ repositoryRoot, wikiRoot }); await index.rebuild();
@@ -78,12 +81,12 @@ export async function evaluateFunctionalRouting(options: { live?: boolean } = {}
       }
       // Controlled negatives remain project knowledge, but cannot seed automatic
       // code evidence. Historical/ambiguous evidence is never upgraded to certainty.
-      if (layout === "flat") for (const state of ["anchorless", "superseded", "ambiguous", "contradicted", "stale"] as const) {
+      if (layout === "flat" || layout === "force-app") for (const state of ["anchorless", "superseded", "ambiguous", "contradicted", "stale"] as const) {
         await mutateEvidenceIrStore(wikiRoot, (store) => {
           const claim = store.claims[0]!; claim.status = state === "anchorless" || state === "stale" ? "active" : state;
           claim.codeAnchor = state === "anchorless" ? undefined : structuredClone(recorded.claims[0]!.codeAnchor);
         });
-        if (state === "stale") { await fs.writeFile(join(repositoryRoot, target), `export function ${symbol}() { return 99; }`); await detectCodeDrift({ repositoryRoot, wikiRoot }); }
+        if (state === "stale") { await fs.writeFile(join(repositoryRoot, target), targetContent(99)); await detectCodeDrift({ repositoryRoot, wikiRoot }); }
         const context = await compileTaskContext({ wikiRoot, intent: "modify", objective: domain.queries[0]!.text, maxEvidence: 1, heuristicTokenBudget: 6000 });
         cases.push({ id: `${domain.id}/${state}`, split: "evaluation", scenario: state, codeRoots: context.changeImpact.codeRoots ?? [],
           pass: !(context.changeImpact.codeRoots?.length), fallbackNeededByOracle: false });

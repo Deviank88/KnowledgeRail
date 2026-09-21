@@ -1,17 +1,22 @@
 /** Literal glob matching without regular-expression backtracking. Compilation is
  * shared by all names in a manifest. The general case takes O(pattern × value)
  * time and O(value) space; literal patterns need no matching buffers. */
-export function literalGlob(pattern: string, options: { pathPrefix?: boolean; questionMark?: boolean } = {}): (value: string) => boolean {
+export function literalGlob(pattern: string, options: { pathPrefix?: boolean; questionMark?: boolean; pathSegments?: boolean } = {}): (value: string) => boolean {
   const { pathPrefix = false, questionMark = false } = options;
   if (!pattern.includes("*") && !(questionMark && pattern.includes("?"))) {
     return (value) => value === pattern || (pathPrefix && (!pattern || value.startsWith(`${pattern}/`)));
   }
-  const tokens: Array<{ literal?: string; star?: boolean; question?: boolean }> = [];
-  for (const char of pattern) {
+  const tokens: Array<{ literal?: string; star?: boolean; question?: boolean; globDirectory?: boolean }> = [];
+  const patternChars = [...pattern];
+  for (let index = 0; index < patternChars.length; index++) {
+    const char = patternChars[index]!;
+    if ((options.pathSegments ?? pathPrefix) && char === "*" && patternChars[index + 1] === "*" && patternChars[index + 2] === "/" && (index === 0 || patternChars[index - 1] === "/")) {
+      tokens.push({ globDirectory: true }); index += 2; continue;
+    }
     if (char === "*") {
       const previous = tokens.at(-1);
       if (previous?.star !== undefined) previous.star = true;
-      else tokens.push({ star: !pathPrefix });
+      else tokens.push({ star: !(options.pathSegments ?? pathPrefix) });
     } else tokens.push(questionMark && char === "?" ? { question: true } : { literal: char });
   }
   return (value) => {
@@ -20,7 +25,14 @@ export function literalGlob(pattern: string, options: { pathPrefix?: boolean; qu
     previous[0] = 1;
     for (const token of tokens) {
       next.fill(0);
-      if (token.star !== undefined) {
+      if (token.globDirectory) {
+        next[0] = previous[0]!;
+        let reachable = previous[0]!;
+        for (let i = 1; i <= chars.length; i++) {
+          next[i] = previous[i]! || (chars[i - 1] === "/" && reachable ? 1 : 0);
+          reachable ||= previous[i]!;
+        }
+      } else if (token.star !== undefined) {
         next[0] = previous[0]!;
         for (let i = 1; i <= chars.length; i++) next[i] = previous[i]! || (next[i - 1]! && (token.star || chars[i - 1] !== "/") ? 1 : 0);
       } else {

@@ -279,7 +279,7 @@ for (const [language, targetPath, targetSource, sourcePath, importingSource, spe
     assert.ok(target, "the real adapter must emit the target module");
     const source = fragments.find((fragment) => fragment.path === sourcePath && fragment.kind === "module")!;
     assert.ok(source, "the real adapter must emit the importing module");
-    assert.deepEqual(source.imports, [specifier], "specifier extraction is a separate capability from resolving an edge");
+    assert.deepEqual(source.imports, language === "Rust" ? [specifier, "self::orders"] : [specifier], "specifier extraction includes declared Rust modules independently of use statements");
     const expectedSources = fragments.filter((fragment) => fragment.path === sourcePath && fragment.imports.includes(specifier));
     const runtime = new CodeQueryRuntime({ version: 2, adapters: registry.roster(), generatedAt: "fixture", files: [], fragments });
     assert.deepEqual(

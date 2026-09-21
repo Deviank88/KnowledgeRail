@@ -330,6 +330,12 @@ Migration must preserve unknown/custom canonical fields and must not silently re
 
 ## Local import references
 
+The unreleased 2.8.x extensions and measurements are recorded in
+[declared-reference extensions](declared-reference-extensions-2.8.x.md).
+The [code evidence guide](../docs/guides/code-evidence-retrieval.md) lists the current
+per-language contracts and limits; historical 2.8.0 measurements below remain
+labeled by version.
+
 Import extraction and incoming `import` relations are separate capabilities.
 Adapters now own resolution through optional `createImportResolver(context)`;
 the context exposes indexed module paths and declarations grouped by file.
@@ -359,7 +365,7 @@ Resolvers keep their array-returning contract. An optional synchronous
 of a group. Custom resolver arrays remain trusted groups. The shared runtime counts
 each source/specifier once, prioritizes ambiguity over other failures and records
 `partial` when valid group members remain. Counts by adapter language family are
-internal generation inventories, not request counts or fallback rates.
+public generation inventories, not request counts or fallback rates. Platform and declared external dependencies have separate counters; actionable failures retain reason labels.
 
 `knowledge_code references` exposes at most twelve `unresolvedImports` with four
 candidate paths each. Ambiguities sort before unresolved examples. The diagnostic
@@ -396,13 +402,12 @@ negatives, token disclosure and explicit acceptance of related-code proposals.
 Recorded aliases drive the lexical run. `eval:project-precision` includes this corpus
 alongside its unchanged original questions. The full suite now contains 18 gates.
 
-`npm run eval:public-manifests:gate` verifies unmodified manifest bytes from six public
-projects, pinned by Git commit, source URL and SHA-256. `public-project-manifests.json`
-contains the source bytes; `public-project-imports.json` provides controlled source
-overlays and independent expected edges/negatives. Three cases are development and
-three evaluation. Django, Symfony Console, ripgrep, Rack, chi and Flask cover actual
-manifest grammar, including unrelated sections and an unsupported Flit layout. These
-are not whole-project imports or private-user observations; source overlays are synthetic.
+`npm run eval:public-manifests:gate` verifies immutable manifest bytes from nine
+public projects, pinned by Git commit, source URL and SHA-256. The original six
+projects are joined by lwc-recipes, Poetry and Hatch. Source overlays and expected
+edges are controlled fixtures. Flask now verifies declared Flit roots from an
+external test script; Hatch's implicit package selection remains a negative control.
+These checks do not measure whole-project accuracy or user fallback rates.
 
 With an embedding provider configured, run the same functional and semantic probes live:
 
@@ -518,9 +523,9 @@ Adapters optionally declare `projectManifests` parsers. The shared reader discov
 manifests along indexed file ancestors once per code generation, reads at most
 256 KiB per file with 16 concurrent operations, and retains compact parsed values.
 The optional `references` hook supplies up to 32 direct local dependencies per
-manifest, parsed with the same spec. Only one level is followed. Current dependencies
+manifest, parsed with its registered adapter spec. One level is the default; explicit workspace/build graphs can opt into at most eight levels and 256 followed references. Current dependencies
 are rechecked, including missing files; edited references discover new targets and
-prune old ones. No executable config or recursive dependency graph is evaluated.
+prune old ones. No executable config is evaluated; traversal and wildcard discovery are bounded.
 Known manifest edits (including equal-sized edits with restored mtime), deletion,
 recreation and root-manifest creation are detected on reference queries. To discover
 a newly added nested manifest, rebuild or call `knowledge_code action="update"`
@@ -530,7 +535,7 @@ Malformed, oversized and unsafe manifests produce at most 12 `manifestWarnings`
 in the MCP reference response, with `manifestWarningCount` for the total. They do
 not trigger fallback to a guessed module identity. Parser data shares the existing
 32 MiB estimated admission budget; oversized generations remain queryable without
-retention. Source snapshot schema remains v2; Ruby/C/C++ syntax provenance and the
+full snapshot retention. Compact sidecar data and the manifest reader can remain within a shared 1 MiB sub-budget, with ordinal postings capped at another 16 MiB; both count against the same 32 MiB ceiling. Source snapshot schema remains v2; Ruby/C/C++ syntax provenance and the
 TS inventory fix advance their extraction versions independently of manifest parsing.
 
 Run `npm run bench:project-structure -- --iterations=30` for Go discovery,
@@ -552,7 +557,7 @@ It uses real TS extraction output in persisted 1k/10k-fragment snapshots and mea
 the complete `compileTaskContext` call, with 40 paired warm samples against the same
 document-only request. The 2,000-token case requests one source root; the 4,000-token
 case requests three. Both must actually disclose code relations and stay within the
-manifest's heuristic budget. `--gate` requires the paired p50 overhead to remain at
+manifest's heuristic budget. `--gate` requires both paired p50 and p95 overhead to remain at
 most 5 ms; it is a separate performance gate, not a change to the 15 quality gates.
 Pass `--baseline=/path/to/preserved/runtime` to check document-only context parity.
 Cold snapshot loading, retained heap, admitted cache size, root/relation counts and
@@ -687,3 +692,23 @@ and resource materialization. `warmHeapBytes` is whole-process heap including lo
 modules; it does not isolate batch allocations or prove a memory reduction when
 comparing dynamically imported runtimes. See the sixth tranche in
 `knowledge-routing-2.8.0.md` for the final measurements.
+
+
+### Additional read-only observations
+
+`workspace-selection-eval.ts --wiki=/path/to/wiki --fixture=/path/to/oracles.json`
+freezes original pages in a temporary directory. The default fixture requires
+active claims; a fixture for authored legacy pages can specify
+`evidenceFormat: "authored-pages"`, with exact `supportingText` fixed before query
+execution. This verifies retention, not answer quality. Three profiles and two
+budgets are repeated measurements, not independent questions.
+
+`real-code-references-eval.ts --repository=/path/to/project --oracle=/path/to/edges.json
+--baseline=/path/to/preserved/runtime --json=/tmp/report.json` reads the full source
+inventory and writes indexes only to temporary wikis. Oracles contain `id`, `source`,
+`target` and `relation` (`import` or `reference`). The aggregate report excludes
+source names; it measures selected positive edge recall, timings, cache admission
+and inventory causes. It does not estimate whole-project precision or user fallback.
+
+The manifest benchmark now accepts `--language=salesforce`, `python` and `rust`
+in addition to the original languages, with dense and sparse directory layouts.

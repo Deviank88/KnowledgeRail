@@ -120,7 +120,7 @@ test("Rust resolves crate, self, super, groups and inline modules within their c
     "other/src/orders/mod.rs": "pub fn place() {}",
     "src/negative.rs": "use super::super::orders::place;\nuse external::orders::place;",
   });
-  assert.deepEqual(fixture.incoming("src/orders.rs"), ["src/feature/mod.rs", "src/feature/nested.rs"]);
+  assert.deepEqual(fixture.incoming("src/orders.rs"), ["src/feature/mod.rs", "src/feature/nested.rs", "src/lib.rs"]);
   assert.deepEqual(fixture.incoming("src/lib.rs"), ["src/feature/nested.rs"]);
   assert.deepEqual(fixture.incoming("src/feature/nested/child.rs"), ["src/feature/nested.rs"]);
   assert.deepEqual(fixture.incoming("other/src/orders/mod.rs"), ["other/src/lib.rs"]);

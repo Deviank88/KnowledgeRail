@@ -76,6 +76,7 @@ try {
       const retainedHeapBytes = process.memoryUsage().heapUsed - heapBefore;
       const overheadStats = stats(overhead);
       if (gate) assert.ok(overheadStats.p50Ms <= 5, `Code expansion p50 overhead exceeds 5 ms: ${overheadStats.p50Ms}`);
+      if (gate) assert.ok(overheadStats.p95Ms <= 5, `Code expansion p95 overhead exceeds 5 ms: ${overheadStats.p95Ms}`);
       results.push({ fragments: fragments.length, files: files.length, tokenBudget, coldMs,
         documentOnly: stats(docSamples), withCode: stats(codeSamples), pairedOverhead: overheadStats, retainedHeapBytes,
         codeRoots: code.changeImpact.codeRoots!.length, codeRelations: code.changeImpact.codeRelations!.length,

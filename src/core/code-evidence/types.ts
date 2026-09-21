@@ -1,16 +1,16 @@
 export const CODE_EVIDENCE_INDEX_VERSION = 2 as const;
-export const TYPESCRIPT_ADAPTER_VERSION = "typescript-javascript-deterministic-v5";
+export const TYPESCRIPT_ADAPTER_VERSION = "typescript-javascript-deterministic-v6";
 export const JAVA_ADAPTER_VERSION = "java-deterministic-v2";
-export const APEX_ADAPTER_VERSION = "apex-deterministic-v1";
+export const APEX_ADAPTER_VERSION = "apex-deterministic-v2";
 export const CSHARP_ADAPTER_VERSION = "csharp-deterministic-v2";
 export const GO_ADAPTER_VERSION = "go-deterministic-v1";
-export const RUST_ADAPTER_VERSION = "rust-deterministic-v1";
+export const RUST_ADAPTER_VERSION = "rust-deterministic-v2";
 export const PHP_ADAPTER_VERSION = "php-deterministic-v2";
 export const C_ADAPTER_VERSION = "c-deterministic-v3";
 export const CPP_ADAPTER_VERSION = "cpp-deterministic-v3";
 export const PYTHON_ADAPTER_VERSION = "python-deterministic-v1";
 export const KOTLIN_ADAPTER_VERSION = "kotlin-deterministic-v2";
-export const SFMETA_ADAPTER_VERSION = "sfmeta-deterministic-v1";
+export const SFMETA_ADAPTER_VERSION = "sfmeta-deterministic-v2";
 export const RUBY_ADAPTER_VERSION = "ruby-deterministic-v2";
 
 export type CodeFragmentKind =
@@ -60,7 +60,16 @@ export interface KnowledgeFragment {
   imports: string[];
   /** Optional syntax provenance on file modules; raw imports remain compatible. */
   importStatements?: Array<{ specifier: string; kind: "require" | "require_relative" | "quote" | "angle" | "import" | "static" }>;
+  /** Syntax observed by the extractor but deliberately not evaluated. File modules only. */
+  unsupportedImports?: string[];
+  /** Literal module declarations used by the Rust resolver, never evaluated cfg. */
+  moduleDeclarations?: Array<{ name: string; path?: string; conditional?: boolean; unsupported?: boolean }>;
+  reexports?: Array<{ name: string; target: string }>;
+  /** Derived from an independently refreshed metadata sidecar. */
+  deploymentStatus?: "Active" | "Inactive" | "Deleted";
   references: string[];
+  /** Literal declarations requiring adapter-owned, boundary-aware resolution. */
+  declaredReferences?: string[];
   calls: string[];
   routes: CodeRoute[];
   configKeys: string[];
@@ -75,18 +84,27 @@ export interface KnowledgeAdapter {
   extract(source: CodeSource): Promise<KnowledgeFragment[]>;
   /** Build disposable language-specific lookup structures once per query generation. */
   createImportResolver?(context: CodeImportContext): CodeImportResolver;
+  createReferenceResolver?(context: CodeImportContext): CodeImportResolver;
   /** Declarative manifests needed by this adapter; read as bounded text, never executed. */
   readonly projectManifests?: readonly ProjectManifestSpec[];
+  enrichSourceMetadata?(fragments: readonly KnowledgeFragment[], structure: ProjectStructure): KnowledgeFragment[];
 }
 
 export interface ProjectManifestSpec {
   /** Literal filename or a bounded leading-star suffix, e.g. *.gemspec. */
   readonly fileName: string;
+  /** Sidecar attached to an indexed source, refreshed on explicit source generation changes. */
+  readonly companion?: { extensions: readonly string[]; suffix: string };
   /** Return compact parsed data. Throw for unsupported or malformed declarations. */
   parse(content: string, context?: { repositoryRoot: string; manifestPath: string }): unknown;
-  /** Optional direct dependencies, parsed with this spec. Repository-relative
-   * paths only; the shared reader follows one level, never a recursive graph. */
+  /** Optional direct dependencies. Repository-relative paths only; the shared
+   * reader follows one level unless referenceDepth explicitly opts into more. */
   references?(value: unknown, manifestPath: string): readonly string[];
+  /** Explicit local wildcard references, discovered once per manifest content generation. */
+  referencePatterns?(value: unknown, manifestPath: string): readonly string[];
+  /** Optional bounded traversal for declared workspace/build graphs (default one level). */
+  readonly referenceDepth?: number;
+  referenceNotices?(value: unknown, manifestPath: string, manifests: ReadonlyMap<string, ProjectManifest>): readonly string[];
   /** Nonfatal diagnostics for unsupported independent declarations. */
   notices?(value: unknown): readonly string[];
 }
@@ -115,11 +133,15 @@ export interface CodeImportContext {
   readonly reportIssue?: (issue: CodeImportIssue) => void;
 }
 
+export type CodeImportReason = "multiple_matches" | "competing_patterns" | "not_indexed_or_unsupported" | "legacy_suffix_heuristic"
+  | "external_dependency" | "platform" | "unsupported_syntax" | "not_indexed" | "cfg_conditional";
+export type CodeImportDisposition = "platform" | "external_dependency";
+
 export interface CodeImportIssue {
   status: "ambiguous" | "unresolved";
   matchedName: string;
   candidates?: ReadonlySet<string> | readonly string[];
-  reason?: "multiple_matches" | "competing_patterns" | "not_indexed_or_unsupported" | "legacy_suffix_heuristic";
+  reason?: CodeImportReason;
 }
 export interface UnresolvedCodeImport {
   sourcePath: string;
@@ -136,6 +158,9 @@ export interface CodeImportDiagnostics {
   unresolvedImportsTruncated: boolean;
   /** These are sampled across the generation, not attributed to the queried target. */
   unresolvedImportsScope: "indexed_snapshot";
+  /** Inventory counts, once per source/specifier. Never a request or fallback denominator. */
+  importResolutionCounts?: Record<string, CodeImportResolutionCounts>;
+  importReasonsByLanguage?: Record<string, Partial<Record<CodeImportReason, number>>>;
 }
 export interface CodeImportResolutionCounts {
   resolved: number;
@@ -143,6 +168,8 @@ export interface CodeImportResolutionCounts {
   unresolved: number;
   /** Retained candidates in an incomplete group or an unverified legacy match. */
   partial: number;
+  platform?: number;
+  external_dependency?: number;
 }
 
 export interface CodeImpactTarget { path: string; fragmentId?: string }

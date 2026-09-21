@@ -4,12 +4,14 @@ import { nearestProjectManifest } from "../project-structure.js";
 import { createDeclarationImportResolver } from "./declarations.js";
 import { localPath } from "./paths.js";
 import { literalGlob } from "../literal-glob.js";
+import { dependencyNames } from "./classification.js";
 
 interface ComposerConfig {
   prefixes: Array<{ prefix: string; directories: string[]; psr0?: boolean }>;
   classmap: string[];
   files?: string[];
   excluded: string[];
+  dependencies: string[];
 }
 
 function paths(value: unknown, exclusions = false): string[] {
@@ -49,7 +51,7 @@ export const COMPOSER_MANIFEST: ProjectManifestSpec = { fileName: "composer.json
     }
     }
   }
-  return { prefixes, classmap, files, excluded } satisfies ComposerConfig;
+  return { prefixes, classmap, files, excluded, dependencies: dependencyNames((root as Record<string, unknown>).require) } satisfies ComposerConfig;
 } };
 
 export function createPhpImportResolver(context: CodeImportContext): CodeImportResolver {

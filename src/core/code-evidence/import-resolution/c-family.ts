@@ -16,12 +16,33 @@ export function createCImportResolver(context: CodeImportContext): CodeImportRes
     } else {
       const cmake = context.structure && nearestProjectManifest(context.structure, source, "CMakeLists.txt");
       if (cmake && !cmake.warning) {
-        const config = cmake.value as CmakeConfig, base = posix.dirname(cmake.path);
-        const targets = config.targets.filter((target) => target.files.some((file) => localPath(base, file) === source));
+        const lineage = [cmake];
+        let child = cmake;
+        while (posix.dirname(child.path) !== ".") {
+          const parent = nearestProjectManifest(context.structure!, child.path, "CMakeLists.txt");
+          // Start above the current directory; the nearest lookup includes self.
+          const upper = nearestProjectManifest(context.structure!, posix.dirname(child.path), "CMakeLists.txt");
+          if (!upper || upper === parent || upper.warning || !upper.references?.includes(child.path)) break;
+          lineage.unshift(upper); child = upper;
+        }
+        const root = posix.dirname(lineage[0]!.path);
+        const declaredPath = (base: string, value: string) => {
+          const prefix = /^\$\{(?:PROJECT_SOURCE_DIR|CMAKE_SOURCE_DIR)\}\/?/u.exec(value);
+          return prefix ? localPath(root, value.slice(prefix[0].length)) : localPath(base, value);
+        };
+        const roots = new Set<string>();
+        for (const manifest of lineage) {
+          const config = manifest.value as CmakeConfig, base = posix.dirname(manifest.path);
+          if (config.blockedGlobal) { groups = []; configurations.set(source, groups); return groups; }
+          const targets = config.targets.filter((target) => target.files.some((file) => declaredPath(base, file) === source));
+          if (targets.some((target) => target.blocked)) { groups = []; configurations.set(source, groups); return groups; }
+          for (const directory of [...config.directories, ...targets.flatMap((target) => target.directories)]) {
+            const path = declaredPath(base, directory); if (path) roots.add(path);
+          }
+        }
         // Each declared CMake root is a candidate; competing headers remain
         // ambiguous when the build tool's complete ordering is not modeled.
-        groups = [...new Set([...config.directories, ...targets.flatMap((target) => target.directories)])]
-          .flatMap((directory) => { const path = localPath(base, directory); return path ? [[path]] : []; });
+        groups = [...roots].map((path) => [path]);
       }
     }
     configurations.set(source, groups); return groups;

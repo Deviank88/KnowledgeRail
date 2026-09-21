@@ -4,6 +4,7 @@ import { constants, type BigIntStats } from "node:fs";
 import { posix, relative, isAbsolute, resolve } from "node:path";
 import { mapConcurrent } from "../concurrent-map.js";
 import { safeResolveWithin } from "../paths.js";
+import { discoverManifestPatterns } from "./manifest-discovery.js";
 import type { KnowledgeAdapterRegistry } from "./adapter-registry.js";
 import type { ProjectManifest, ProjectManifestSpec, ProjectStructure } from "./types.js";
 
@@ -22,14 +23,21 @@ function stamp(stat: BigIntStats): string {
 }
 
 /** Ancestors come from indexed paths, never a conventional source-root name. */
-function candidatesFor(paths: Iterable<string>, registry: KnowledgeAdapterRegistry): Candidate[] {
+function candidatesFor(paths: Iterable<string>, registry: KnowledgeAdapterRegistry, companions: boolean): Candidate[] {
   const candidates = new Map<string, ProjectManifestSpec>();
   const registrations = registry.registrations.filter(({ adapter }) => adapter.projectManifests?.length);
   for (const path of paths) {
     const specs = registrations.find(({ adapter, extensionClaims }) =>
       extensionClaims.some((claim) => path.toLowerCase().endsWith(claim)) && adapter.supports({ path })
-    )?.adapter.projectManifests;
+    )?.adapter.projectManifests?.filter((spec) => Boolean(spec.companion) === companions);
     if (!specs?.length) continue;
+    if (companions) {
+      for (const spec of specs) if (spec.companion!.extensions.some((extension) => path.toLowerCase().endsWith(extension))) {
+        if (!/^[A-Za-z0-9._-]+$/u.test(spec.companion!.suffix)) throw new Error("Invalid companion suffix.");
+        candidates.set(path + spec.companion!.suffix, spec);
+      }
+      continue;
+    }
     let directory = posix.dirname(path);
     while (true) {
       for (const spec of specs) {
@@ -61,12 +69,14 @@ export class ProjectStructureReader {
   private current?: ProjectStructure;
   private pending?: Promise<ProjectStructure>;
   private patterns: Candidate[];
+  private readonly manifestSpecs: readonly ProjectManifestSpec[];
   /** Conservative admission estimate; not a V8 heap measurement. */
   estimatedBytes = 0;
 
-  constructor(repositoryRoot: string, paths: Iterable<string>, registry: KnowledgeAdapterRegistry) {
+  constructor(repositoryRoot: string, paths: Iterable<string>, registry: KnowledgeAdapterRegistry, companions = false) {
     this.repositoryRoot = resolve(repositoryRoot);
-    this.candidates = candidatesFor(paths, registry);
+    this.manifestSpecs = registry.registrations.flatMap(({ adapter }) => adapter.projectManifests ?? []).filter((spec) => !spec.companion);
+    this.candidates = candidatesFor(paths, registry, companions);
     this.patterns = this.candidates.filter(({ spec }) => spec.fileName.startsWith("*"));
     this.candidates = this.candidates.filter(({ spec }) => !spec.fileName.startsWith("*"));
   }
@@ -120,7 +130,9 @@ export class ProjectStructureReader {
         const value = spec.parse(bytes.toString("utf8"), { repositoryRoot: this.repositoryRoot, manifestPath: path });
         const notices = spec.notices?.(value);
         if (notices && (notices.length > 12 || notices.some((reason) => typeof reason !== "string" || reason.length > 256))) throw new Error("Invalid manifest notices.");
-        const references = spec.references?.(value, path);
+        const patterns = spec.referencePatterns?.(value, path);
+        const references = [...(spec.references?.(value, path) ?? []),
+          ...(patterns?.length ? await discoverManifestPatterns(this.repositoryRoot, patterns) : [])];
         if (references) {
           if (references.length > 32) throw new Error("Too many direct manifest references.");
           for (const reference of references) {
@@ -188,7 +200,7 @@ export class ProjectStructureReader {
     this.candidates.forEach((candidate, index) => {
       for (const path of records[index]!.manifest?.references ?? []) {
         const known = nextRecords.get(path);
-        if (!known) dependencies.set(path, { path, spec: candidate.spec });
+        if (!known) dependencies.set(path, { path, spec: this.manifestSpecs.find((spec) => (spec.fileName === posix.basename(path) || spec.fileName.startsWith("*") && posix.basename(path).endsWith(spec.fileName.slice(1)))) ?? candidate.spec });
         else if (!known.manifest) nextRecords.set(path, {
           ...known, manifest: { path, fileName: candidate.spec.fileName, warning: "missing_manifest" },
         });
@@ -202,6 +214,46 @@ export class ProjectStructureReader {
         ...record, manifest: { path: candidate.path, fileName: candidate.spec.fileName, warning: "missing_manifest" },
       });
     });
+    // Most adapters deliberately keep one reference level. Workspace/build
+    // declarations opt into a bounded graph; source option inheritance still
+    // has its own stricter language contract.
+    const visited = new Set<string>();
+    let frontier = [...this.candidates, ...dependencyCandidates].filter(({ spec }) => (spec.referenceDepth ?? 1) > 1);
+    let followed = dependencyCandidates.length;
+    for (let depth = 1; frontier.length && depth < 8; depth++) {
+      const next = new Map<string, Candidate>();
+      for (const candidate of frontier) {
+        if (visited.has(candidate.path)) continue;
+        visited.add(candidate.path);
+        const record = nextRecords.get(candidate.path);
+        if (depth >= (candidate.spec.referenceDepth ?? 1)) {
+          if (record?.manifest?.references?.some((path) => !nextRecords.has(path))) nextRecords.set(candidate.path, {
+            ...record, manifest: { ...record.manifest, warning: "manifest_reference_depth" },
+          });
+          continue;
+        }
+        for (const path of record?.manifest?.references ?? []) {
+          if (visited.has(path)) continue;
+          const spec = this.manifestSpecs.find((entry) => (entry.fileName === posix.basename(path) || entry.fileName.startsWith("*") && posix.basename(path).endsWith(entry.fileName.slice(1)))) ?? candidate.spec;
+          next.set(path, { path, spec });
+        }
+      }
+      const missing = [...next.values()].filter(({ path }) => !nextRecords.has(path));
+      if ((followed += missing.length) > 256) {
+        for (const candidate of frontier) {
+          const record = nextRecords.get(candidate.path);
+          if (record?.manifest) nextRecords.set(candidate.path, { ...record, manifest: { ...record.manifest, warning: "manifest_discovery_limit" } });
+        }
+        break;
+      }
+      const loaded = await mapConcurrent(missing, MANIFEST_READ_CONCURRENCY, (candidate) => this.read(candidate, rootReal));
+      missing.forEach((candidate, index) => {
+        const record = loaded[index]!;
+        nextRecords.set(candidate.path, record.manifest ? record : { ...record,
+          manifest: { path: candidate.path, fileName: candidate.spec.fileName, warning: "missing_manifest" } });
+      });
+      frontier = [...next.values()];
+    }
     this.candidates = tracked;
     this.records = nextRecords;
     for (const { candidate, warning } of discovered) if (warning) nextRecords.set(candidate.path, {
@@ -219,14 +271,19 @@ export class ProjectStructureReader {
     if (this.current?.identity === identity) return this.current;
     const manifests = new Map<string, ProjectManifest>();
     const warnings: Array<{ path: string; reason: string }> = [];
+    const referenceManifests = new Map([...nextRecords].flatMap(([path, record]) => record.manifest ? [[path, record.manifest] as const] : []));
     for (const [, record] of orderedRecords) if (record.manifest) {
       let manifest = record.manifest;
-      if (!manifest.warning && manifest.references?.some((path) => nextRecords.get(path)?.manifest?.references?.length)) {
+      const spec = this.manifestSpecs.find((entry) => entry.fileName === manifest.fileName);
+      if (!manifest.warning && (spec?.referenceDepth ?? 1) === 1 && manifest.references?.some((path) => nextRecords.get(path)?.manifest?.references?.length)) {
         manifest = { ...manifest, warning: "manifest_reference_depth" };
       }
       manifests.set(manifest.path, manifest);
       if (manifest.warning) warnings.push({ path: manifest.path, reason: manifest.warning });
       for (const reason of manifest.notices ?? []) warnings.push({ path: manifest.path, reason });
+      if (!manifest.warning) for (const reason of spec?.referenceNotices?.(manifest.value, manifest.path, referenceManifests) ?? []) {
+        warnings.push({ path: manifest.path, reason });
+      }
     }
     return this.current = { identity, manifests, warnings };
   }

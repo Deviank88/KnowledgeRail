@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Extend declared references across Salesforce, Poetry/Hatch/Flit/PDM, Rust module attributes and re-exports, JS/TS projects and local package exports, and literal CMake/Go/JVM/C#/Ruby build declarations. Reuse bounded manifest readers, XML/TOML projections, glob matching and generation-local indexes without adding dependencies.
+- Expose import inventory causes separately from request/fallback telemetry: platform modules, declared dependencies, verified unindexed paths and unsupported syntax. Keep actionable examples bounded and preserve ambiguous candidates.
+- Add Salesforce functional routing, immutable public manifests, declaration regressions and read-only probes for real code and overview/detail wiki selection.
+
+### Fixed
+
+- Treat Apex trigger headers as declared object references instead of calls, preserving SOQL evidence. Exclude enclosing class inventories from callers of their own methods; retain actual sibling callers.
+- Refresh Apex deployment status through generation-bound sidecar metadata, including bounded reuse when a source snapshot exceeds cache admission. Keep inactive/deleted evidence searchable.
+
+
 ## [2.8.0] - 2026-09-07
 
 ### Fixed

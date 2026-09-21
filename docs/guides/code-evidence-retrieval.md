@@ -70,7 +70,7 @@ a rule cannot resolve the edge.
 Reference responses expose `unresolvedImports` when the indexed snapshot contains
 recognized ambiguity or unresolved imports. Each example includes the source path,
 specifier, matched name, status, reason and candidate paths. At most twelve examples
-are retained, with ambiguity first and four candidates per example. Strings longer
+are retained, with ambiguity first, then actionable `not_indexed`/`unsupported_syntax` cases, and four candidates per example. Strings longer
 than 256 UTF-16 code units are abbreviated and marked `textTruncated`; use the
 indexed source for complete text. `unresolvedImportsTruncated` also reports omitted
 examples or candidates.
@@ -83,8 +83,15 @@ An ambiguous singular name contributes no import edge. An explicit namespace or
 package can legitimately contain multiple files; valid members of partially
 resolved PHP/Rust groups remain available while failed members get diagnostics.
 Custom resolver arrays remain trusted declarations, with an optional issue-reporting
-callback. Inventory counts by adapter language family stay internal and are not
-request or fallback rates. Task context carries a compact warning for incomplete
+callback. `importResolutionCounts` and `importReasonsByLanguage` expose generation inventory
+by adapter family; they are not request or fallback rates. `platform` and
+`external_dependency` do not fill the unresolved sample or unresolved counter.
+Dependency classification uses only declared names, with no distribution-to-module
+or Composer-package-to-namespace guessing. `not_indexed` requires an existing,
+repository-confined relative literal with an explicit extension, absent from the
+source inventory. At most 4,096 distinct paths are probed once per source generation;
+other missing imports retain `not_indexed_or_unsupported`. JS dynamic import/require
+expressions are inventoried as `unsupported_syntax` without evaluating them. Task context carries a compact warning for incomplete
 resolution, without turning ambiguity into a missing-index GAP.
 
 Lexical display selection is still under observation. A higher-ranked page of the
@@ -99,8 +106,10 @@ traceability, explicit artifact chains and diversity/contradiction requests reta
 their existing selection. The full candidate pool remains available for GAP assessment.
 Deterministic regressions cover overview/detail ranking in all three profiles,
 including five-of-six and half-coverage cases. The local workspace check retains
-all expected pages, but they already rank first; broader real-project validation
-remains needed. See the
+all expected pages. An additional read-only check on one authentic overview/detail
+wiki retained all expected pages across 120 runs (20 analyst-authored questions,
+three profiles, two budgets); 86 runs had the target below first rank. This does
+not close the requirement for real questions across three authentic workspaces. See the
 [workspace probe](../../benchmarks/README.md#workspace-specific-page-retention).
 
 For Go projects, module identities come from discovered `go.mod` files. References
@@ -117,8 +126,15 @@ JS/TS uses declared `paths` and `baseUrl` from the nearest `tsconfig.json` or
 level. Known configs and their current base files refresh on reference queries;
 new nested configs need `update` on their path or a rebuild. Missing, invalid or
 unsupported bases produce manifest diagnostics. `rootDir` is not an import alias.
-Project references, include/exclude ownership and package/bundler resolution remain
-outside this bounded resolver; inspect those declarations when an edge is missing.
+Local `references`, literal `include`/`exclude`/`files`, and one-level inherited
+membership choose the owning config; overlapping explicit projects stay ambiguous.
+`package.json` supports local `exports` and `imports` (`#alias`), single-star
+patterns, and ordered `import`/`require`/`default` conditions. npm/yarn `workspaces`
+and literal pnpm `packages` lists supply local package identities. Duplicate package
+names stay ambiguous; unexported subpaths remain private. Arrays, external alias
+targets, custom conditions and bundler aliases are not resolved. Config ownership
+is selected among discovered ancestor-directory configs; configs outside that chain
+cannot claim arbitrary external source trees.
 
 Python reads setuptools `package-dir`, explicit `packages`/`py-modules` and literal
 package discovery roots/patterns from `pyproject.toml` or `setup.cfg`. Named directory
@@ -129,12 +145,17 @@ and a regular package supplies its verified root. Repository-wide `PYTHONPATH`,
 implicit namespace packages, dynamic imports and build-backend execution are not
 inferred. Tests outside a package need declared roots to import that package.
 
-Only setuptools layout declarations are currently read. Poetry, Hatch, Flit and PDM
-layouts are not interpreted. In those projects, the verified package/script rules
-still work, but a script under `scripts/` or tests under `tests/` cannot automatically
-import a repository-root module or a separate source tree. Those absolute imports
-remain unresolved unless a supported declaration provides their roots. This is a
-known recall limit; a pyproject file alone does not establish an import path.
+Poetry supports literal `packages = [{include="pkg", from="src"}]`, or the
+project-named regular package beside the manifest. Hatch supports wheel `packages`
+and literal `sources` lists/mappings; its implicit package selection is not guessed.
+Flit supports its module/project name, flat and `src/` regular packages and single
+modules. PDM supports `package-dir` and literal `includes`. Backend identity comes
+from `build-backend` or a unique relevant tool table. Conflicting tables produce a
+warning and no declared roots, while intra-package relative imports keep their
+verified package boundary. Tests/scripts outside packages can now reach these
+explicit layouts; implicit namespaces and runtime `sys.path` remain unsupported.
+The pinned Hatch project deliberately verifies the undeclared-layout limit, while
+the deterministic fixtures cover explicit Hatch layouts.
 
 Composer reads PSR-4, PSR-0, classmap, files and literal exclusions from `autoload`
 and `autoload-dev`, including string or array PSR directories. It
@@ -148,18 +169,25 @@ backtracking. Composer scripts and installed packages are not executed or loaded
 Java and Kotlin share declared classes and functions across source roots and both
 languages; Java static imports identify the owning class. Duplicate names or overloads
 in competing Gradle modules remain ambiguous. Gradle dependency declarations are not
-used to guess which duplicate is active. C# composes nested and file-scoped namespaces
+used to guess which duplicate is active. Literal Gradle settings and Maven modules
+identify build boundaries; Maven reactor members share declarations, independent
+nested builds remain separate. Conditional includes, profiles and custom Gradle
+project directories are not evaluated. C# composes nested and file-scoped namespaces
 and joins compatible partial types within the same discovered `.csproj` boundary.
 Multiple project files in one directory are ambiguous. Without project declarations,
-the repository remains one unspecified boundary; MSBuild and Compile items are not evaluated.
+the repository remains one unspecified boundary. `Directory.Build.props` supplies
+a shared boundary, and literal `Compile Remove` patterns exclude members. If the
+file contains `Condition`, its remove rules are skipped with a notice; no MSBuild
+condition or imported build script is executed.
 
-Cargo reads package identities, custom `[lib].path`/`[[bin]].path` and
-one level of literal workspace members. It preserves crate boundaries; workspace
-membership alone does not declare an external-crate dependency. Wildcard members,
-dependency resolution, cfg, path attributes and re-exports remain unsupported.
-Unsupported workspace member globs and invalid member declarations produce nonfatal
-manifest warnings. They do not discard valid targets of the root package; valid
-literal members remain usable up to the existing 32-reference limit.
+Cargo reads package identities, custom `[lib].path`/`[[bin]].path`, literal workspace
+members and bounded simple globs such as `crates/*`. Rust file-level `mod` declarations
+produce edges, literal `#[path]` replaces conventional targets, and `cfg` alternatives
+remain candidates with `cfg_conditional` diagnostics. Unsupported `cfg_attr`/path
+expressions do not fall through to a guessed file. Unique one-level `pub use` can
+reach the defining module; chains and macro expansion remain unsupported. Declared
+Cargo dependencies are classified separately and are never resolved from installed
+crates. Invalid independent workspace/dependency declarations retain valid root targets.
 
 The shared minimal TOML parser supports tables, quoted/dotted keys, strings, arrays,
 inline tables and scalar values used by these manifests. Python and Cargo select
@@ -167,8 +195,12 @@ only relevant declaration fields; unrelated tool options and date literals are
 skipped without retaining their values. Selected malformed roots still yield
 `invalid_manifest`. Unterminated strings/containers or malformed table boundaries
 can prevent trustworthy section discovery and still invalidate the read. The reader
-is not a validator for unrelated configuration. All manifest readers retain the existing 256 KiB/file, one-level
-dependency, confinement, freshness and workspace admission limits. These are bounded
+is not a validator for unrelated configuration. Manifest readers retain 256 KiB/file
+and 32 direct references. Selected workspace/build graphs opt into at most eight
+levels and 256 followed references. Wildcard enumeration has limits of 32 patterns,
+32 results, 16 path segments and 16,384 directory entries; recursive `**` manifest
+discovery is unsupported. Confinement, freshness and the 32 MiB project query-cache
+admission budget remain enforced. These are bounded
 declaration readers, not validators for every build tool's grammar.
 
 Ruby `require_relative` resolves the literal path from the importing file, including
@@ -177,7 +209,10 @@ The nearest unambiguous gemspec supplies literal, ordered `require_paths`. A dec
 `Gem::Specification` without require_paths access supplies RubyGems' default `lib`;
 dynamic/conditional assignments and mutations produce notices instead of guessed roots.
 `require_relative` remains usable independently of gemspec errors. External gems are
-not resolved. The reader discovers `*.gemspec` and `*.csproj` in indexed ancestors
+not resolved. Literal `Gemfile` path gems add only their declared gemspec load paths.
+Go also supports literal `go.work use` and local `replace`, respecting nested module
+identity; competing replacements stay ambiguous. Vendor/build tags remain outside
+the contract. The reader discovers `*.gemspec` and `*.csproj` in indexed ancestors
 with bounded directory enumeration; new nested boundaries require index update.
 
 C/C++ quoted includes first check the including directory, then literal include
@@ -190,16 +225,33 @@ directories must be made discoverable at indexed ancestors/root. Angle includes,
 macros, response files, dynamic CMake expressions and external paths remain unsupported.
 No implementation twin is invented.
 
-CMake support is a literal starting point with a substantial recall limit. A single
-unsupported relevant declaration discards **all CMake-derived directories and targets
-from that file**, including otherwise valid unconditional ones. For example, a
-`target_include_directories` inside `if()` or a path using an unmodeled variable
-produces a notice and disables those roots. The reader cannot prove that an unknown
-root would not shadow a known header. Source-relative quoted includes still work;
-an unrelated `if()` without a recognized declaration does not itself trigger this rule.
-Projects using conditional build logic, generated paths or additional variables
-should expect CMake-derived imports to remain unresolved. No measured percentage
-of real CMake projects is supported by the current corpus.
+CMake supports single-level literal `set`, `${PROJECT_SOURCE_DIR}` and
+`${CMAKE_SOURCE_DIR}` relative to the outer linked manifest, and literal
+`add_subdirectory`. Unsupported declarations discard the affected target, while
+independent literal targets survive. An unknown global include root blocks the
+scope because it could shadow known headers; this is explicitly diagnosed.
+Source-relative quoted includes remain available. No percentage of all real CMake
+projects is claimed by the controlled corpus.
+
+Salesforce reads `sfdx-project.json` package directories and nested project boundaries.
+`@salesforce/label/c.Name`, `resourceUrl/Name` and `messageChannel/Name__c` resolve only
+to indexed entity metadata. Duplicate bundles remain ambiguous across package
+directories. Namespaced labels without a modeled declaration remain unresolved.
+The platform module families (`lwc`, `lightning/*`, `@lwc/*`, `@wire`, bare
+`@salesforce/apex`, and supported Salesforce user/client/i18n/community/site/permission
+and content-asset families) never create invented local files.
+
+Trigger headers create declared object references. Literal `controller`/`extensions`
+attributes in Visualforce and `controller` in Aura reach Apex classes. Dynamic
+expressions and LWC HTML templates remain unsupported. Apex `.cls-meta.xml` and
+`.trigger-meta.xml` supply `Active`/`Inactive`/`Deleted` status on explicit index
+updates; they remain outside the source roster and telemetry reports them as
+unsupported source extensions. Up to 1 MiB of compact sidecar data and manifest-reader state can survive an
+oversized uncached snapshot. Ordinal reference postings can also be retained under
+a separate 16 MiB cap, without retaining fragment objects. Both count against the
+unchanged 32 MiB project ceiling. Source generations invalidate both; manifest edits
+invalidate postings. This avoids repeated sidecar discovery and resolver construction
+when the full snapshot cannot be admitted. Status never removes evidence.
 
 The public `imports` array retains raw specifiers; optional `importStatements` on
 file modules preserve these syntax distinctions. Mixed resolved/unresolved forms

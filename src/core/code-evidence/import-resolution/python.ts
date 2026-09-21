@@ -11,7 +11,8 @@ export function createPythonImportResolver(context: CodeImportContext): CodeImpo
     if (!match || !specifier) return [];
     const level = match[1]!.length;
     const manifest = pythonManifest(context, source);
-    if (manifest) {
+    const packageBoundaryOnly = manifest && !manifest.warning && (manifest.value as { notices?: string[] }).notices?.includes("conflicting_python_backends");
+    if (manifest && !packageBoundaryOnly) {
       let names = declared.get(manifest.path);
       if (!names) { names = pythonDeclaredNames(context, manifest); declared.set(manifest.path, names); }
       let logical = match[2] ?? "";
@@ -33,6 +34,7 @@ export function createPythonImportResolver(context: CodeImportContext): CodeImpo
       packageDepth++;
       packageRoot = posix.dirname(packageRoot);
     }
+    if (packageBoundaryOnly && (!packageDepth || (!level && modulePath.split("/")[0] !== posix.relative(packageRoot, source).split("/")[0]))) return [];
     // A regular-package chain supplies its root. A script outside a package
     // supplies only its own directory, never the repository or a guessed src/.
     let bases = [packageDepth ? packageRoot : directory];

@@ -1,9 +1,67 @@
 {
-  "version": 1,
+  "version": 2,
   "provenance": "Hand-labeled domain stories. Aliases are recorded evidence; source identifiers and directory names are deliberately unrelated to task vocabulary. Development and evaluation questions are separate. This is a controlled corpus, not a production-provider accuracy claim.",
   "domains": [
-    { "id": "credit", "title": "Storni commerciali", "claim": "Gli storni commerciali hanno un tetto di cinque unità. Rimborso, nota di credito, commercial reversal, refund limit and credit cap denote this same rule.", "queries": [{ "split": "development", "text": "Modificare il tetto degli storni commerciali" }, { "split": "evaluation", "text": "Change the refund limit" }] },
-    { "id": "booking", "title": "Annullamento prenotazioni", "claim": "Annullare una prenotazione libera il posto soltanto prima della partenza. Disdetta, revoca, booking cancellation and release a reserved seat identify this rule.", "queries": [{ "split": "development", "text": "Modificare la disdetta delle prenotazioni" }, { "split": "evaluation", "text": "Change booking cancellation before departure" }] },
-    { "id": "archive", "title": "Conservazione pratiche", "claim": "Le pratiche chiuse vengono conservate per trenta giorni. Archivio, rimozione, closed case retention and purge archived records identify this retention rule.", "queries": [{ "split": "development", "text": "Modificare la conservazione delle pratiche chiuse" }, { "split": "evaluation", "text": "Change closed case retention" }] }
+    {
+      "id": "credit",
+      "title": "Storni commerciali",
+      "claim": "Gli storni commerciali hanno un tetto di cinque unità. Rimborso, nota di credito, commercial reversal, refund limit and credit cap denote this same rule.",
+      "queries": [
+        {
+          "split": "development",
+          "text": "Modificare il tetto degli storni commerciali"
+        },
+        {
+          "split": "evaluation",
+          "text": "Change the refund limit"
+        }
+      ]
+    },
+    {
+      "id": "booking",
+      "title": "Annullamento prenotazioni",
+      "claim": "Annullare una prenotazione libera il posto soltanto prima della partenza. Disdetta, revoca, booking cancellation and release a reserved seat identify this rule.",
+      "queries": [
+        {
+          "split": "development",
+          "text": "Modificare la disdetta delle prenotazioni"
+        },
+        {
+          "split": "evaluation",
+          "text": "Change booking cancellation before departure"
+        }
+      ]
+    },
+    {
+      "id": "archive",
+      "title": "Conservazione pratiche",
+      "claim": "Le pratiche chiuse vengono conservate per trenta giorni. Archivio, rimozione, closed case retention and purge archived records identify this retention rule.",
+      "queries": [
+        {
+          "split": "development",
+          "text": "Modificare la conservazione delle pratiche chiuse"
+        },
+        {
+          "split": "evaluation",
+          "text": "Change closed case retention"
+        }
+      ]
+    },
+    {
+      "id": "salesforce",
+      "language": "salesforce",
+      "title": "Approvazione degli affidamenti",
+      "claim": "Gli affidamenti richiedono approvazione oltre cinque unità. Soglia di autorizzazione, credit approval threshold and lending authorization denote this rule.",
+      "queries": [
+        {
+          "split": "development",
+          "text": "Modificare la soglia di autorizzazione degli affidamenti"
+        },
+        {
+          "split": "evaluation",
+          "text": "Change the credit approval threshold"
+        }
+      ]
+    }
   ]
 }

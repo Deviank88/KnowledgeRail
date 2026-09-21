@@ -6,7 +6,8 @@ import { performance } from "node:perf_hooks";
 import { createHash } from "node:crypto";
 import { mapConcurrent } from "../src/core/concurrent-map.js";
 import { CodeQueryRuntime } from "../src/core/code-evidence/query-runtime.js";
-import { CppKnowledgeAdapter, CSharpKnowledgeAdapter, GoKnowledgeAdapter } from "../src/core/code-evidence/language-adapters.js";
+import { ApexKnowledgeAdapter, CppKnowledgeAdapter, CSharpKnowledgeAdapter, GoKnowledgeAdapter, RustKnowledgeAdapter } from "../src/core/code-evidence/language-adapters.js";
+import { PythonKnowledgeAdapter } from "../src/core/code-evidence/python-adapter.js";
 import { RubyKnowledgeAdapter } from "../src/core/code-evidence/ruby-adapter.js";
 import { TypeScriptKnowledgeAdapter } from "../src/core/code-evidence/typescript-adapter.js";
 import { KnowledgeAdapterRegistry } from "../src/core/code-evidence/adapter-registry.js";
@@ -16,7 +17,14 @@ const argument = (name: string, fallback: string) => process.argv.find((value) =
 const scales = argument("scales", "1000,10000").split(",").map(Number);
 const iterations = Number(argument("iterations", "30"));
 const language = argument("language", "go");
-const languages: Record<string, { adapter: () => KnowledgeAdapter; extension: string; source: (index: number, group: number) => string; importer: string; manifest?: [string, string] }> = {
+const languages: Record<string, { adapter: () => KnowledgeAdapter; extraAdapters?: () => KnowledgeAdapter[]; importerPath?: string; extension: string; source: (index: number, group: number) => string; importer: string; manifest?: [string, string] }> = {
+  salesforce: { adapter: () => new ApexKnowledgeAdapter(), extraAdapters: () => [new TypeScriptKnowledgeAdapter()], extension: "cls",
+    source: (i) => `public class Value${i} {\n public static void run() {}\n}`, importerPath: "packages/main.js",
+    importer: 'import run from "@salesforce/apex/Value0.run";', manifest: ["sfdx-project.json", '{"packageDirectories":[{"path":"packages"}]}'] },
+  python: { adapter: () => new PythonKnowledgeAdapter(), extension: "py", source: (i) => `def value${i}():\n return ${i}\n`,
+    importer: "import file0", manifest: ["pyproject.toml", '[tool.hatch.build.targets.wheel]\nsources=["packages/pkg0"]'] },
+  rust: { adapter: () => new RustKnowledgeAdapter(), extension: "rs", source: (i) => `pub struct Value${i} {}`,
+    importerPath: "packages/pkg0/lib.rs", importer: "mod file0;", manifest: ["Cargo.toml", '[package]\nname="bench"\n[lib]\npath="packages/pkg0/lib.rs"'] },
   go: { adapter: () => new GoKnowledgeAdapter(), extension: "go", source: (i, group) => `package pkg${group}\nfunc Value${i}() {}`,
     importer: 'package main\nimport "example.com/bench/packages/pkg0"\nfunc main() {}', manifest: ["go.mod", "module example.com/bench\n"] },
   javascript: { adapter: () => new TypeScriptKnowledgeAdapter(), extension: "ts", source: (i) => `export function Value${i}() { return ${i}; }`,
@@ -41,7 +49,7 @@ try {
   for (const scale of scales) for (const filesPerDirectory of [50, 1]) {
     const repositoryRoot = path.join(root, `${scale}-${filesPerDirectory}`);
     const adapter = definition.adapter();
-    const registry = new KnowledgeAdapterRegistry([adapter]);
+    const registry = new KnowledgeAdapterRegistry([adapter, ...(definition.extraAdapters?.() ?? [])]);
     const fileCount = Math.floor(scale / 2);
     const files: string[] = Array.from({ length: fileCount }, (_, i) => `packages/pkg${Math.floor(i / filesPerDirectory)}/file${i}.${definition.extension}`);
     await mapConcurrent([...new Set(files.map((file) => path.dirname(file)))], 16, (directory) => fs.mkdir(path.join(repositoryRoot, directory), { recursive: true }));
@@ -53,8 +61,8 @@ try {
     }
     const fragments: KnowledgeFragment[] = (await mapConcurrent(files, 16, (file, i) => adapter.extract({ repositoryRoot, path: file,
       content: definition.source(i, Math.floor(i / filesPerDirectory)) }))).flat();
-    const importer = `main.${definition.extension}`;
-    fragments.push(...await adapter.extract({ repositoryRoot, path: importer,
+    const importer = definition.importerPath ?? `main.${definition.extension}`;
+    fragments.push(...await registry.resolve({ path: importer })!.extract({ repositoryRoot, path: importer,
       content: definition.importer }));
     const snapshot = { version: 2 as const, adapters: registry.roster(), generatedAt: "fixture", files: [], fragments };
     global.gc?.();

@@ -13,9 +13,11 @@ import { clearWorkspaceStates } from "../src/core/workspace-state.js";
 const argument = (name: string, fallback: string) => process.argv.find((value) => value.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 const sourceWiki = path.resolve(argument("wiki", path.join(repositoryRoot, "wiki")));
-const fixtureBytes = await fs.readFile(new URL("fixtures/workspace-specific-pages.json", import.meta.url));
+const fixtureBytes = await fs.readFile(argument("fixture", fileURLToPath(new URL("fixtures/workspace-specific-pages.json", import.meta.url))));
 const fixture = JSON.parse(fixtureBytes.toString("utf8")) as {
   version: number; provenance: string;
+  evidenceFormat?: "active-claims" | "authored-pages";
+  limitation?: string;
   cases: Array<{ id: string; query: string; expected: string; supportingText: string }>;
 };
 const digest = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -34,7 +36,8 @@ try {
   for (const item of fixture.cases) {
     assert.ok(pages.some((page) => page.path === item.expected), `Missing expected page: ${item.id}`);
     const body = await fs.readFile(path.join(wikiRoot, item.expected), "utf8");
-    assert.ok(body.split("\n### ").some((block) => block.includes(item.supportingText) && /\bstatus active\b/u.test(block)), `Review stale oracle evidence: ${item.id}`);
+    assert.ok(item.supportingText.length > 0 && (fixture.evidenceFormat === "authored-pages" ? body.includes(item.supportingText)
+      : body.split("\n### ").some((block) => block.includes(item.supportingText) && /\bstatus active\b/u.test(block))), `Review stale oracle evidence: ${item.id}`);
   }
 
   // The A/B runtime differs at exactly one call site. Reuse its real fusion,
@@ -69,7 +72,7 @@ try {
       gapsBefore: before.coverage.evidenceGaps, gapsAfter: after.coverage.evidenceGaps });
   }
   const report = { version: fixture.version, fixtureSha256: digest(fixtureBytes), provenance: fixture.provenance, pages,
-    method: "Actual workspace pages frozen byte-for-byte; one-call-site A/B with identical scored pools, budgets and fixed W0. Semantic disabled. Three profiles and two budgets repeat twelve questions; these are not 72 independent queries. Checks target-page retention, not answer correctness or passage freshness.",
+    method: "Actual workspace pages frozen byte-for-byte; one-call-site A/B with identical scored pools, budgets and fixed W0. Semantic disabled. Three profiles and two budgets repeat the same questions; repeated runs are not independent queries. Checks target-page retention, not answer correctness or passage freshness.",
     summary: { questions: fixture.cases.length, runs: cases.length,
       targetShownBefore: cases.filter((item) => item.targetShownBefore).length,
       targetShownAfter: cases.filter((item) => item.targetShownAfter).length,
@@ -78,7 +81,7 @@ try {
       newlyShown: cases.filter((item) => !item.targetShownBefore && item.targetShownAfter).length,
       runsWithDominance: cases.filter((item) => item.removedByDominance.length).length,
       targetsBelowFirstRank: cases.filter((item) => item.targetPoolRank > 1).length },
-    limitation: "This six-page workspace has thematic implementation pages, without a separately authored broad overview. When expected pages already rank first, retention cannot validate the risk of a higher-ranked overview suppressing a specific lower-ranked page. Do not declare the rule stable from this check.", cases };
+    limitation: fixture.limitation ?? "This six-page workspace has thematic implementation pages, without a separately authored broad overview. When expected pages already rank first, retention cannot validate the risk of a higher-ranked overview suppressing a specific lower-ranked page. Do not declare the rule stable from this check.", cases };
   const output = path.resolve(argument("json", path.join(repositoryRoot, "benchmarks/results/280-workspace-selection.json")));
   await fs.mkdir(path.dirname(output), { recursive: true });
   await fs.writeFile(output, JSON.stringify(report, null, 2) + "\n");

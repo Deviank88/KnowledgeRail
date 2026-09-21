@@ -1,17 +1,13 @@
 import type { CodeImportContext, CodeImportResolver, KnowledgeFragment, ProjectManifestSpec } from "../types.js";
 import { nearestProjectManifest } from "../project-structure.js";
 import { addName, uniqueImport } from "./paths.js";
+import { createCompileMembership, createJvmBoundary } from "./build-boundaries.js";
+export { CSHARP_PROJECT_MANIFEST } from "./build-boundaries.js";
 
 type DeclarationLanguage = "java" | "kotlin" | "csharp" | "php";
 const EXTENSIONS: Record<DeclarationLanguage, RegExp> = {
   java: /\.(?:java|kt|kts)$/iu, kotlin: /\.(?:java|kt|kts)$/iu, csharp: /\.cs$/iu, php: /\.php$/iu,
 };
-
-/** Identity boundary only: no MSBuild evaluation or inferred Compile items. */
-export const CSHARP_PROJECT_MANIFEST: ProjectManifestSpec = { fileName: "*.csproj", parse(content) {
-  if (!/<Project(?:\s[^<>]*|)\s*(?:\/>|>[\s\S]*<\/Project>)/u.test(content)) throw new Error("Invalid project boundary.");
-  return {};
-} };
 
 export function createDeclarationImportResolver(context: CodeImportContext, language: DeclarationLanguage): CodeImportResolver {
   const names = new Map<string, Set<string>>();
@@ -19,8 +15,12 @@ export function createDeclarationImportResolver(context: CodeImportContext, lang
   const declarations = new Map<string, KnowledgeFragment[]>();
   const separator = language === "php" ? "\\" : ".";
   const nameOf = (fragment: KnowledgeFragment) => fragment.qualifiedName.replace(/#/gu, ".");
+  const membership = createCompileMembership(context.structure);
+  const jvmBoundary = createJvmBoundary(context.structure);
+  const jvm = language === "java" || language === "kotlin";
   for (const [path, fragments] of context.fragmentsByPath) {
     if (!EXTENSIONS[language].test(path)) continue;
+    if (language === "csharp" && !membership(path)) continue;
     for (const fragment of fragments) {
       if (!["class", "function", "method", "constant"].includes(fragment.kind)) continue;
       const name = nameOf(fragment);
@@ -38,8 +38,9 @@ export function createDeclarationImportResolver(context: CodeImportContext, lang
       }
     }
   }
-  const resolveName = (name: string, key = name): string[] => {
-    const matches = names.get(key);
+  const resolveName = (source: string, name: string, key = name): string[] => {
+    const all = names.get(key);
+    const matches = all && (jvm ? new Set([...all].filter((path) => jvmBoundary(path) === jvmBoundary(source))) : all);
     if (matches) {
       if (language === "csharp" && matches.size > 1) {
         const parts = declarations.get(name) ?? [];
@@ -47,7 +48,8 @@ export function createDeclarationImportResolver(context: CodeImportContext, lang
           const declaration = /\bpartial\s+(class|interface|struct|record(?:\s+(?:class|struct))?)\s+\w+\s*(<[^<>]*>)?/u.exec(part.definition);
           return declaration && `${declaration[1]}:${declaration[2]?.split(",").length ?? 0}`;
         });
-        const owners = parts.map((part) => context.structure && nearestProjectManifest(context.structure, part.path, "*.csproj"));
+        const owners = parts.map((part) => context.structure && (nearestProjectManifest(context.structure, part.path, "*.csproj")
+          ?? nearestProjectManifest(context.structure, part.path, "Directory.Build.props")));
         if (new Set(parts.map((part) => part.path)).size === matches.size && signatures.length && signatures.every(Boolean) &&
             new Set(signatures).size === 1 && !owners.some((owner) => owner?.warning) && new Set(owners.map((owner) => owner?.path)).size === 1) return [...matches];
       }
@@ -57,10 +59,11 @@ export function createDeclarationImportResolver(context: CodeImportContext, lang
     return uniqueImport(context, name, []);
   };
   return (source, raw) => {
+    if (language === "csharp" && !membership(source)) return [];
     if (language === "java") {
       const statements = context.fragmentsByPath.get(source)?.find((fragment) => fragment.kind === "module" && fragment.qualifiedName === source)?.importStatements;
       if (statements?.some((entry) => entry.specifier === raw && entry.kind === "static")) {
-        return resolveName(raw.slice(0, raw.lastIndexOf(".")));
+        return resolveName(source, raw.slice(0, raw.lastIndexOf(".")));
       }
     }
     if (language === "php") {
@@ -72,11 +75,13 @@ export function createDeclarationImportResolver(context: CodeImportContext, lang
       return [...new Set(parts.flatMap((part) => {
         const kind = /^(function|const)\s+/u.exec(part.trim())?.[1] ?? leadingKind;
         const name = `${group?.[1] ?? ""}${part.trim().replace(/^(?:function|const)\s+/u, "").replace(/\s+as\s+\w+$/iu, "")}`.replace(/^\\/u, "");
-        return /^[A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*$/u.test(name) ? resolveName(name, `${kind === "const" ? "constant" : kind ?? "class"}:${name}`) : [];
+        return /^[A-Za-z_]\w*(?:\\[A-Za-z_]\w*)*$/u.test(name) ? resolveName(source, name, `${kind === "const" ? "constant" : kind ?? "class"}:${name}`) : [];
       }))];
     }
     const name = raw.replace(/\s+as\s+\w+$/u, "");
-    if (language !== "csharp" && name.endsWith(".*")) return [...(containers.get(name.slice(0, -2)) ?? [])];
-    return /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/u.test(name) ? resolveName(name) : [];
+    if (language !== "csharp" && name.endsWith(".*")) {
+      return [...(containers.get(name.slice(0, -2)) ?? [])].filter((path) => !jvm || jvmBoundary(path) === jvmBoundary(source));
+    }
+    return /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/u.test(name) ? resolveName(source, name) : [];
   };
 }

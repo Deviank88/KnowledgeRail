@@ -2,7 +2,7 @@ import { posix } from "node:path";
 import type { CodeImportContext, CodeImportResolver } from "../types.js";
 import { localPath, uniqueImport } from "./paths.js";
 import { nearestProjectManifest } from "../project-structure.js";
-import type { GemspecConfig } from "./ruby-config.js";
+import type { GemspecConfig, GemfileConfig } from "./ruby-config.js";
 
 export function createRubyImportResolver(context: CodeImportContext): CodeImportResolver {
   const owners = new Map<string, ReturnType<typeof nearestProjectManifest>>();
@@ -32,6 +32,26 @@ export function createRubyImportResolver(context: CodeImportContext): CodeImport
           if (base) for (const path of resolve(base)) if (owner(path)?.path === manifest.path) matches.add(path);
           // Load paths are ordered. An indexed first match shadows later roots.
           if (matches.size) break;
+        }
+      }
+      const gemfile = context.structure && nearestProjectManifest(context.structure, source, "Gemfile");
+      if (gemfile && !gemfile.warning && !matches.size) {
+        for (const gem of (gemfile.value as GemfileConfig).gems) {
+          const directory = localPath(posix.dirname(gemfile.path), gem.directory);
+          if (!directory) continue;
+          const specs = (gemfile.references ?? []).filter((path) => posix.dirname(path) === directory)
+            .map((path) => context.structure!.manifests.get(path)).filter((entry) => entry && !entry.warning);
+          // A path gem contributes the load paths its own gemspec declares.
+          // Missing/competing gemspecs never manufacture a conventional root.
+          if (specs.length !== 1) continue;
+          const spec = specs[0]!;
+          for (const loadPath of (spec.value as GemspecConfig).requirePaths) {
+            const base = localPath(directory, loadPath);
+            if (!base) continue;
+            const found = resolve(base).filter((path) => owner(path)?.path === spec.path);
+            for (const path of found) matches.add(path);
+            if (found.length) break;
+          }
         }
       }
       for (const path of uniqueImport(context, kinds.includes("require_relative") ? `require:${specifier}` : specifier, matches)) results.add(path);

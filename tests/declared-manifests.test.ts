@@ -249,7 +249,7 @@ test("Python ignores unrelated tool grammar and retains package boundaries for u
   assert.deepEqual(await p.incoming("odd/unit.py"), ["tests/test_unit.py"]);
   assert.deepEqual(await p.index.projectStructureWarnings(), []);
   const bytes = await fs.readFile(codeEvidenceIndexFile(p.wikiRoot));
-  for (const backend of ["poetry", "hatch", "flit", "pdm"]) {
+  for (const backend of ["custom_builder", "unrelated_tool"]) {
     await p.write("pyproject.toml", `[project]\nreleased=2026-09-06\n[tool.${backend}]\npackages=["pkg"]\n`);
     assert.deepEqual(await p.incoming("pkg/mod.py"), ["pkg/run.py"], backend);
     assert.deepEqual(await p.incoming("odd/unit.py"), [], "tests outside a package need supported declared roots");
@@ -271,7 +271,7 @@ test("Cargo workspace member problems warn without discarding valid root-package
   const bytes = await fs.readFile(codeEvidenceIndexFile(p.wikiRoot));
   assert.deepEqual(await p.incoming("odd/unit.rs"), ["odd/entry.rs"]);
   assert.deepEqual(await p.incoming("member/src/unit.rs"), ["member/src/lib.rs"]);
-  assert.ok((await p.index.projectStructureWarnings()).some((w) => w.reason === "unsupported_cargo_workspace_glob"));
+  assert.ok(!(await p.index.projectStructureWarnings()).some((w) => w.reason === "unsupported_cargo_workspace_glob"));
   await p.write("Cargo.toml", declaration + '[workspace]\nmembers=42\n');
   assert.deepEqual(await p.incoming("odd/unit.rs"), ["odd/entry.rs"]);
   assert.ok((await p.index.projectStructureWarnings()).some((w) => w.reason === "invalid_cargo_workspace_members"));

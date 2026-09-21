@@ -2,11 +2,14 @@ import { createDefaultKnowledgeAdapterRegistry, type KnowledgeAdapterRegistry } 
 import { createLegacyImportResolver } from "./import-resolution/paths.js";
 import { ImportResolutionCollector } from "./import-resolution/diagnostics.js";
 import { ProjectStructureReader } from "./project-structure.js";
+import { createImportClassifier, probeUnindexedImports } from "./import-resolution/classification.js";
+import { localPath } from "./import-resolution/paths.js";
+import { posix } from "node:path";
 import { TopResults } from "../top-results.js";
 import type {
   CodeEvidenceHit, CodeEvidenceSnapshot, CodeReference, CodeSearchOptions, KnowledgeFragment,
   CodeImportResolver, KnowledgeAdapter, ProjectStructure,
-  CodeImportDiagnostics, CodeImportResolutionCounts,
+  CodeImportDiagnostics, CodeImportResolutionCounts, CodeImportIssue,
   RelatedCodeEvidence,
 } from "./types.js";
 
@@ -58,9 +61,11 @@ interface ReferenceIndex {
   calls: Map<string, number[]>;
   references: Map<string, number[]>;
   imports: Map<string, number[]>;
+  declaredReferences: Map<string, number[]>;
   importDiagnostics: CodeImportDiagnostics;
   importCounts: Record<string, CodeImportResolutionCounts>;
   diagnosticBytes: number;
+  estimatedBytes: number;
 }
 
 function addReferences(index: Map<string, number[]>, values: readonly string[], ordinal: number): void {
@@ -71,40 +76,97 @@ function addReferences(index: Map<string, number[]>, values: readonly string[], 
   }
 }
 
-/** Disposable query structures for one validated snapshot generation. */
+/** Generation-bound metadata and ordinal postings may survive a snapshot too
+ * large for admission, within sub-budgets of the existing project cache. */
+export interface CodeGenerationCache {
+  structure?: ProjectStructure;
+  pending?: Promise<ProjectStructure>;
+  estimatedBytes: number;
+  projectReader?: ProjectStructureReader;
+  projectEstimatedBytes?: number;
+  incoming?: { identity?: string; index: ReferenceIndex };
+  incomingEstimatedBytes?: number;
+}
+
 export class CodeQueryRuntime {
   readonly snapshot: CodeEvidenceSnapshot;
   private symbols?: { entries: SymbolEntry[]; exact: Map<string, SymbolEntry[]> };
   private incoming?: ReferenceIndex;
   private structureReader?: ProjectStructureReader;
   private structure?: ProjectStructure;
+  private unindexedPaths?: Promise<ReadonlySet<string>>;
+  private verifiedUnindexedPaths: ReadonlySet<string> = new Set();
+  private metadataEstimatedBytes = 0;
+  private metadataReady?: Promise<void>;
+  private metadataWarnings: ProjectStructure["warnings"] = [];
 
-  constructor(snapshot: CodeEvidenceSnapshot, readonly registry: KnowledgeAdapterRegistry = DEFAULT_QUERY_ADAPTERS) {
+  constructor(snapshot: CodeEvidenceSnapshot, readonly registry: KnowledgeAdapterRegistry = DEFAULT_QUERY_ADAPTERS,
+    private readonly generationCache: CodeGenerationCache = { estimatedBytes: 0 }) {
     this.snapshot = { ...snapshot, fragments: enrichLwcBundles(snapshot.fragments) };
+  }
+
+  /** Sidecars follow source freshness: explicit update/remove/rebuild publishes a
+   * new generation. Warm symbol/search queries perform no sidecar filesystem IO. */
+  async refreshSourceMetadata(repositoryRoot: string): Promise<void> {
+    const adapters = this.registry.registrations.map(({ adapter }) => adapter).filter((adapter) => adapter.enrichSourceMetadata);
+    if (!adapters.length) return;
+    this.metadataReady ??= (async () => {
+      const cache = this.generationCache;
+      if (!cache.structure && !cache.pending) cache.pending = (async () => {
+        const reader = new ProjectStructureReader(repositoryRoot,
+          new Set(this.snapshot.fragments.map((fragment) => fragment.path)), this.registry, true);
+        const metadata = await reader.load();
+        const estimate = metadata.manifests.size || metadata.warnings.length
+          ? Buffer.byteLength(JSON.stringify([...metadata.manifests])) * 4 + metadata.manifests.size * 128 + Buffer.byteLength(JSON.stringify(metadata.warnings)) * 4 : 0;
+        if (estimate <= 1024 * 1024) { cache.structure = metadata; cache.estimatedBytes = estimate; }
+        return metadata;
+      })().finally(() => { cache.pending = undefined; });
+      const metadata = cache.structure ?? await cache.pending!;
+      this.metadataEstimatedBytes = cache.estimatedBytes;
+      this.metadataWarnings = metadata.warnings;
+      if (!metadata.manifests.size) return;
+      for (const adapter of adapters) this.snapshot.fragments = adapter.enrichSourceMetadata!(this.snapshot.fragments, metadata);
+      this.symbols = undefined;
+      this.incoming = undefined;
+    })().catch((error) => { this.metadataReady = undefined; throw error; });
+    await this.metadataReady;
   }
 
   /** Only reference consumers pay for manifest freshness checks. */
   async refreshProjectStructure(repositoryRoot: string): Promise<void> {
+    this.unindexedPaths ??= probeUnindexedImports(repositoryRoot, this.snapshot.fragments,
+      new Set(this.snapshot.fragments.map((fragment) => fragment.path)));
+    this.verifiedUnindexedPaths = await this.unindexedPaths;
     if (!this.registry.registrations.some(({ adapter }) => adapter.projectManifests?.length)) return;
     if (!this.structureReader || this.structureReader.repositoryRoot !== repositoryRoot) {
-      this.structureReader = new ProjectStructureReader(repositoryRoot,
-        new Set(this.snapshot.fragments.map((fragment) => fragment.path)), this.registry);
+      this.structureReader = this.generationCache.projectReader?.repositoryRoot === repositoryRoot
+        ? this.generationCache.projectReader : new ProjectStructureReader(repositoryRoot,
+          new Set(this.snapshot.fragments.map((fragment) => fragment.path)), this.registry);
       this.structure = undefined;
       this.incoming = undefined;
     }
     const structure = await this.structureReader.load();
+    if (this.structureReader.estimatedBytes + this.generationCache.estimatedBytes <= 1024 * 1024) {
+      this.generationCache.projectReader = this.structureReader;
+      this.generationCache.projectEstimatedBytes = this.structureReader.estimatedBytes;
+    } else {
+      this.generationCache.projectReader = undefined; this.generationCache.projectEstimatedBytes = 0;
+    }
     if (this.structure?.identity !== structure.identity) {
       this.structure = structure;
       this.incoming = undefined;
     }
+    if (this.generationCache.incoming?.identity !== structure.identity) {
+      this.generationCache.incoming = undefined; this.generationCache.incomingEstimatedBytes = 0;
+    }
   }
 
   projectStructureWarnings(): ProjectStructure["warnings"] {
-    return this.structure?.warnings ?? [];
+    return [...(this.structure?.warnings ?? []), ...this.metadataWarnings];
   }
 
   projectStructureEstimatedBytes(): number {
-    return (this.structureReader?.estimatedBytes ?? 0) + (this.incoming?.diagnosticBytes ?? 0);
+    return (this.structureReader?.estimatedBytes ?? 0) + this.metadataEstimatedBytes + (this.incoming?.estimatedBytes ?? 0);
   }
 
   /** Internal outcome counts are generation inventory, never request/fallback rates. */
@@ -154,19 +216,25 @@ export class CodeQueryRuntime {
   }
 
   private referenceIndex(): ReferenceIndex {
+    if (!this.incoming && this.generationCache.incoming?.identity === this.structure?.identity) this.incoming = this.generationCache.incoming?.index;
     if (!this.incoming) {
       const modulePaths = new Set(this.snapshot.fragments.filter((fragment) => fragment.kind === "module").map((fragment) => fragment.path));
       const diagnostics = new ImportResolutionCollector(modulePaths);
       const incoming: ReferenceIndex = { byId: new Map(), calls: new Map(), references: new Map(), imports: new Map(),
-        importDiagnostics: diagnostics.result(), importCounts: diagnostics.byLanguage, diagnosticBytes: 0 };
+        declaredReferences: new Map(),
+        importDiagnostics: diagnostics.result(), importCounts: diagnostics.byLanguage, diagnosticBytes: 0, estimatedBytes: 0 };
       const fragmentsByPath = new Map<string, KnowledgeFragment[]>();
       for (const fragment of this.snapshot.fragments) {
         const siblings = fragmentsByPath.get(fragment.path);
         if (siblings) siblings.push(fragment);
         else fragmentsByPath.set(fragment.path, [fragment]);
       }
-      const context = { paths: modulePaths, fragmentsByPath, structure: this.structure, reportIssue: diagnostics.report };
+      const issues: CodeImportIssue[] = [];
+      const context = { paths: modulePaths, fragmentsByPath, structure: this.structure,
+        reportIssue: (issue: CodeImportIssue) => issues.push(issue) };
+      const classify = createImportClassifier(context);
       const resolvers = new Map<KnowledgeAdapter | undefined, CodeImportResolver>();
+      const referenceResolvers = new Map<KnowledgeAdapter, CodeImportResolver>();
       let legacy: CodeImportResolver | undefined;
       // Adapters attach the same import inventory to several fragments per file.
       // Memoize resolution only while constructing this generation's incoming map.
@@ -177,7 +245,29 @@ export class CodeQueryRuntime {
           const value = normalizedCodeText(call);
           return [value, value.split(".").at(-1)!];
         }), ordinal);
-        addReferences(incoming.references, [...fragment.references, ...fragment.databaseRefs].map(normalizedCodeText), ordinal);
+        const declaredNames = new Set(fragment.declaredReferences?.filter((name) => name.startsWith("schema:")).map((name) => normalizedCodeText(name.slice(7))));
+        addReferences(incoming.references, [...fragment.references.map(normalizedCodeText).filter((name) => !declaredNames.has(name)),
+          ...fragment.databaseRefs.map(normalizedCodeText)], ordinal);
+        if (fragment.declaredReferences?.length) {
+          const adapter = this.registry.resolve({ path: fragment.path });
+          if (adapter?.createReferenceResolver) {
+            let resolve = referenceResolvers.get(adapter);
+            if (!resolve) {
+              resolve = adapter.createReferenceResolver({ ...context, reportIssue: undefined });
+              referenceResolvers.set(adapter, resolve);
+            }
+            addReferences(incoming.declaredReferences,
+              fragment.declaredReferences.flatMap((name) => [...resolve!(fragment.path, name)]).filter((path) => modulePaths.has(path)), ordinal);
+          }
+        }
+        if (fragment.kind === "module" && fragment.qualifiedName === fragment.path) {
+          for (const specifier of fragment.unsupportedImports ?? []) {
+            const language = this.registry.resolve({ path: fragment.path })?.parserVersion.split("-deterministic-")[0] ?? "legacy";
+            diagnostics.begin(fragment.path, specifier, language);
+            diagnostics.report({ status: "unresolved", reason: "unsupported_syntax", matchedName: specifier });
+            diagnostics.finish(0);
+          }
+        }
         if (fragment.imports.length === 0) return;
         let resolved = resolvedBySource.get(fragment.path);
         if (!resolved) {
@@ -195,8 +285,18 @@ export class CodeQueryRuntime {
           let targets = resolved.imports.get(specifier);
           if (!targets) {
             diagnostics.begin(fragment.path, specifier, resolved.language);
+            issues.length = 0;
             targets = [...new Set(resolved.resolve(fragment.path, specifier))].filter((path) => modulePaths.has(path));
-            diagnostics.finish(targets.length);
+            const disposition = !targets.length && !issues.some((issue) => issue.status === "ambiguous")
+              ? classify(fragment.path, specifier, resolved.language) : undefined;
+            if (!disposition) {
+              const local = /^\.{1,2}\//u.test(specifier) ? localPath(posix.dirname(fragment.path), specifier) : undefined;
+              const notIndexed = local !== undefined && this.verifiedUnindexedPaths.has(local);
+              if (!targets.length && !issues.length && notIndexed) issues.push({ status: "unresolved", matchedName: specifier });
+              for (const issue of issues) diagnostics.report(notIndexed && issue.status === "unresolved"
+                ? { ...issue, reason: "not_indexed" } : issue);
+            }
+            diagnostics.finish(targets.length, disposition);
             resolved.imports.set(specifier, targets);
           }
           imports.push(...targets);
@@ -205,6 +305,17 @@ export class CodeQueryRuntime {
       });
       incoming.importDiagnostics = diagnostics.result();
       incoming.diagnosticBytes = 2 * JSON.stringify([incoming.importDiagnostics, incoming.importCounts]).length + 2048;
+      // Conservative string/map/array allowance. Postings contain ordinals, not
+      // fragment objects, so retaining them cannot retain an oversized snapshot.
+      incoming.estimatedBytes = incoming.diagnosticBytes;
+      for (const [key] of incoming.byId) incoming.estimatedBytes += 128 + key.length * 4;
+      for (const index of [incoming.calls, incoming.references, incoming.imports, incoming.declaredReferences]) {
+        for (const [key, ordinals] of index) incoming.estimatedBytes += 160 + key.length * 4 + ordinals.length * 16;
+      }
+      if (incoming.estimatedBytes <= 16 * 1024 * 1024) {
+        this.generationCache.incoming = { identity: this.structure?.identity, index: incoming };
+        this.generationCache.incomingEstimatedBytes = incoming.estimatedBytes;
+      }
       this.incoming = incoming;
     }
     return this.incoming;
@@ -290,9 +401,9 @@ export class CodeQueryRuntime {
         if (ordinal === singleTarget || seen.has(ordinal) || targetOrdinals?.has(ordinal)) continue;
         const source = this.snapshot.fragments[ordinal]!;
         if (!codePathAllowed(source.path, options.paths)) continue;
-        // A module's lexical inventory includes its own declarations. Showing
-        // that enclosing module as a caller of its child is not useful impact.
-        if (source.kind === "module" && source.path === target.path &&
+        // Enclosing inventories include child declarations. Keep actual sibling
+        // method callers, not the containing module/class as a caller of itself.
+        if ((source.kind === "module" || source.kind === "class") && source.path === target.path &&
             source.range.startLine <= target.range.startLine && source.range.endLine >= target.range.endLine) continue;
         seen.add(ordinal);
         best.add({ ordinal, relation, source, target });
@@ -300,6 +411,7 @@ export class CodeQueryRuntime {
     };
     collect(incoming.calls, targetByName, "call");
     collect(incoming.references, targetByName, "reference");
+    collect(incoming.declaredReferences, new Map(targets.map((target) => [target.path, target])), "reference");
     collect(incoming.imports, modules, "import");
     return best.sorted()
       .map(({ source, target, relation }) => ({ source, target, relation }));

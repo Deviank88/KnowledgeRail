@@ -1,3 +1,6 @@
+import { wellFormedXml, firstElement, elementSpans, childText, decodeXml, type XmlSpan } from "./manifest-xml.js";
+import { SALESFORCE_MANIFEST } from "./import-resolution/salesforce-config.js";
+import { createSalesforceReferenceResolver } from "./import-resolution/salesforce.js";
 import * as nodePath from "node:path";
 import {
   codeFragmentId,
@@ -18,114 +21,12 @@ export const SFMETA_EXTENSION_CLAIMS = [
   ".validationrule-meta.xml",
   ".flow-meta.xml",
   ".permissionset-meta.xml",
+  ".labels-meta.xml", ".resource-meta.xml", ".messagechannel-meta.xml",
+  ".page", ".component", ".cmp", ".app",
 ] as const;
 
-interface XmlSpan {
-  start: number;
-  end: number;
-  bodyStart: number;
-  bodyEnd: number;
-}
-
 function supportedPath(path: string): boolean {
-  const lower = path.toLowerCase();
-  return SFMETA_EXTENSION_CLAIMS.some((claim) => lower.endsWith(claim));
-}
-
-function wellFormedXml(content: string): boolean {
-  const stack: string[] = [];
-  let rootElements = 0;
-  for (let offset = 0; offset < content.length;) {
-    const start = content.indexOf("<", offset);
-    if (start < 0) return !content.slice(offset).trim() && rootElements === 1 && stack.length === 0;
-    if (stack.length === 0 && content.slice(offset, start).trim()) return false;
-    if (content.startsWith("<!--", start)) {
-      const end = content.indexOf("-->", start + 4);
-      if (end < 0) return false;
-      offset = end + 3;
-      continue;
-    }
-    if (content.startsWith("<![CDATA[", start)) {
-      if (stack.length === 0) return false;
-      const end = content.indexOf("]]>", start + 9);
-      if (end < 0) return false;
-      offset = end + 3;
-      continue;
-    }
-    if (content.startsWith("<?", start)) {
-      const end = content.indexOf("?>", start + 2);
-      if (end < 0) return false;
-      offset = end + 2;
-      continue;
-    }
-    let quote = "";
-    let end = start + 1;
-    for (; end < content.length; end++) {
-      const value = content[end]!;
-      if (quote) {
-        if (value === quote) quote = "";
-      } else if (value === "\"" || value === "'") {
-        quote = value;
-      } else if (value === ">") {
-        break;
-      }
-    }
-    if (end >= content.length || quote) return false;
-    const token = content.slice(start + 1, end).trim();
-    if (token.startsWith("!")) return false;
-    const closing = token.startsWith("/");
-    const selfClosing = !closing && token.endsWith("/");
-    const name = /^\/?([A-Za-z_][\w:.-]*)(?:\s|\/|$)/u.exec(token)?.[1];
-    if (!name) return false;
-    if (closing) {
-      if (token.slice(1 + name.length).trim() || stack.pop() !== name) return false;
-    } else {
-      if (stack.length === 0 && ++rootElements > 1) return false;
-      if (!selfClosing) stack.push(name);
-    }
-    offset = end + 1;
-  }
-  return rootElements === 1 && stack.length === 0;
-}
-
-function decodeXml(value: string): string {
-  return value
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gu, "$1")
-    .replace(/&lt;/gu, "<")
-    .replace(/&gt;/gu, ">")
-    .replace(/&quot;/gu, "\"")
-    .replace(/&apos;/gu, "'")
-    .replace(/&amp;/gu, "&")
-    .replace(/<[^>]+>/gu, " ")
-    .replace(/\s+/gu, " ")
-    .trim();
-}
-
-function elementSpans(content: string, tag: string): XmlSpan[] {
-  const values: XmlSpan[] = [];
-  const lower = content.toLowerCase();
-  const open = new RegExp(`<${tag}\\b[^>]*>`, "giu");
-  const closeToken = `</${tag.toLowerCase()}>`;
-  for (const match of content.matchAll(open)) {
-    const start = match.index ?? 0;
-    const bodyStart = start + match[0].length;
-    const close = lower.indexOf(closeToken, bodyStart);
-    if (close < 0) continue;
-    values.push({ start, bodyStart, bodyEnd: close, end: close + closeToken.length });
-  }
-  return values;
-}
-
-function firstElement(content: string, tag: string): XmlSpan | undefined {
-  return elementSpans(content, tag)[0];
-}
-
-function childText(content: string, tag: string, within?: XmlSpan): string | undefined {
-  const start = within?.bodyStart ?? 0;
-  const end = within?.bodyEnd ?? content.length;
-  const slice = content.slice(start, end);
-  const span = firstElement(slice, tag);
-  return span ? decodeXml(slice.slice(span.bodyStart, span.bodyEnd)) || undefined : undefined;
+  return SFMETA_EXTENSION_CLAIMS.some((claim) => path.toLowerCase().endsWith(claim));
 }
 
 function apiName(path: string, suffix: string): string {
@@ -332,6 +233,8 @@ function permissionSet(source: CodeSource): KnowledgeFragment | undefined {
 }
 
 export class SalesforceMetadataKnowledgeAdapter implements KnowledgeAdapter {
+  readonly projectManifests = [SALESFORCE_MANIFEST];
+  readonly createReferenceResolver = createSalesforceReferenceResolver;
   readonly parserVersion = SFMETA_ADAPTER_VERSION;
   readonly extensionClaims = SFMETA_EXTENSION_CLAIMS;
 
@@ -343,6 +246,35 @@ export class SalesforceMetadataKnowledgeAdapter implements KnowledgeAdapter {
     if (!this.supports(source)) return [];
     if (!wellFormedXml(source.content)) return [moduleFragment(source)];
     const lower = source.path.toLowerCase();
+    if (/\.(?:page|component|cmp|app)$/u.test(lower)) {
+      const module = moduleFragment(source);
+      const visible = source.content.replace(/<!--[\s\S]*?-->/gu, " ");
+      const root = /^\s*(?:<\?xml[^>]*>\s*)?<(?:apex:(?:page|component)|aura:(?:component|application))\b((?:"[^"]*"|'[^']*'|[^'">])*)>/u.exec(visible);
+      if (root) {
+        const declared = new Set<string>();
+        for (const attribute of root[1]!.matchAll(/\b(controller|extensions)\s*=\s*(["'])(.*?)\2/gu)) {
+          if (attribute[1] === "extensions" && /\.(?:cmp|app)$/u.test(lower)) continue;
+          const names = attribute[3]!.split(",").map((name) => name.trim());
+          if (names.every((name) => /^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?$/u.test(name))) for (const name of names) declared.add(name);
+        }
+        if (declared.size) module.declaredReferences = [...declared];
+      }
+      return [module];
+    }
+    if (lower.endsWith(".labels-meta.xml")) {
+      return [moduleFragment(source), ...elementSpans(source.content, "labels").flatMap((span) => {
+        const name = childText(source.content, "fullName", span);
+        return name && /^[A-Za-z_]\w*$/u.test(name) ? [fragment({ source, span, kind: "constant", symbol: name,
+          qualifiedName: name, definition: `CustomLabel ${name}`, docComment: childText(source.content, "shortDescription", span) })] : [];
+      })];
+    }
+    for (const [suffix, tag, kind] of [[".resource-meta.xml", "StaticResource", "constant"],
+      [".messageChannel-meta.xml", "LightningMessageChannel", "class"]] as const) {
+      if (!lower.endsWith(suffix.toLowerCase())) continue;
+      const span = firstElement(source.content, tag), name = apiName(source.path, suffix);
+      return span ? [moduleFragment(source), fragment({ source, span, kind, symbol: name, qualifiedName: name,
+        definition: `${tag} ${name}`, docComment: childText(source.content, "description", span) })] : [moduleFragment(source)];
+    }
     const entity = lower.endsWith(".object-meta.xml") ? customObject(source)
       : lower.endsWith(".field-meta.xml") ? customField(source)
       : lower.endsWith(".validationrule-meta.xml") ? validationRule(source)

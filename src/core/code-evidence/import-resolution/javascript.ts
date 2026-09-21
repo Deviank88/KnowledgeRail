@@ -2,7 +2,8 @@ import { posix } from "node:path";
 import type { CodeImportContext, CodeImportResolver } from "../types.js";
 import { localPath, uniqueImport } from "./paths.js";
 import { createSalesforceImportResolver } from "./salesforce.js";
-import { importConfig, nearestJavaScriptConfig, type JavaScriptImportConfig } from "./javascript-config.js";
+import { importConfig, createJavaScriptConfigSelector, type JavaScriptImportConfig } from "./javascript-config.js";
+import { createPackageImportResolver } from "./javascript-packages.js";
 
 const EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".cts", ".cjs"];
 const SUBSTITUTIONS: Readonly<Record<string, readonly string[]>> = {
@@ -12,16 +13,18 @@ const SUBSTITUTIONS: Readonly<Record<string, readonly string[]>> = {
 export function createJavaScriptImportResolver(context: CodeImportContext): CodeImportResolver {
   const { paths } = context;
   let salesforce: CodeImportResolver | undefined;
+  let packages: CodeImportResolver | undefined;
   const configs = new Map<string, JavaScriptImportConfig | undefined>();
   const directories = new Map<string, JavaScriptImportConfig | undefined>();
+  const selectConfig = context.structure ? createJavaScriptConfigSelector(context.structure) : undefined;
   const configFor = (source: string): JavaScriptImportConfig | undefined => {
     if (!context.structure?.manifests.size) return;
-    const directory = posix.dirname(source);
-    if (directories.has(directory)) return directories.get(directory);
-    const manifest = nearestJavaScriptConfig(context.structure, directory);
+    if (directories.has(source)) return directories.get(source);
+    const manifest = selectConfig?.(source);
+    if (manifest?.warning === "ambiguous_tsconfig_ownership") return;
     if (manifest && !configs.has(manifest.path)) configs.set(manifest.path, importConfig(manifest, context.structure));
     const config = manifest ? configs.get(manifest.path) : undefined;
-    directories.set(directory, config);
+    directories.set(source, config);
     return config;
   };
   // Preserve ambiguity internally: an ambiguous first paths target must not
@@ -42,6 +45,9 @@ export function createJavaScriptImportResolver(context: CodeImportContext): Code
       return uniqueImport(context, specifier, found);
     }
     if (specifier.startsWith("node:")) return [];
+    if (selectConfig?.(source)?.warning === "ambiguous_tsconfig_ownership") {
+      context.reportIssue?.({ status: "ambiguous", reason: "competing_patterns", matchedName: specifier }); return [];
+    }
     const config = configFor(source);
     if (config) {
       let targets = config.exact.get(specifier);
@@ -78,6 +84,6 @@ export function createJavaScriptImportResolver(context: CodeImportContext): Code
     if (specifier.startsWith("@salesforce/") || specifier.startsWith("c/")) {
       return (salesforce ??= createSalesforceImportResolver(context))(source, specifier);
     }
-    return [];
+    return (packages ??= createPackageImportResolver(context, candidates))(source, specifier);
   };
 }

@@ -40,6 +40,7 @@ export interface BraceLanguageConfig {
   importStatements?(content: string, masked: string): NonNullable<KnowledgeFragment["importStatements"]>;
   configKeys?(content: string): string[];
   databaseRefs?(content: string): string[];
+  callsSource?(masked: string): string;
 }
 
 interface CommentSpan {
@@ -680,7 +681,7 @@ export function extractBraceLanguage(source: CodeSource, config: BraceLanguageCo
     ));
     const raw = source.content.slice(candidate.start, candidate.end);
     const code = detailed.masked.slice(candidate.start, candidate.end);
-    const calls = unique([...(candidate.calls ?? []), ...callsIn(code, config)]);
+    const calls = unique([...(candidate.calls ?? []), ...callsIn(config.callsSource?.(code) ?? code, config)]);
     const references = unique([
       ...(candidate.references ?? []),
       ...identifiersIn(code, config),

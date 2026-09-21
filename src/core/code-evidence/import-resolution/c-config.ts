@@ -69,36 +69,68 @@ export const COMPILE_COMMANDS_MANIFEST: ProjectManifestSpec = {
   notices: (value) => (value as CompileConfig).notices,
 };
 
-export interface CmakeConfig { directories: string[]; targets: Array<{ files: string[]; directories: string[] }>; notices: string[] }
+export interface CmakeConfig {
+  directories: string[];
+  targets: Array<{ files: string[]; directories: string[]; blocked?: boolean }>;
+  notices: string[];
+  subdirectories: string[];
+  blockedGlobal?: boolean;
+}
 
-/** Literal commands only. Conditional/function bodies are not executed. */
+/** Literal commands only. Unsupported declarations fail independently unless an
+ * unknown include root can shadow a known one in the same scope. */
 export const CMAKE_MANIFEST: ProjectManifestSpec = {
-  fileName: "CMakeLists.txt",
+  fileName: "CMakeLists.txt", referenceDepth: 8,
   parse(content): CmakeConfig {
-    const directories: string[] = [], targets = new Map<string, { files: string[]; directories: string[] }>();
+    const directories: string[] = [], subdirectories: string[] = [];
+    const targets = new Map<string, { files: string[]; directories: string[]; blocked?: boolean }>();
+    const variables = new Map<string, string>();
     const notices = new Set<string>();
-    let depth = 0;
+    let depth = 0, blockedGlobal = false;
+    const literal = (value: string): string | undefined => {
+      const expanded = value.replace(/\$\{([A-Za-z_]\w*)\}/gu, (token, name: string) => variables.get(name) ?? token);
+      const relative = expanded.replace(/^\$\{CMAKE_CURRENT_(?:SOURCE|LIST)_DIR\}\/?/u, "");
+      const checked = relative.replace(/^\$\{(?:PROJECT_SOURCE_DIR|CMAKE_SOURCE_DIR)\}\/?/u, "");
+      if (/[\0$<>]/u.test(checked) || posix.isAbsolute(checked) || checked.includes("\\")) return;
+      return relative || ".";
+    };
     for (const { name, args: rawArgs } of cmakeCommands(content)) {
       if (["if", "foreach", "while", "function", "macro", "block"].includes(name)) { depth++; continue; }
       if (["endif", "endforeach", "endwhile", "endfunction", "endmacro", "endblock"].includes(name)) { depth = Math.max(0, depth - 1); continue; }
-      if (!["include_directories", "target_include_directories", "add_library", "add_executable", "target_sources"].includes(name)) continue;
-      if (depth) { notices.add("conditional_cmake_declaration"); continue; }
+      if (name === "set") {
+        const key = rawArgs[0];
+        if (key) variables.delete(key);
+        if (!depth && key && /^[A-Za-z_]\w*$/u.test(key) && rawArgs.length === 2 && !/\$\{/u.test(rawArgs[1]!)) {
+          const value = literal(rawArgs[1]!); if (value !== undefined) variables.set(key, value);
+        }
+        continue;
+      }
+      if (!["include_directories", "target_include_directories", "add_library", "add_executable", "target_sources", "add_subdirectory"].includes(name)) continue;
       const args = rawArgs.flatMap((value) => value.split(";"));
-      const literal = (value: string) => {
-        const result = value.replace(/^\$\{CMAKE_CURRENT_(?:SOURCE|LIST)_DIR\}\/?/u, "");
-        if (/[\0$<>]/u.test(result) || posix.isAbsolute(result) || result.includes("\\")) { notices.add("dynamic_cmake_path"); return undefined; }
-        return result || ".";
-      };
+      if (name === "add_subdirectory") {
+        const directory = !depth && args[0] ? literal(args[0]) : undefined;
+        if (directory !== undefined && !directory.includes("$")) subdirectories.push(directory);
+        else notices.add("unsupported_cmake_subdirectory");
+        continue;
+      }
       const targetName = name === "include_directories" ? undefined : args.shift();
+      if (targetName && !/^[A-Za-z_][\w.-]*$/u.test(targetName)) { notices.add("dynamic_cmake_target"); continue; }
       const target = targetName ? targets.get(targetName) ?? { files: [], directories: [] } : undefined;
       if (targetName && target) targets.set(targetName, target);
-      let scope = "PRIVATE";
+      let scope = "PRIVATE", unsupported = depth > 0;
       const values: string[] = [];
       for (const arg of args) {
         if (["PUBLIC", "PRIVATE", "INTERFACE"].includes(arg)) { scope = arg; continue; }
         if (["BEFORE", "AFTER", "SYSTEM", "STATIC", "SHARED", "MODULE", "OBJECT", "EXCLUDE_FROM_ALL", "WIN32", "MACOSX_BUNDLE"].includes(arg)) continue;
         if (scope === "INTERFACE") continue;
-        const path = literal(arg); if (path !== undefined) values.push(path);
+        const path = literal(arg);
+        if (path === undefined) unsupported = true; else values.push(path);
+      }
+      if (unsupported) {
+        notices.add(depth ? "conditional_cmake_declaration" : "dynamic_cmake_path");
+        if (name === "include_directories") blockedGlobal = true;
+        if (target) target.blocked = true;
+        continue;
       }
       if (name === "include_directories") args.includes("BEFORE") ? directories.unshift(...values) : directories.push(...values);
       else if (target) {
@@ -106,10 +138,15 @@ export const CMAKE_MANIFEST: ProjectManifestSpec = {
         args.includes("BEFORE") ? output.unshift(...values) : output.push(...values);
       }
     }
-    // Unknown include roots may shadow a known one. Keep local quoted includes
-    // usable, but do not invent a target by discarding dynamic declarations.
-    return notices.size ? { directories: [], targets: [], notices: [...notices] }
-      : { directories, targets: [...targets.values()], notices: [] };
+    if (blockedGlobal || [...targets.values()].some((target) => target.blocked)) notices.add("unknown_cmake_root_may_shadow");
+    return { directories, targets: [...targets.values()], notices: [...notices], subdirectories, ...(blockedGlobal ? { blockedGlobal } : {}) };
+  },
+  references(value, path) {
+    return (value as CmakeConfig).subdirectories.map((directory) => {
+      const target = posix.normalize(posix.join(posix.dirname(path), directory, "CMakeLists.txt"));
+      if (target === ".." || target.startsWith("../")) throw new Error("CMake subdirectory leaves repository.");
+      return target;
+    });
   },
   notices: (value) => (value as CmakeConfig).notices,
 };

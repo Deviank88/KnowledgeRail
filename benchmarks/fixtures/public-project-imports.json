@@ -1,7 +1,8 @@
 {
   "cases": [
     {
-      "repository": "django/django", "split": "development",
+      "repository": "django/django",
+      "split": "development",
       "files": {
         "django/__init__.py": "VERSION = 5\n",
         "django/unit.py": "def work():\n    return 1\n",
@@ -9,59 +10,203 @@
         "unlisted/unit.py": "def other():\n    return 1\n",
         "tests/run.py": "import django.unit\nimport unlisted.unit\n"
       },
-      "edges": [["tests/run.py", "django/unit.py"]],
-      "issues": [["tests/run.py", "unlisted.unit", "unresolved"]]
+      "edges": [
+        [
+          "tests/run.py",
+          "django/unit.py"
+        ]
+      ],
+      "issues": [
+        [
+          "tests/run.py",
+          "unlisted.unit",
+          "unresolved"
+        ]
+      ]
     },
     {
-      "repository": "symfony/console", "split": "development",
+      "repository": "symfony/console",
+      "split": "development",
       "files": {
         "Helper/Unit.php": "<?php namespace Symfony\\Component\\Console\\Helper;\nclass Unit {}\n",
         "wrong/Unit.php": "<?php namespace Symfony\\Component\\Console\\Helper;\nclass Unit {}\n",
         "run.php": "<?php\nuse Symfony\\Component\\Console\\Helper\\Unit;\nuse External\\Unit;\n"
       },
-      "edges": [["run.php", "Helper/Unit.php"]],
-      "issues": [["run.php", "External\\Unit", "unresolved"]]
+      "edges": [
+        [
+          "run.php",
+          "Helper/Unit.php"
+        ]
+      ],
+      "issues": [
+        [
+          "run.php",
+          "External\\Unit",
+          "unresolved"
+        ]
+      ]
     },
     {
-      "repository": "rack/rack", "split": "development",
+      "repository": "rack/rack",
+      "split": "development",
       "files": {
         "lib/rack/unit.rb": "module Rack\nmodule Unit\nend\nend\n",
         "wrong/rack/unit.rb": "module Rack\nmodule Unit\nend\nend\n",
         "test/run.rb": "require 'rack/unit'\nrequire 'external_gem'\n"
       },
-      "edges": [["test/run.rb", "lib/rack/unit.rb"]],
-      "issues": [["test/run.rb", "external_gem", "unresolved"]]
+      "edges": [
+        [
+          "test/run.rb",
+          "lib/rack/unit.rb"
+        ]
+      ],
+      "issues": [
+        [
+          "test/run.rb",
+          "external_gem",
+          "unresolved"
+        ]
+      ]
     },
     {
-      "repository": "BurntSushi/ripgrep", "split": "evaluation",
+      "repository": "BurntSushi/ripgrep",
+      "split": "evaluation",
       "files": {
         "crates/core/main.rs": "mod unit;\nuse crate::unit::work;\nfn main() {}\n",
         "crates/core/unit.rs": "pub fn work() {}\n",
-        "unrelated/unit.rs": "pub fn work() {}\n"
+        "unrelated/unit.rs": "pub fn work() {}\n",
+        "overlay/Cargo.toml": "[workspace]\nmembers=[\"crates/*\"]",
+        "overlay/crates/local/Cargo.toml": "[package]\nname=\"probe\"",
+        "overlay/crates/local/src/lib.rs": "mod value;",
+        "overlay/crates/local/src/value.rs": "pub fn value() {}"
       },
-      "edges": [["crates/core/main.rs", "crates/core/unit.rs"]], "issues": []
+      "edges": [
+        [
+          "crates/core/main.rs",
+          "crates/core/unit.rs"
+        ],
+        [
+          "overlay/crates/local/src/lib.rs",
+          "overlay/crates/local/src/value.rs"
+        ]
+      ],
+      "issues": []
     },
     {
-      "repository": "go-chi/chi", "split": "evaluation",
+      "repository": "go-chi/chi",
+      "split": "evaluation",
       "files": {
         "middleware/unit.go": "package middleware\nfunc Unit() {}\n",
         "middleware/other.go": "package middleware\nfunc Other() {}\n",
         "middleware/unit_test.go": "package middleware\nfunc TestUnit() {}\n",
         "example/run.go": "package main\nimport \"github.com/go-chi/chi/v5/middleware\"\nimport \"github.com/external/chi/v5/middleware\"\n"
       },
-      "edges": [["example/run.go", "middleware/unit.go"], ["example/run.go", "middleware/other.go"]],
-      "issues": [["example/run.go", "github.com/external/chi/v5/middleware", "unresolved"]]
+      "edges": [
+        [
+          "example/run.go",
+          "middleware/unit.go"
+        ],
+        [
+          "example/run.go",
+          "middleware/other.go"
+        ]
+      ],
+      "issues": [
+        [
+          "example/run.go",
+          "github.com/external/chi/v5/middleware",
+          "unresolved"
+        ]
+      ]
     },
     {
-      "repository": "pallets/flask", "split": "evaluation",
+      "repository": "pallets/flask",
+      "split": "evaluation",
       "files": {
         "src/flask/__init__.py": "VERSION = 3\n",
         "src/flask/unit.py": "def work():\n    return 1\n",
         "src/flask/run.py": "import flask.unit\n",
         "tests/run.py": "import flask.unit\n"
       },
-      "edges": [["src/flask/run.py", "src/flask/unit.py"]],
-      "issues": [["tests/run.py", "flask.unit", "unresolved"]]
+      "edges": [
+        [
+          "src/flask/run.py",
+          "src/flask/unit.py"
+        ],
+        [
+          "tests/run.py",
+          "src/flask/unit.py"
+        ]
+      ],
+      "issues": []
+    },
+    {
+      "repository": "trailheadapps/lwc-recipes",
+      "split": "evaluation",
+      "files": {
+        "force-app/main/default/lwc/view/view.js": "import \"@salesforce/apex/Unit.run\"; import \"@salesforce/label/c.Title\"; import \"lwc\"; import \"@salesforce/label/c.Missing\";",
+        "force-app/main/default/classes/Unit.cls": "public class Unit { public static void run() {} }",
+        "force-app/main/default/labels/Custom.labels-meta.xml": "<CustomLabels><labels><fullName>Title</fullName></labels></CustomLabels>",
+        "unlisted/classes/Unit.cls": "public class Unit {}"
+      },
+      "edges": [
+        [
+          "force-app/main/default/lwc/view/view.js",
+          "force-app/main/default/classes/Unit.cls"
+        ],
+        [
+          "force-app/main/default/lwc/view/view.js",
+          "force-app/main/default/labels/Custom.labels-meta.xml"
+        ]
+      ],
+      "issues": [
+        [
+          "force-app/main/default/lwc/view/view.js",
+          "@salesforce/label/c.Missing",
+          "unresolved"
+        ]
+      ]
+    },
+    {
+      "repository": "python-poetry/poetry",
+      "split": "evaluation",
+      "files": {
+        "poetry/__init__.py": "",
+        "poetry/unit.py": "VALUE = 1",
+        "tests/probe.py": "import poetry.unit\nimport requests\nimport other.unit",
+        "other/__init__.py": "",
+        "other/unit.py": "VALUE = 2"
+      },
+      "edges": [
+        [
+          "tests/probe.py",
+          "poetry/unit.py"
+        ]
+      ],
+      "issues": [
+        [
+          "tests/probe.py",
+          "other.unit",
+          "unresolved"
+        ]
+      ]
+    },
+    {
+      "repository": "pypa/hatch",
+      "split": "evaluation",
+      "files": {
+        "src/hatch/__init__.py": "",
+        "src/hatch/unit.py": "VALUE = 1",
+        "tests/probe.py": "import hatch.unit\nimport click"
+      },
+      "edges": [],
+      "issues": [
+        [
+          "tests/probe.py",
+          "hatch.unit",
+          "unresolved"
+        ]
+      ]
     }
   ]
 }

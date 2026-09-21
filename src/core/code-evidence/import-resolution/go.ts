@@ -3,6 +3,56 @@ import type { CodeImportContext, CodeImportResolver, ProjectManifestSpec } from 
 import { nearestProjectManifest } from "../project-structure.js";
 import { addName, localPath } from "./paths.js";
 
+interface GoConfig { modulePath?: string; dependencies: string[]; replacements: Array<{ name: string; directory: string }>; uses: string[]; notices: string[] }
+function goDirectives(content: string, directive: string): string[] {
+  const values: string[] = [];
+  let group = false;
+  for (const raw of content.split(/\r?\n/u)) {
+    const line = raw.replace(/\s*\/\/.*$/u, "").trim();
+    if (!line) continue;
+    if (group) { if (line === ")") group = false; else values.push(line); }
+    else if (line.startsWith(directive + " ") || line.startsWith(directive + "\t")) {
+      const value = line.slice(directive.length).trim();
+      if (value === "(") group = true; else values.push(value);
+    }
+  }
+  if (group) throw new Error("Unterminated Go directive block.");
+  return values;
+}
+function goConfig(content: string): GoConfig {
+  const dependencies: string[] = [], replacements: GoConfig["replacements"] = [], uses: string[] = [], notices = new Set<string>();
+  const literal = (value: string): string | undefined => {
+    try { return value.startsWith('"') ? JSON.parse(value) : /^[^\s"`]+$/u.test(value) ? value : undefined; } catch { return; }
+  };
+  for (const line of goDirectives(content, "require")) {
+    const match = /^("[^"\\]+"|\S+)\s+v[^\s]+$/u.exec(line);
+    const name = match && literal(match[1]!);
+    if (name) dependencies.push(name); else notices.add("unsupported_go_require");
+  }
+  for (const line of goDirectives(content, "replace")) {
+    const match = /^("[^"\\]+"|\S+)(?:\s+v\S+)?\s*=>\s*("[^"\\]+"|\S+)$/u.exec(line);
+    const name = match && literal(match[1]!), directory = match && literal(match[2]!);
+    if (name && directory && /^\.{1,2}(?:\/|$)/u.test(directory)) replacements.push({ name, directory });
+    else notices.add("unsupported_go_replace");
+  }
+  for (const line of goDirectives(content, "use")) {
+    const directory = literal(line);
+    if (directory && !/[\0*?]/u.test(directory)) uses.push(directory); else notices.add("unsupported_go_workspace_use");
+  }
+  return { dependencies, replacements, uses, notices: [...notices] };
+}
+function goReferences(value: unknown, path: string): string[] {
+  const config = value as GoConfig;
+  return [...config.uses, ...config.replacements.map((entry) => entry.directory)].flatMap((directory) => {
+    const target = localPath(posix.dirname(path), posix.join(directory, "go.mod"));
+    return target ? [target] : [];
+  });
+}
+export const GO_WORKSPACE_MANIFEST: ProjectManifestSpec = {
+  fileName: "go.work", parse: goConfig, references: goReferences, referenceDepth: 4,
+  notices: (value) => (value as GoConfig).notices,
+};
+
 export const GO_MODULE_MANIFEST: ProjectManifestSpec = {
   fileName: "go.mod",
   parse(content) {
@@ -13,8 +63,10 @@ export const GO_MODULE_MANIFEST: ProjectManifestSpec = {
     const modulePath: string = match[1]!.startsWith('"') ? JSON.parse(match[1]!) : match[1]!;
     if (modulePath.length > 4096 || !/^[A-Za-z0-9._~+-]+(?:\/[A-Za-z0-9._~+-]+)*$/u.test(modulePath) ||
         modulePath.split("/").some((part) => part === "." || part === "..")) throw new Error("Invalid module path.");
-    return { modulePath };
+    return { ...goConfig(content), modulePath };
   },
+  references: goReferences, referenceDepth: 4,
+  notices: (value) => (value as GoConfig).notices,
 };
 
 export function createGoImportResolver(context: CodeImportContext): CodeImportResolver {
@@ -31,12 +83,40 @@ export function createGoImportResolver(context: CodeImportContext): CodeImportRe
     return (source, specifier) => {
       const manifest = ownership.get(posix.dirname(source)) ?? nearestProjectManifest(structure, source, "go.mod");
       if (!manifest || manifest.warning) return [];
-      const modulePath = (manifest.value as { modulePath: string }).modulePath;
-      if (specifier !== modulePath && !specifier.startsWith(`${modulePath}/`)) return [];
+      const workspace = nearestProjectManifest(structure, source, "go.work");
+      const configurations = [manifest, ...(workspace && !workspace.warning ? [workspace] : [])];
+      const replacements = configurations.flatMap((entry) => (entry.value as GoConfig).replacements.map((replacement) => ({ ...replacement, owner: entry })));
+      const matching = replacements.filter((entry) => specifier === entry.name || specifier.startsWith(entry.name + "/"))
+        .sort((a, b) => b.name.length - a.name.length || Number(b.owner.fileName === "go.work") - Number(a.owner.fileName === "go.work"));
+      const replacement = matching[0];
+      if (replacement && new Set(matching.filter((entry) => entry.name === replacement.name && entry.owner === replacement.owner)
+        .map((entry) => entry.directory)).size > 1) {
+        context.reportIssue?.({ status: "ambiguous", matchedName: specifier, reason: "multiple_matches" }); return [];
+      }
+      let target = manifest;
+      let modulePath = (manifest.value as GoConfig).modulePath!;
+      if (replacement) {
+        const file = localPath(posix.dirname(replacement.owner.path), posix.join(replacement.directory, "go.mod"));
+        const resolved = file && structure.manifests.get(file);
+        if (!resolved || resolved.warning) return [];
+        target = resolved; modulePath = replacement.name;
+      } else if (specifier !== modulePath && !specifier.startsWith(`${modulePath}/`)) {
+        const members = workspace && !workspace.warning ? (workspace.value as GoConfig).uses.flatMap((directory) => {
+          const path = localPath(posix.dirname(workspace.path), posix.join(directory, "go.mod"));
+          if (!path) return [];
+          const entry = structure.manifests.get(path), name = (entry?.value as GoConfig | undefined)?.modulePath;
+          return entry && !entry.warning && name && (specifier === name || specifier.startsWith(name + "/")) ? [entry] : [];
+        }) : [];
+        if (members.length !== 1) {
+          if (members.length > 1) context.reportIssue?.({ status: "ambiguous", matchedName: specifier, reason: "multiple_matches" });
+          return [];
+        }
+        target = members[0]!; modulePath = (target.value as GoConfig).modulePath!;
+      }
       const suffix = specifier === modulePath ? "" : specifier.slice(modulePath.length + 1);
       if (suffix && suffix.split("/").some((part) => !part || part === "." || part === ".." || part === "vendor")) return [];
-      const directory = suffix ? localPath(posix.dirname(manifest.path), suffix) : posix.dirname(manifest.path);
-      if (!directory || ownership.get(directory)?.path !== manifest.path) return [];
+      const directory = suffix ? localPath(posix.dirname(target.path), suffix) : posix.dirname(target.path);
+      if (!directory || ownership.get(directory)?.path !== target.path) return [];
       return [...(directories.get(directory) ?? [])];
     };
   }
