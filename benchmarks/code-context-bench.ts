@@ -11,6 +11,7 @@ import { codeEvidenceIndexFile, getCodeQueryCacheDiagnostics } from "../src/core
 import { TypeScriptKnowledgeAdapter } from "../src/core/code-evidence/typescript-adapter.js";
 import { clearWorkspaceStates } from "../src/core/workspace-state.js";
 import type { KnowledgeFragment } from "../src/core/code-evidence/types.js";
+import { stableContextPayload } from "../src/tools/context-tools.js";
 
 const argument = (name: string, fallback: string) => process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
 const scales = argument("scales", "1000,10000").split(",").map(Number);
@@ -62,7 +63,7 @@ try {
       assert.ok(code.changeImpact.codeRoots?.length);
       assert.ok(code.changeImpact.codeRelations?.length, "the measured operation must actually disclose incoming code candidates");
       assert.ok(code.budget.withinHeuristicBudget);
-      const docSamples: number[] = [], codeSamples: number[] = [], overhead: number[] = [];
+      const docSamples: number[] = [], codeSamples: number[] = [], overhead: number[] = [], mapDelta: number[] = [];
       for (let i = 0; i < iterations; i++) {
         const start = performance.now();
         const document = await compileTaskContext(params);
@@ -71,10 +72,20 @@ try {
         const end = performance.now();
         assert.deepEqual(document, doc);
         docSamples.push(middle - start); codeSamples.push(end - middle); overhead.push((end - middle) - (middle - start));
+        if (process.argv.includes("--map-ablation")) {
+          const withoutStart = performance.now();
+          await compileTaskContext({ ...codeParams, includeRepositoryMap: false });
+          const withStart = performance.now();
+          await compileTaskContext(codeParams);
+          mapDelta.push((performance.now() - withStart) - (withStart - withoutStart));
+        }
       }
       global.gc?.();
       const retainedHeapBytes = process.memoryUsage().heapUsed - heapBefore;
       const overheadStats = stats(overhead);
+      const alternate = await compileTaskContext({ ...codeParams, objective: "Review the credit limits for billing" });
+      const prefix = (a: unknown, b: unknown) => { const left = Buffer.from(JSON.stringify(a)), right = Buffer.from(JSON.stringify(b)); let i = 0;
+        while (i < Math.min(left.length, right.length) && left[i] === right[i]) i++; return i; };
       if (gate) assert.ok(overheadStats.p50Ms <= 5, `Code expansion p50 overhead exceeds 5 ms: ${overheadStats.p50Ms}`);
       if (gate) assert.ok(overheadStats.p95Ms <= 5, `Code expansion p95 overhead exceeds 5 ms: ${overheadStats.p95Ms}`);
       results.push({ fragments: fragments.length, files: files.length, tokenBudget, coldMs,
@@ -82,6 +93,9 @@ try {
         codeRoots: code.changeImpact.codeRoots!.length, codeRelations: code.changeImpact.codeRelations!.length,
         heuristicTokens: code.size.heuristicTokens, withinBudget: code.budget.withinHeuristicBudget,
         cached: getCodeQueryCacheDiagnostics(wikiRoot), documentParity: previous ? "identical" : "not compared" });
+      Object.assign(results.at(-1)!, { ...(mapDelta.length ? { mapPairedOverhead: stats(mapDelta) } : {}),
+        prefixBytes: { originalOrder: prefix(code, alternate), stableOrder: prefix(stableContextPayload(code), stableContextPayload(alternate)),
+          payloadBytes: Buffer.byteLength(JSON.stringify(code)), note: "Same query and project, different objective; serialized prefix bytes, not provider cache hits." } });
     }
   }
   const report = { node: process.version, iterations, gate,

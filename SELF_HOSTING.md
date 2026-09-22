@@ -54,7 +54,7 @@ A pre-commit integration should:
 3. Block the commit when the summary reports drift, showing `topDrifted` claim IDs, pages, ranges, and reasons.
 4. Re-verify those claims through the normal Evidence IR workflow; never rewrite a wiki page automatically from the hook.
 
-A CI integration uses the same payload with paths changed relative to the target branch. It can publish `topDrifted` as a review annotation and should fail the job on `driftSuspected > 0` or `anchorUnresolvable > 0`. For a periodic repository-wide audit, use `{"action":"drift"}`. The operation mutates only the disposable `wiki/.knowledge-rail/drift/ledger.json`; canonical pages, claims, and repository files remain byte-preserved.
+A CI integration uses the same payload with paths changed relative to the target branch. It can publish `topDrifted` as a review annotation and should fail the job on `driftSuspected > 0` or `anchorUnresolvable > 0`. For a periodic repository-wide audit, use `{"action":"drift"}`. Drift persists its disposable ledger and, for hash-verified Git relocations, updates claim anchors with history. It requires write scope. Use `dry_run=true` for a read-only report; canonical pages and repository source files are not edited.
 
 Do not share or hard-code the loopback gateway credential in CI. Prefer a job-local `stdio` server bound to the checked-out workspace, or provision the protected local gateway state using the same trust boundary described above.
 
@@ -124,3 +124,23 @@ external changes are checked on the next query. Workspace release and automatic
 LRU eviction discard its disposable state. An idle workspace does not notice an
 external edit until another query. See the [cache measurements and lifecycle](benchmarks/README.md#code-evidence-queries)
 for the distinction between admission estimates, heap and RSS.
+
+## Semantic persistence and local memory
+
+Semantic snapshots (`semantic-index.json`, `semantic-vectors.bin`) and the durable
+`semantic-journal.bin` live in each wiki's `.knowledge-rail/`. Unchanged pages reuse
+vectors after restart. A page change rebuilds that whole page; a provider/model
+identity change rebuilds the corpus. Use `knowledge_admin action=status` for progress
+and `action=checkpoint` for compaction (`force=true` rebuilds asynchronously).
+
+Keep the canonical wiki and `docs/evidence-ir` in backups. Semantic artifacts are
+rebuildable; deleting the usage ledger intentionally loses ranking observations.
+Provider failures preserve canonical writes and report pending/degraded semantic work.
+Different client provider configurations on one wiki invalidate the shared semantic
+snapshot. No provider configuration means fully offline lexical/graph retrieval.
+
+Optional static models download only through explicit `semantic_setup` apply. They
+consume per-workspace tokenizer memory plus the configured matrix budget; the default
+256 MiB budget uses uncached rows for the larger multilingual model. See
+[memory evolution](docs/guides/memory-evolution.md) for setup, read-only behavior,
+historical queries, usage retention/reset, and measured startup limits.

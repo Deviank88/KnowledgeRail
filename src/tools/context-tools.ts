@@ -34,7 +34,7 @@ function compactManifestText(manifest: TaskContext): string {
       .filter((evidence) => evidence.type === "decision")
       .map((evidence) => evidence.path)
   ).size;
-  const lines = [
+  const dynamicLines = [
     `Task context: ${manifest.evidence.length} evidence, ${manifest.unknowns.length} unknown(s), ` +
       `~${manifest.size.heuristicTokens} heuristic tokens (${manifest.size.estimator}).`,
     `Intent: ${manifest.task.intent}`,
@@ -43,6 +43,7 @@ function compactManifestText(manifest: TaskContext): string {
       `coverage=${manifest.retrieval.coverageSufficient}; mode=${manifest.retrieval.coverageMode}; ` +
       `fallback=${manifest.retrieval.fallbackUsed}.`,
   ];
+  const lines = ["KnowledgeRail task context"];
 
   if (decisionCandidateCount > 0) {
     lines.push(
@@ -54,9 +55,8 @@ function compactManifestText(manifest: TaskContext): string {
     );
   }
 
-  for (const warning of manifest.retrieval.coverageWarnings) lines.push(`WARNING: ${warning}`);
-
-  for (const field of TASK_CONTEXT_EVIDENCE_FIELDS) {
+  const fields = ["currentState", "decisions", ...TASK_CONTEXT_EVIDENCE_FIELDS.filter((field) => field !== "currentState" && field !== "decisions")] as const;
+  for (const field of fields) {
     const evidenceItems = manifest[field];
     if (evidenceItems.length === 0) continue;
     lines.push("", `${CONTEXT_SECTION_LABELS[field]}:`);
@@ -80,7 +80,17 @@ function compactManifestText(manifest: TaskContext): string {
     for (const relation of manifest.changeImpact.codeRelations ?? []) lines.push(`- incoming ${relation.relation}: ${relation.path}#${relation.symbol}`);
   }
   for (const warning of manifest.changeImpact.codeWarnings ?? []) lines.push(`CODE WARNING: ${warning}`);
+  if (manifest.repositoryMap) {
+    lines.push("", "Repository map (indexed declarations; inspect relevant resources):");
+    for (const node of manifest.repositoryMap.nodes) lines.push(`- ${node.path}: ${node.signature}`);
+  }
+  if (manifest.temporal) {
+    lines.push("", `Historical claim validity at ${manifest.temporal.asOf} (page links open current pages):`);
+    for (const claim of manifest.temporal.claims) lines.push(`- ${claim.id}: ${claim.text}`);
+  }
   for (const gap of manifest.unknowns) lines.push(`UNKNOWN ${gap.kind}: ${gap.description}`);
+  for (const warning of manifest.retrieval.coverageWarnings) lines.push(`WARNING: ${warning}`);
+  lines.push("", ...dynamicLines);
   return lines.join("\n");
 }
 
@@ -100,13 +110,15 @@ function evidenceLinks(manifest: TaskContext): ResourceLink[] {
   }
   for (const page of manifest.changeImpact.codeWikiPages ?? []) links.push({ type: "resource_link", uri: page.uri, name: page.title,
     mimeType: "text/markdown", description: "Related wiki page with an active anchored claim; inspect before relying on it." });
+  for (const node of manifest.repositoryMap?.nodes ?? []) links.push({ type: "resource_link", uri: node.uri,
+    name: `${node.path}#${node.symbol}`, mimeType: "text/plain", description: "Repository map declaration; lexical edges do not prove execution." });
   return [...new Map(links.map((link) => [link.uri, link])).values()];
 }
 
 export function compactStructuredContext(manifest: TaskContext) {
   return {
     version: manifest.version,
-    task: manifest.task,
+    decisions: manifest.decisions,
     evidence: manifest.evidence.map((evidence) => ({
       uri: evidence.uri,
       path: evidence.path,
@@ -118,7 +130,8 @@ export function compactStructuredContext(manifest: TaskContext) {
       staleReason: evidence.staleReason,
       driftClaimIds: evidence.driftClaimIds,
     })),
-    decisions: manifest.decisions,
+    ...(manifest.repositoryMap ? { repositoryMap: manifest.repositoryMap } : {}),
+    ...(manifest.temporal ? { temporal: manifest.temporal } : {}),
     changeImpact: {
       mode: manifest.changeImpact.mode,
       decisions: manifest.changeImpact.decisions,
@@ -145,7 +158,17 @@ export function compactStructuredContext(manifest: TaskContext) {
       fallbackUsed: manifest.retrieval.fallbackUsed,
     },
     budget: manifest.budget,
+    task: manifest.task,
   };
+}
+
+/** Preserve values and ranking while putting volatile task and snapshot data last. */
+export function stableContextPayload(manifest: TaskContext): TaskContext {
+  const { version, currentState, decisions, repositoryMap, task, intent, objective, retrieval, size, budget, ...rest } = manifest;
+  return { version, currentState, decisions, ...rest,
+    ...(repositoryMap ? { repositoryMap: { components: repositoryMap.components, nodes: repositoryMap.nodes,
+      relations: repositoryMap.relations, truncated: repositoryMap.truncated, widenable: repositoryMap.widenable, snapshot: repositoryMap.snapshot } } : {}),
+    budget, size, task, intent, objective, retrieval };
 }
 
 export function registerContextTools(
@@ -171,6 +194,8 @@ export function registerContextTools(
         max_evidence: z.number().int().min(1).max(20).default(8),
         heuristic_token_budget: z.number().int().min(256).max(12_000).default(2_000),
         response_detail: z.enum(["full", "compact"]).default("full"),
+        include_repository_map: z.boolean().optional(),
+        as_of: z.iso.datetime().optional(),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
     },
@@ -184,6 +209,8 @@ export function registerContextTools(
       max_evidence,
       heuristic_token_budget,
       response_detail,
+      include_repository_map,
+      as_of,
     }) => {
       try {
         const manifest = await compileTaskContext({
@@ -196,6 +223,8 @@ export function registerContextTools(
           retrievalProfile: retrieval_profile,
           maxEvidence: max_evidence,
           heuristicTokenBudget: heuristic_token_budget,
+          includeRepositoryMap: include_repository_map,
+          asOf: as_of,
         });
         return {
           content: [
@@ -204,7 +233,7 @@ export function registerContextTools(
           ],
           structuredContent: response_detail === "compact"
             ? compactStructuredContext(manifest)
-            : { ...manifest },
+            : { ...stableContextPayload(manifest) },
         };
       } catch (error: unknown) {
         return errorResult(error);

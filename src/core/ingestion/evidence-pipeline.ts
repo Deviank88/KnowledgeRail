@@ -139,6 +139,21 @@ export async function recordEvidenceClaims(params: {
     },
   });
 
+  const testsByInput = new Map<number, NonNullable<EvidenceClaim["testEvidence"]>>();
+  for (const [index, input] of params.claims.entries()) {
+    if (!input.verifiedBy?.length) continue;
+    if (input.verifiedBy.length > 8) throw new Error("At most eight test references are supported per claim.");
+    const repositoryRoot = path.dirname(path.resolve(params.wikiRoot));
+    const evidenceIndex = new PersistentCodeEvidenceIndex({ repositoryRoot, wikiRoot: params.wikiRoot });
+    const uris = [...new Set(input.verifiedBy)];
+    await refreshCodeTargetPaths(evidenceIndex, uris.map((uri) => parseCodeResourceUri(uri, { allowWorkspaceBinding: false }).path));
+    const verified: NonNullable<EvidenceClaim["testEvidence"]> = [];
+    for (const uri of uris) verified.push({ resourceUri: uri, anchor: await captureCodeAnchor({
+      repositoryRoot, wikiRoot: params.wikiRoot, resourceUri: uri, capturedAt: now, requireTest: true,
+    }) });
+    testsByInput.set(index, verified);
+  }
+
   const result = await mutateEvidenceIrStore(params.wikiRoot, (store) => {
     const byId = new Map(store.claims.map((claim) => [claim.id, claim] as const));
     const recorded: EvidenceClaim[] = [];
@@ -150,6 +165,7 @@ export async function recordEvidenceClaims(params: {
         segmentId: params.segmentId,
         input,
         codeAnchor: capturedAnchors.get(inputIndex),
+        testEvidence: testsByInput.get(inputIndex),
         now,
         ...(Object.prototype.hasOwnProperty.call(params, "userEmailDomain")
           ? { userEmailDomain: params.userEmailDomain }
@@ -167,6 +183,10 @@ export async function recordEvidenceClaims(params: {
           delete existing.codeAnchor;
         }
         existing.relations = candidate.relations;
+        if (input.validFrom !== undefined) existing.validFrom = candidate.validFrom;
+        if (input.validUntil !== undefined) existing.validUntil = candidate.validUntil;
+        if (input.provenance !== undefined) existing.provenance = candidate.provenance;
+        if (input.verifiedBy !== undefined) existing.testEvidence = candidate.testEvidence;
         existing.confidence = candidate.confidence;
         existing.status = candidate.status;
         existing.updatedAt = now;

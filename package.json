@@ -1,6 +1,6 @@
 {
   "name": "knowledge-rail",
-  "version": "2.8.7",
+  "version": "2.9.0",
   "mcpName": "io.github.Deviank88/knowledge-rail",
   "description": "Local-first MCP 2.0 server for persistent, evidence-backed project knowledge and task context",
   "license": "Apache-2.0",
@@ -24,6 +24,7 @@
     "CHANGELOG.md",
     "docs/guides/claude-code-hooks.md",
     "docs/guides/code-evidence-retrieval.md",
+    "docs/guides/memory-evolution.md",
     "SELF_HOSTING.md",
     "SECURITY.md",
     "assets/knowledge-rail-logo.png",
@@ -119,12 +120,14 @@
     "bench:task-efficiency": "node --import tsx benchmarks/task-efficiency-bench.ts",
     "bench:code-memory": "node --expose-gc --import tsx benchmarks/code-memory-budget-bench.ts",
     "bench:code-cold": "node --import tsx benchmarks/code-cold-acceptance-bench.ts",
-    "bench:task-model": "node --import tsx benchmarks/task-model-efficiency-bench.ts"
+    "bench:task-model": "node --import tsx benchmarks/task-model-efficiency-bench.ts",
+    "eval:semantic:lifecycle": "node --import tsx benchmarks/semantic-lifecycle-eval.ts"
   },
   "engines": {
     "node": ">=22.12.0"
   },
   "dependencies": {
+    "@huggingface/tokenizers": "0.2.0",
     "@modelcontextprotocol/client": "^2.0.0",
     "@modelcontextprotocol/node": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",

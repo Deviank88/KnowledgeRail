@@ -56,6 +56,9 @@ function renderClaim(claim: EvidenceClaim): string[] {
     epistemic,
     `> Provenance: \`${claim.sourceUri}#${claim.segmentId}\` · confidence ${claim.confidence.toFixed(3)} · status ${claim.status}`,
     ...code,
+    ...(claim.testEvidence ?? []).map((test) => `> Verified by: [${test.anchor.path.replace(/[\\[\]]/gu, "\\$&").replace(/[\r\n]/gu, " ")}:${test.anchor.startLine}-${test.anchor.endLine}](<${test.resourceUri}>) (anchored test evidence; execution is not implied).`),
+    ...(claim.provenance ?? []).map((reference) => `> ${reference.kind}: ${reference.reference}`),
+    ...(claim.validFrom || claim.validUntil ? [`> Validity: ${claim.validFrom ?? claim.createdAt} → ${claim.validUntil ?? "open"} (exclusive end).`] : []),
   ];
 }
 

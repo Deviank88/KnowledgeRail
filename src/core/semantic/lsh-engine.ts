@@ -5,6 +5,8 @@ import type {
   AnnSearchResult,
   AnnVectorEntry,
 } from "./types.js";
+import type { SemanticVector, AnnSignatures } from "./types.js";
+import { cosine, normalizeVector, storeVector } from "./vector.js";
 
 export interface LshAnnEngineOptions {
   dimensions: number;
@@ -67,7 +69,7 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function dot(left: Float32Array, right: Float32Array): number {
+function dot(left: ArrayLike<number>, right: ArrayLike<number>): number {
   let value = 0;
   for (let index = 0; index < left.length; index++) value += left[index]! * right[index]!;
   return value;
@@ -75,7 +77,10 @@ function dot(left: Float32Array, right: Float32Array): number {
 
 export class LshAnnEngine implements AnnEngine {
   readonly descriptor: LshAnnEngineDescriptor;
-  private readonly vectors = new Map<string, Float32Array>();
+  private readonly vectors = new Map<string, SemanticVector>();
+  private readonly savedSignatures = new Map<string, AnnSignatures>();
+  private restoring: Promise<void> | undefined;
+  private restoreGeneration = 0;
   private readonly hyperplanes: Float32Array[][];
   private readonly buckets: Array<Map<number, Set<string>>>;
 
@@ -97,6 +102,7 @@ export class LshAnnEngine implements AnnEngine {
       bitsPerTable,
       probes,
       minimumScore,
+      seed,
     };
     this.hyperplanes = Array.from({ length: tables }, (_, table) => {
       const random = mulberry32(seedNumber(`${seed}\0${table}`));
@@ -108,7 +114,7 @@ export class LshAnnEngine implements AnnEngine {
     this.buckets = Array.from({ length: tables }, () => new Map());
   }
 
-  private signature(vector: Float32Array, table: number): Signature {
+  private signature(vector: ArrayLike<number>, table: number): Signature {
     let value = 0;
     const margins: Array<{ bit: number; margin: number }> = [];
     for (let bit = 0; bit < this.descriptor.bitsPerTable; bit++) {
@@ -120,45 +126,93 @@ export class LshAnnEngine implements AnnEngine {
     return { value, margins };
   }
 
-  private addToBuckets(id: string, vector: Float32Array): void {
+  private addToBuckets(id: string, vector: SemanticVector, restored?: AnnSignatures): void {
+    const signatures: number[] = [];
     for (let table = 0; table < this.descriptor.tables; table++) {
-      const signature = this.signature(vector, table).value;
+      const signature = restored?.[table] ?? this.signature(vector, table).value;
+      if (!restored) signatures.push(signature);
       const bucket = this.buckets[table]!.get(signature) ?? new Set<string>();
       bucket.add(id);
       this.buckets[table]!.set(signature, bucket);
     }
+    this.savedSignatures.set(id, restored ?? signatures);
   }
 
-  private removeFromBuckets(id: string, vector: Float32Array): void {
+  private removeFromBuckets(id: string): void {
+    if (!this.savedSignatures.has(id)) return;
     for (let table = 0; table < this.descriptor.tables; table++) {
-      const signature = this.signature(vector, table).value;
+      const signature = this.savedSignatures.get(id)![table]!;
       const bucket = this.buckets[table]!.get(signature);
       if (!bucket) continue;
       bucket.delete(id);
       if (bucket.size === 0) this.buckets[table]!.delete(signature);
     }
+    this.savedSignatures.delete(id);
   }
 
   rebuild(entries: readonly AnnVectorEntry[]): void {
+    this.restoreGeneration++;
+    this.restoring = undefined;
     this.vectors.clear();
+    this.savedSignatures.clear();
     for (const buckets of this.buckets) buckets.clear();
     for (const entry of entries) this.upsert(entry);
   }
 
+  restore(entries: readonly AnnVectorEntry[], normalized = false): void {
+    this.rebuild([]);
+    const pending: string[] = [];
+    for (const entry of entries) {
+      const validSignatures = entry.signatures?.length === this.descriptor.tables &&
+        entry.signatures.every((value) => Number.isInteger(value) && value >= 0 && value < 2 ** this.descriptor.bitsPerTable);
+      if (validSignatures) this.upsert(normalized ? { ...entry, normalized } : entry);
+      else {
+        const vector = (normalized || entry.normalized) && (entry.vector instanceof Float32Array || entry.vector instanceof Int8Array)
+          ? entry.vector : normalizeVector(entry.vector, this.descriptor.dimensions);
+        this.vectors.set(entry.id, vector);
+        pending.push(entry.id);
+      }
+    }
+    if (!pending.length) return;
+    const generation = this.restoreGeneration;
+    this.restoring = (async () => {
+      for (let offset = 0; offset < pending.length; offset += 64) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        if (generation !== this.restoreGeneration) return;
+        for (const id of pending.slice(offset, offset + 64)) {
+          const vector = this.vectors.get(id);
+          if (vector && !this.savedSignatures.has(id)) this.addToBuckets(id, vector);
+        }
+      }
+    })().finally(() => { if (generation === this.restoreGeneration) this.restoring = undefined; });
+  }
+  async ready(): Promise<void> { await this.restoring; }
+  dispose(): void { this.restoreGeneration++; this.restoring = undefined; }
+
   upsert(entry: AnnVectorEntry): void {
     if (!entry.id.trim() || entry.id.includes("\0")) throw new Error("ANN entry ID is invalid.");
-    const vector = normalizedVector(entry.vector, this.descriptor.dimensions);
+    const vector = entry.normalized && (entry.vector instanceof Float32Array || entry.vector instanceof Int8Array)
+      ? entry.vector : normalizeVector(entry.vector, this.descriptor.dimensions);
+    if (vector.length !== this.descriptor.dimensions) throw new Error("Embedding dimension mismatch.");
+    if (entry.signatures && (entry.signatures.length !== this.descriptor.tables ||
+        entry.signatures.some((value) => !Number.isInteger(value) || value < 0 || value >= 2 ** this.descriptor.bitsPerTable))) {
+      throw new Error("Invalid persisted ANN signatures.");
+    }
     const previous = this.vectors.get(entry.id);
-    if (previous) this.removeFromBuckets(entry.id, previous);
+    if (previous) this.removeFromBuckets(entry.id);
     this.vectors.set(entry.id, vector);
-    this.addToBuckets(entry.id, vector);
+    this.addToBuckets(entry.id, vector, entry.signatures);
   }
 
   remove(id: string): void {
     const vector = this.vectors.get(id);
     if (!vector) return;
-    this.removeFromBuckets(id, vector);
+    this.removeFromBuckets(id);
     this.vectors.delete(id);
+  }
+
+  signatures(id: string): AnnSignatures | undefined {
+    return this.savedSignatures.get(id);
   }
 
   search(value: readonly number[], k: number): AnnSearchResult {
@@ -166,10 +220,13 @@ export class LshAnnEngine implements AnnEngine {
       throw new Error("ANN result limit must be an integer between 1 and 1,000.");
     }
     const limit = k;
-    const vector = normalizedVector(value, this.descriptor.dimensions);
+    const quantized = this.vectors.values().next().value instanceof Int8Array;
+    const vector = quantized ? storeVector(value, this.descriptor.dimensions, "i8").vector
+      : normalizedVector(value, this.descriptor.dimensions);
     const candidates = new Set<string>();
     let visitedBuckets = 0;
-    for (let table = 0; table < this.descriptor.tables; table++) {
+    if (this.restoring) for (const id of this.vectors.keys()) candidates.add(id);
+    for (let table = 0; !this.restoring && table < this.descriptor.tables; table++) {
       const signature = this.signature(vector, table);
       const signatures = [signature.value];
       for (const candidate of signature.margins.slice(0, this.descriptor.probes - 1)) {
@@ -181,7 +238,7 @@ export class LshAnnEngine implements AnnEngine {
       }
     }
     const hits = [...candidates]
-      .map((id) => ({ id, score: dot(vector, this.vectors.get(id)!) }))
+      .map((id) => ({ id, score: quantized ? cosine(vector, this.vectors.get(id)!) : dot(vector, this.vectors.get(id)!) }))
       .filter((hit) => hit.score >= this.descriptor.minimumScore)
       .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
       .slice(0, limit);
@@ -191,6 +248,7 @@ export class LshAnnEngine implements AnnEngine {
         candidateCount: candidates.size,
         visitedBuckets,
         vectorCount: this.vectors.size,
+        ...(this.restoring ? { indexMode: "exact" as const } : {}),
       },
     };
   }

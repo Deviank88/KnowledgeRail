@@ -1,7 +1,8 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { atomicWriteText } from "./fs-service.js";
-import { pagePathsByClaim, readEvidenceIrStore } from "./ingestion/evidence-store.js";
+import { mutateEvidenceIrStore, pagePathsByClaim, readEvidenceIrStore } from "./ingestion/evidence-store.js";
+import { relocateGitAnchor } from "./code-evidence/git-anchor.js";
 import { withWikiFileLock } from "./lock-service.js";
 import { wikiMetaDir } from "./manifest-service.js";
 import { readFileSafe } from "./utils.js";
@@ -12,7 +13,7 @@ import type { CodeAnchor } from "./code-evidence/types.js";
 
 export const DRIFT_LEDGER_VERSION = 1 as const;
 
-export type DriftVerdict = "fresh" | "drift_suspected" | "anchor_unresolvable";
+export type DriftVerdict = "fresh" | "relocated" | "drift_suspected" | "anchor_unresolvable";
 export type DriftReason =
   | "content_changed"
   | "range_out_of_bounds"
@@ -27,6 +28,8 @@ export interface DriftLedgerEntry {
   observedRangeHash?: string;
   verdict: DriftVerdict;
   reason?: DriftReason;
+  relocatedAnchor?: CodeAnchor;
+  testResourceUri?: string;
 }
 
 export interface DriftLedger {
@@ -43,7 +46,7 @@ export interface DriftEvaluation {
 
 export interface StaleClaimsForPage {
   claimIds: string[];
-  reason: Exclude<DriftVerdict, "fresh">;
+  reason: Exclude<DriftVerdict, "fresh" | "relocated">;
 }
 
 export interface DriftSummary {
@@ -53,6 +56,7 @@ export interface DriftSummary {
   totalAnchors: number;
   checkedAnchors: number;
   fresh: number;
+  relocated?: number;
   driftSuspected: number;
   anchorUnresolvable: number;
   topDrifted: Array<{
@@ -95,7 +99,8 @@ function validEntry(value: unknown): value is DriftLedgerEntry {
     Array.isArray(entry.pagePaths) && entry.pagePaths.every((page) => typeof page === "string") &&
     validAnchor(entry.anchor) && validIsoTimestamp(entry.checkedAt) &&
     (entry.observedRangeHash === undefined || /^[a-f0-9]{64}$/.test(entry.observedRangeHash)) &&
-    ["fresh", "drift_suspected", "anchor_unresolvable"].includes(entry.verdict ?? "") &&
+    ["fresh", "relocated", "drift_suspected", "anchor_unresolvable"].includes(entry.verdict ?? "") &&
+    (entry.relocatedAnchor === undefined || validAnchor(entry.relocatedAnchor)) &&
     (entry.reason === undefined || [
       "content_changed", "range_out_of_bounds", "file_missing", "parser_version_changed",
     ].includes(entry.reason));
@@ -107,7 +112,7 @@ function validateLedger(value: unknown): DriftLedger {
   if (
     ledger.version !== DRIFT_LEDGER_VERSION || !validIsoTimestamp(ledger.checkedAt) ||
     !Array.isArray(ledger.entries) || !ledger.entries.every(validEntry) ||
-    new Set(ledger.entries.map((entry) => entry.claimId)).size !== ledger.entries.length
+    new Set(ledger.entries.map((entry) => `${entry.claimId}\0${entry.testResourceUri ?? "code"}`)).size !== ledger.entries.length
   ) throw new Error("Drift ledger has an unsupported or invalid schema.");
   return ledger as DriftLedger;
 }
@@ -261,16 +266,16 @@ export async function detectCodeDrift(params: {
   }
   const store = await readEvidenceIrStore(params.wikiRoot);
   params.signal?.throwIfAborted();
-  const allAnchored = store.claims.filter((claim) => claim.codeAnchor !== undefined);
-  const selected = allAnchored.filter((claim) =>
-    scope === "all" || pathMatches(claim.codeAnchor!.path, prefixes)
-  );
+  const allAnchored = store.claims.flatMap((claim) => [
+    ...(claim.codeAnchor ? [{ claim, anchor: claim.codeAnchor, testResourceUri: undefined as string | undefined }] : []),
+    ...(claim.testEvidence ?? []).map((test) => ({ claim, anchor: test.anchor, testResourceUri: test.resourceUri })),
+  ]);
+  const selected = allAnchored.filter(({ anchor }) => scope === "all" || pathMatches(anchor.path, prefixes));
   const pages = pagePathsByClaim(store);
   const fileCache = new Map<string, Promise<CurrentCodeRead>>();
   const entries: DriftLedgerEntry[] = [];
-  for (const claim of selected) {
+  for (const { claim, anchor, testResourceUri } of selected) {
     params.signal?.throwIfAborted();
-    const anchor = claim.codeAnchor!;
     let content = fileCache.get(anchor.path);
     if (!content) {
       content = readCurrentCode(params.repositoryRoot, repositoryRootReal, anchor.path);
@@ -285,20 +290,38 @@ export async function detectCodeDrift(params: {
           content: current.status === "missing" ? null : current.content,
           parserVersion: defaultParserVersionForPath(anchor.path) ?? anchor.parserVersion,
         });
+    const relocatedAnchor = evaluation.verdict === "drift_suspected" && current.status === "readable"
+      ? await relocateGitAnchor(params.repositoryRoot, anchor, current.content, checkedAt) : null;
     entries.push({
       claimId: claim.id,
+      ...(testResourceUri ? { testResourceUri } : {}),
       pagePaths: pages.get(claim.id) ?? [],
       anchor,
       checkedAt,
       ...(evaluation.observedRangeHash ? { observedRangeHash: evaluation.observedRangeHash } : {}),
-      verdict: evaluation.verdict,
-      ...(evaluation.reason ? { reason: evaluation.reason } : {}),
+      verdict: relocatedAnchor ? "relocated" : evaluation.verdict,
+      ...(relocatedAnchor ? { relocatedAnchor, observedRangeHash: relocatedAnchor.rangeHash }
+        : evaluation.reason ? { reason: evaluation.reason } : {}),
     });
   }
   entries.sort((left, right) => left.claimId.localeCompare(right.claimId));
 
   params.signal?.throwIfAborted();
   if (params.writeLedger !== false) {
+    if (entries.some((entry) => entry.relocatedAnchor)) await mutateEvidenceIrStore(params.wikiRoot, (latest) => {
+      params.signal?.throwIfAborted();
+      for (const entry of entries) {
+        if (!entry.relocatedAnchor) continue;
+        const claim = latest.claims.find((item) => item.id === entry.claimId);
+        const test = claim?.testEvidence?.find((item) => item.resourceUri === entry.testResourceUri);
+        const current = entry.testResourceUri ? test?.anchor : claim?.codeAnchor;
+        if (claim && JSON.stringify(current) === JSON.stringify(entry.anchor)) {
+          if (test) test.anchor = entry.relocatedAnchor;
+          else claim.codeAnchor = entry.relocatedAnchor;
+          claim.updatedAt = checkedAt;
+        }
+      }
+    });
     const file = driftLedgerFile(params.wikiRoot);
     await withWikiFileLock(params.wikiRoot, file, async () => {
       params.signal?.throwIfAborted();
@@ -360,6 +383,7 @@ export async function detectCodeDrift(params: {
     totalAnchors: allAnchored.length,
     checkedAnchors: entries.length,
     fresh: entries.filter((entry) => entry.verdict === "fresh").length,
+    ...(entries.some((entry) => entry.verdict === "relocated") ? { relocated: entries.filter((entry) => entry.verdict === "relocated").length } : {}),
     driftSuspected: drifted.length,
     anchorUnresolvable: entries.filter((entry) => entry.verdict === "anchor_unresolvable").length,
     topDrifted: drifted.slice(0, topLimit),
@@ -378,14 +402,14 @@ export async function staleClaimsByPage(
   // The common empty/fresh-ledger path does not read or retain the evidence IR.
   const candidates = new Map<string, DriftLedgerEntry>();
   for (const entry of ledger.entries) {
-    if (entry.verdict !== "fresh" && entry.pagePaths.length > 0) candidates.set(entry.claimId, entry);
+    if (entry.verdict !== "fresh" && entry.verdict !== "relocated" && entry.pagePaths.length > 0) candidates.set(entry.claimId, entry);
   }
   if (candidates.size === 0) return new Map();
   const store = await readStore();
   for (const claim of store.claims) if (claim.status === "superseded") candidates.delete(claim.id);
-  const byPage = new Map<string, { claimIds: Set<string>; reason: Exclude<DriftVerdict, "fresh"> }>();
+  const byPage = new Map<string, { claimIds: Set<string>; reason: Exclude<DriftVerdict, "fresh" | "relocated"> }>();
   for (const entry of candidates.values()) {
-    if (entry.verdict === "fresh") continue;
+    if (entry.verdict === "fresh" || entry.verdict === "relocated") continue;
     for (const pagePath of entry.pagePaths) {
       const state = byPage.get(pagePath) ?? { claimIds: new Set<string>(), reason: entry.verdict };
       state.claimIds.add(entry.claimId);

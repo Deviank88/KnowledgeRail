@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import { createHash } from "node:crypto";
-import { canonicalCodeResourceUri } from "../code-evidence/resource-uri.js";
+import { canonicalCodeResourceUri, parseCodeResourceUri } from "../code-evidence/resource-uri.js";
 import type { CodeAnchor } from "../code-evidence/types.js";
 import { WIKI_PAGE_TYPES, type WikiPageType } from "../wiki-validation.js";
 import { normalizeWikiPagePath } from "../wiki-page-path.js";
@@ -85,6 +85,10 @@ export interface EvidenceClaim {
   relations: EvidenceRelationHint[];
   createdAt: string;
   updatedAt: string;
+  validFrom?: string;
+  validUntil?: string;
+  provenance?: Array<{ kind: "commit" | "pull_request"; reference: string }>;
+  testEvidence?: Array<{ resourceUri: string; anchor: CodeAnchor }>;
 }
 
 export interface EvidenceClaimInput {
@@ -96,6 +100,10 @@ export interface EvidenceClaimInput {
   status?: EvidenceClaimStatus;
   target?: EvidenceTargetHint;
   relations?: readonly EvidenceRelationHint[];
+  validFrom?: string;
+  validUntil?: string;
+  provenance?: EvidenceClaim["provenance"];
+  verifiedBy?: readonly string[];
 }
 
 const KINDS = new Set<string>(EVIDENCE_CLAIM_KINDS);
@@ -172,7 +180,7 @@ function normalizeTarget(target: EvidenceTargetHint | undefined): EvidenceTarget
   };
 }
 
-function normalizeCodeAnchor(anchor: CodeAnchor | undefined): CodeAnchor | undefined {
+function normalizeCodeAnchor(anchor: CodeAnchor | undefined, historical = false): CodeAnchor | undefined {
   if (!anchor) return undefined;
   const normalizedPath = anchor.path.replace(/\\/g, "/").normalize("NFC");
   if (
@@ -200,6 +208,8 @@ function normalizeCodeAnchor(anchor: CodeAnchor | undefined): CodeAnchor | undef
   if (typeof anchor.capturedAt !== "string" || Number.isNaN(Date.parse(anchor.capturedAt))) {
     throw new Error("Evidence code anchor capturedAt must be ISO-8601 compatible.");
   }
+  if (anchor.revision !== undefined && !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/u.test(anchor.revision)) throw new Error("Invalid Git anchor revision.");
+  if (anchor.history !== undefined && (historical || !Array.isArray(anchor.history))) throw new Error("Invalid anchor history.");
   return {
     path: normalizedPath,
     startLine: anchor.startLine,
@@ -207,6 +217,8 @@ function normalizeCodeAnchor(anchor: CodeAnchor | undefined): CodeAnchor | undef
     rangeHash: anchor.rangeHash,
     parserVersion,
     capturedAt: anchor.capturedAt,
+    ...(anchor.revision ? { revision: anchor.revision } : {}),
+    ...(anchor.history ? { history: anchor.history.map((item) => normalizeCodeAnchor(item, true)!) } : {}),
   };
 }
 
@@ -251,6 +263,7 @@ export function createEvidenceClaim(params: {
   segmentId: string;
   input: EvidenceClaimInput;
   codeAnchor?: CodeAnchor;
+  testEvidence?: EvidenceClaim["testEvidence"];
   now?: string;
   /** `null` means identity was resolved but its domain is unknown. */
   userEmailDomain?: string | null;
@@ -317,6 +330,26 @@ export function createEvidenceClaim(params: {
     throw new Error(`Evidence claim ID does not match its content-addressed identity: ${params.input.id}.`);
   }
   const now = params.now ?? new Date().toISOString();
+  const validFrom = params.input.validFrom, validUntil = params.input.validUntil;
+  for (const timestamp of [now, validFrom, validUntil]) if (timestamp !== undefined &&
+    (typeof timestamp !== "string" || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/u.test(timestamp) || !Number.isFinite(Date.parse(timestamp)))) throw new Error("Claim validity requires UTC ISO timestamps.");
+  if (validUntil && Date.parse(validUntil) < Date.parse(validFrom ?? now)) throw new Error("Claim validUntil precedes validFrom.");
+  const provenance = params.input.provenance?.map((item) => {
+    if (item.kind === "commit" && /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/u.test(item.reference)) return { ...item };
+    if (item.kind === "pull_request") {
+      const url = new URL(item.reference);
+      if (url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash && url.pathname !== "/" &&
+        !/[\u0000-\u0020<>`]/u.test(item.reference)) return { ...item };
+    }
+    throw new Error("Provenance requires a full commit hash or HTTPS pull-request URL.");
+  });
+  if ((provenance?.length ?? 0) > 16 || (params.testEvidence?.length ?? 0) > 8) throw new Error("Too many evidence references.");
+  const testEvidence = params.testEvidence?.map((item) => {
+    const resourceUri = canonicalCodeResourceUri(item.resourceUri), anchor = normalizeCodeAnchor(item.anchor)!;
+    if (!anchor || parseCodeResourceUri(resourceUri).path !== anchor.path) throw new Error("Test evidence URI and anchor path differ.");
+    return { resourceUri, anchor };
+  });
+  if (testEvidence && new Set(testEvidence.map((item) => item.resourceUri)).size !== testEvidence.length) throw new Error("Duplicate test evidence references.");
   return {
     id,
     sourceUri,
@@ -331,6 +364,10 @@ export function createEvidenceClaim(params: {
     relations: normalizeRelations(params.input.relations),
     createdAt: now,
     updatedAt: now,
+    ...(validFrom ? { validFrom } : {}),
+    ...(validUntil ? { validUntil } : {}),
+    ...(provenance?.length ? { provenance } : {}),
+    ...(testEvidence?.length ? { testEvidence } : {}),
   };
 }
 
@@ -358,8 +395,12 @@ export function evidenceClaimIsValid(value: unknown): value is EvidenceClaim {
         status: claim.status as EvidenceClaimStatus,
         target: claim.target,
         relations: claim.relations,
+        validFrom: claim.validFrom,
+        validUntil: claim.validUntil,
+        provenance: claim.provenance,
       },
       codeAnchor: claim.codeAnchor,
+      testEvidence: claim.testEvidence,
       now: claim.createdAt,
     });
     return normalized.sourceUri === claim.sourceUri && normalized.segmentId === claim.segmentId &&
@@ -368,6 +409,9 @@ export function evidenceClaimIsValid(value: unknown): value is EvidenceClaim {
       normalized.status === claim.status &&
       JSON.stringify(normalized.target ?? null) === JSON.stringify(claim.target ?? null) &&
       JSON.stringify(normalized.codeAnchor ?? null) === JSON.stringify(claim.codeAnchor ?? null) &&
+      JSON.stringify(normalized.testEvidence ?? null) === JSON.stringify(claim.testEvidence ?? null) &&
+      JSON.stringify(normalized.provenance ?? null) === JSON.stringify(claim.provenance ?? null) &&
+      normalized.validFrom === claim.validFrom && normalized.validUntil === claim.validUntil &&
       JSON.stringify(normalized.relations) === JSON.stringify(claim.relations);
   } catch {
     return false;
@@ -376,4 +420,12 @@ export function evidenceClaimIsValid(value: unknown): value is EvidenceClaim {
 
 export function normalizedClaimText(text: string): string {
   return normalizedIdentityText(text).toLocaleLowerCase("en-US");
+}
+
+/** Valid time is independent of recording time; the upper bound is exclusive. */
+export function claimValidAt(claim: EvidenceClaim, asOf: string): boolean {
+  const at = Date.parse(asOf);
+  return Number.isFinite(at) && Date.parse(claim.validFrom ?? claim.createdAt) <= at &&
+    (!claim.validUntil || at < Date.parse(claim.validUntil)) &&
+    (claim.status !== "superseded" || !!claim.validUntil);
 }

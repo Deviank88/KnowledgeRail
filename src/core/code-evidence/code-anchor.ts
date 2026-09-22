@@ -4,6 +4,7 @@ import { readCodeEvidenceSnapshot } from "./index.js";
 import { readConfinedRepositoryFile } from "./confined-reader.js";
 import { parseCodeResourceUri } from "./resource-uri.js";
 import type { CodeAnchor } from "./types.js";
+import { captureGitRevision } from "./git-anchor.js";
 
 export function normalizedCodeRange(lines: readonly string[]): string {
   return lines
@@ -32,6 +33,7 @@ export async function captureCodeAnchor(params: {
   wikiRoot: string;
   resourceUri: string;
   capturedAt?: string;
+  requireTest?: boolean;
 }): Promise<CodeAnchor> {
   const reference = parseCodeResourceUri(params.resourceUri, { allowWorkspaceBinding: false });
   const snapshot = await readCodeEvidenceSnapshot(params.wikiRoot);
@@ -40,6 +42,7 @@ export async function captureCodeAnchor(params: {
     candidate.id === reference.fragmentId && candidate.path === reference.path
   );
   if (!file || !fragment) throw new Error(`Code evidence target is not indexed: ${params.resourceUri}`);
+  if (params.requireTest && !fragment.isTest) throw new Error("Test evidence must target an indexed test fragment.");
   const currentParserVersion = defaultParserVersionForPath(reference.path);
   if (currentParserVersion && file.parserVersion !== currentParserVersion) {
     throw new Error(`Code evidence parser changed for ${reference.path}; rebuild before capturing an anchor.`);
@@ -56,6 +59,7 @@ export async function captureCodeAnchor(params: {
   }
   const capturedAt = params.capturedAt ?? new Date().toISOString();
   if (Number.isNaN(Date.parse(capturedAt))) throw new Error("Code anchor capturedAt must be ISO-8601 compatible.");
+  const revision = await captureGitRevision(params.repositoryRoot, reference.path, content);
   return {
     path: fragment.path,
     startLine: fragment.range.startLine,
@@ -63,5 +67,6 @@ export async function captureCodeAnchor(params: {
     rangeHash: codeAnchorHash(content, fragment.range.startLine, fragment.range.endLine),
     parserVersion: file.parserVersion,
     capturedAt,
+    ...(revision ? { revision } : {}),
   };
 }

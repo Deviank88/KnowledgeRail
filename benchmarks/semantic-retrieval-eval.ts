@@ -109,7 +109,7 @@ function axis(index: number): number[] {
  * the quality of a third-party embedding model. Known paraphrase pairs share an
  * axis; unrelated corpus passages and queries use orthogonal axes.
  */
-class GoldenEmbeddingProvider implements EmbeddingProvider {
+export class GoldenEmbeddingProvider implements EmbeddingProvider {
   readonly descriptor = {
     id: "deterministic-semantic-golden",
     model: "golden-concept-axis",

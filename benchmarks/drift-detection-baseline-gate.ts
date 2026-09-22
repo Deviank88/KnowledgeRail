@@ -5,6 +5,7 @@ import {
   DEFAULT_DRIFT_FIXTURE,
   evaluateDriftDetection,
 } from "./drift-detection-eval.js";
+import { evaluateGitRelocation } from "./git-relocation-eval.js";
 import { canonicalFixtureSha256 } from "./fixture-integrity.js";
 
 interface DriftBaseline {
@@ -66,6 +67,9 @@ async function main(): Promise<void> {
     report.results.every((result) => result.passed),
     report.results.filter((result) => !result.passed).map((result) => result.id).join(",") || "all"
   );
+
+  const relocations = await evaluateGitRelocation();
+  check(failures, "gitRelocationScenarios", relocations.length === 5 && relocations.every((r) => r.passed), JSON.stringify(relocations));
 
   process.stdout.write(
     `PERF full=${report.fullEvaluationMs}ms/${report.scaleAnchorCount} ` +

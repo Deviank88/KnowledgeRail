@@ -143,7 +143,14 @@ export function recomputeEvidenceClaimStatuses(store: EvidenceIrStore, now: stri
   for (const resolution of store.resolutions) {
     if (resolution.disposition === "ambiguous") elevate(resolution.claimId, "ambiguous");
     if (resolution.disposition === "supersedes") {
-      for (const id of resolution.targetClaimIds) elevate(id, "superseded");
+      const replacement = store.claims.find((claim) => claim.id === resolution.claimId)!;
+      const until = replacement.validFrom ?? replacement.createdAt;
+      for (const id of resolution.targetClaimIds) {
+        elevate(id, "superseded");
+        const old = store.claims.find((claim) => claim.id === id)!;
+        if (Date.parse(until) < Date.parse(old.validFrom ?? old.createdAt)) throw new Error("Supersession predates the target claim's validity; supply valid_from explicitly.");
+        if (!old.validUntil || Date.parse(until) < Date.parse(old.validUntil)) old.validUntil = until;
+      }
     }
     if (resolution.disposition === "contradiction") {
       elevate(resolution.claimId, "contradicted");

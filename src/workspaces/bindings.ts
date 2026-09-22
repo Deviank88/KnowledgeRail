@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { createWorkspaceContext, type WorkspaceAccessScope, type WorkspaceContext } from "../core/workspace-context.js";
 import { resolveWorkspaceUserIdentity } from "../core/user-identity.js";
 import { BINDING_FORMAT_VERSION } from "../product.js";
@@ -91,6 +92,8 @@ export class WorkspaceBindingManager {
       maximumExpiresAtMs: now + this.maximumLifetimeMs,
     };
     this.records.set(this.key(digest), record);
+    void import("../core/semantic/index.js").then(({ warmSemanticIndex }) =>
+      warmSemanticIndex(path.join(registration.canonicalRoot, "wiki")));
     return { binding: token, workspace, scope, expiresAt: new Date(record.expiresAtMs).toISOString() };
   }
 

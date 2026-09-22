@@ -456,3 +456,24 @@ of the two paraphrase-only probes. The instruction reduced no-benefit token grow
 estimated tokens) in the final run; it did not improve recall. See the
 [measured report](../../benchmarks/knowledge-routing-2.8.0.md) before interpreting
 successful integration as general semantic coverage.
+
+## 2.9.0 memory integration (unreleased)
+
+Code-related task context can disclose a bounded `repositoryMap` of declarations and
+known call/import neighbors, expanded to depth two within the existing token budget.
+Set `include_repository_map=false` to omit it. No source bodies are included, and
+lexical edges do not establish execution. Known manifest components are declarations,
+not inferred architecture.
+
+Claims can explicitly cite indexed tests through `verified_by`, and drift checks
+those anchors alongside implementation anchors. A Git revision is captured only for
+committed file bytes; diff relocation requires the same range hash and preserves the
+previous anchor in history. Test anchors do not assert that a test has run or passed.
+Historical `as_of` context uses claim validity and does not treat current source as
+historical proof.
+
+Semantic indexes now persist metadata, binary vectors/signatures and a CRC journal
+inside `.knowledge-rail/`. Page changes regenerate all passages for that page;
+provider/model identity changes rebuild all embeddings. See
+[memory evolution](memory-evolution.md) for the complete lifecycle, static model setup,
+usage-based ranking and performance/quality limits.

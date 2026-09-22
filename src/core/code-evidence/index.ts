@@ -46,6 +46,7 @@ import {
   type KnowledgeAdapter,
   type KnowledgeFragment,
   type ProjectStructure,
+  type RepositoryMap,
 } from "./types.js";
 
 const DEFAULT_MAX_RESULTS = 12;
@@ -77,6 +78,30 @@ const CODE_IGNORES = [
 
 function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+/** Conservative declaration excerpt, including single-line Python/Ruby bodies. */
+function declarationSignature(fragment: KnowledgeFragment): string {
+  if (fragment.kind === "constant") return `${fragment.kind} ${fragment.qualifiedName}`;
+  const line = fragment.definition.split(/\r?\n/u)[0]!;
+  const python = fragment.path.endsWith(".py");
+  let depth = 0;
+  let quote = "";
+  for (let i = 0; i < line.length; i++) {
+    const character = line[i]!;
+    if (quote) {
+      if (character === "\\") i++;
+      else if (character === quote) quote = "";
+      continue;
+    }
+    if (character === '"' || character === "'" || character === "`") { quote = character; continue; }
+    if (character === "(" || character === "[") depth++;
+    if (character === ")" || character === "]") depth--;
+    if (character === "{" || (depth === 0 && (character === ";" || character === "=" || (python && character === ":")))) {
+      return line.slice(0, i).trim().slice(0, 240);
+    }
+  }
+  return line.trim().slice(0, 240);
 }
 
 function normalizedRelativePath(path: string): string {
@@ -802,6 +827,62 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
       manifestWarnings: structuredClone(runtime.projectStructureWarnings()),
       ...(roots.length ? { importDiagnostics: structuredClone(runtime.importResolutionDiagnostics().diagnostics) } : {}),
     };
+  }
+
+  /** Task-local graph projection; source bodies and inferred ownership are excluded. */
+  async repositoryMap(params: { query: string; paths?: readonly string[]; anchors?: readonly string[]; maxNodes?: number }): Promise<RepositoryMap> {
+    await this.assertScopedSnapshot();
+    const runtime = await this.queryRuntime(false);
+    const maximum = Math.max(1, Math.min(40, params.maxNodes ?? 16));
+    const words = new Set(params.query.normalize("NFKC").toLowerCase().match(/[\p{L}_][\p{L}\p{N}_.:]*/gu) ?? []);
+    const anchorIds = new Set((params.anchors ?? []).map((uri) => {
+      try { return new URL(uri).hash.slice(1); } catch { return ""; }
+    }));
+    const seeds = new TopResults<{ fragment: KnowledgeFragment; score: number; origin: RepositoryMap["nodes"][number]["origin"] }>(8,
+      (a, b) => b.score - a.score || a.fragment.path.localeCompare(b.fragment.path) || a.fragment.id.localeCompare(b.fragment.id));
+    let seedCount = 0;
+    for (const fragment of runtime.snapshot.fragments) {
+      if (fragment.kind === "comment") continue;
+      const changed = codePathAllowed(fragment.path, params.paths) && !!params.paths?.length;
+      const anchored = anchorIds.has(fragment.id);
+      const named = words.has(fragment.symbol.toLowerCase()) || words.has(fragment.qualifiedName.toLowerCase());
+      if (!changed && !anchored && !named) continue;
+      seedCount++;
+      seeds.add({ fragment, score: (changed ? 30 : 0) + (anchored ? 20 : 0) + (named ? 10 : 0),
+        origin: changed ? "changed_path" : anchored ? "anchor" : "task_symbol" });
+    }
+    const nodes = new Map<string, RepositoryMap["nodes"][number]>();
+    const relations = new Map<string, RepositoryMap["relations"][number]>();
+    const add = (fragment: KnowledgeFragment, depth: number, origin: RepositoryMap["nodes"][number]["origin"]) => {
+      if (nodes.has(fragment.id)) return;
+      nodes.set(fragment.id, { uri: codeResourceUri(fragment), path: fragment.path, symbol: fragment.symbol,
+        signature: declarationSignature(fragment), kind: fragment.kind,
+        isTest: fragment.isTest, depth, centrality: 0, origin });
+    };
+    for (const seed of seeds.sorted()) add(seed.fragment, 0, seed.origin);
+    let truncated = seedCount > 8;
+    if (nodes.size) await runtime.refreshProjectStructure(this.repositoryRoot);
+    for (let depth = 0; depth < 2; depth++) {
+      for (const [id, node] of [...nodes]) {
+        if (node.depth !== depth) continue;
+        const neighbors = runtime.relatedEvidence(id, 13);
+        truncated ||= neighbors.length > 12;
+        for (const neighbor of neighbors.slice(0, 12)) {
+          if (!nodes.has(neighbor.fragment.id) && nodes.size >= 64) { truncated = true; continue; }
+          add(neighbor.fragment, depth + 1, "relation");
+          const edge = { from: neighbor.direction === "incoming" ? neighbor.fragment.id : id,
+            to: neighbor.direction === "incoming" ? id : neighbor.fragment.id, relation: neighbor.relation, basis: neighbor.basis };
+          relations.set(`${edge.from}\0${edge.to}\0${edge.relation}`, edge);
+        }
+      }
+    }
+    for (const edge of relations.values()) nodes.get(edge.to)!.centrality += edge.relation === "call" ? 2 : 1;
+    const selected = [...nodes.entries()].sort(([, a], [, b]) => a.depth - b.depth || b.centrality - a.centrality || a.path.localeCompare(b.path) || a.symbol.localeCompare(b.symbol)).slice(0, maximum);
+    const selectedIds = new Set(selected.map(([id]) => id));
+    accountProjectStructure(this.wikiRoot, runtime);
+    return { snapshot: runtime.snapshot.generatedAt, nodes: selected.map(([, node]) => node),
+      relations: [...relations.values()].filter((e) => selectedIds.has(e.from) && selectedIds.has(e.to)).map((e) => ({ ...e, from: nodes.get(e.from)!.uri, to: nodes.get(e.to)!.uri })),
+      components: runtime.declaredComponents(selected.map(([, n]) => n.path)), truncated: truncated || nodes.size > maximum, widenable: false };
   }
 
   async referencesWithDiagnostics(symbolId: string, options: CodeSearchOptions = {}): Promise<{

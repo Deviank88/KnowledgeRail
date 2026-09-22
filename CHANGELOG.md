@@ -4,7 +4,56 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.9.0] - 2026-09-22
+
+### Added
+
+- Implement the 2.9.0 memory lifecycle: binary semantic snapshots with shared typed
+  vectors and persisted LSH signatures, durable per-batch journals, partial-page
+  crash recovery, background generation, query priority and visible partial coverage.
+- Add optional hash-pinned local model2vec providers with explicit setup, bounded
+  matrix caching and an uncached disk-row path. Runtime retrieval never downloads
+  models; the configured provider remains unchanged. Int8 is the default vector
+  storage format, with explicit Float32 available.
+- Record bounded local usage observations for within-pool reranking, with actual
+  materialization, fallback/outcome penalties, 90-day decay and a 15% boost cap.
+  Add inspection/reset, task repository maps and offline consolidation review.
+- Add hash-verified Git anchor relocation with history, commit/PR provenance,
+  optional claim validity intervals, historical `as_of` context and test anchors.
+- Add reproducible durability, throughput, static-provider and map/prefix measurements.
+  Extend drift acceptance with five real Git scenarios and add a lifecycle gate for
+  full/compact context parity, partial readiness and continuous query traffic.
+
+### Changed
+
+- Persist semantic work automatically on writes and queries. A changed page
+  regenerates every passage in that page; a changed provider/model descriptor
+  regenerates the entire corpus. Unchanged documents reuse embeddings across sessions.
+- Restore the semantic index without recomputing LSH projections when saved signatures
+  match; otherwise serve exact vector search during signature rebuilding. This improves
+  the semantic branch, not lexical, graph or code-index startup. Local synthetic
+  10k/50k reload medians were 68/357 ms with warm filesystem cache; empty-workspace
+  stdio readiness remained approximately 300 ms. These are separate measurements.
+- Measure the real Ollama lifecycle on 8 project pages / 376 passages, including
+  document, query and coverage embeddings: median stdio startup through context
+  24.85 s on 2.8.7 → 0.58 s (f32) / 0.60 s (i8), three fresh processes per version
+  with the embedding model loaded. The old context path re-embedded all 376 passages
+  after restart; the new path reuses them. Seven query/coverage embeddings and
+  identical returned evidence in every case. First full construction still costs
+  about 23 s; partial context arrives sooner. Synthetic-provider startup figures
+  are retained only as diagnostics, not real-world latency claims.
+- Use int8 by default after full ANN/fusion/coverage comparison on the current
+  16-query fixture returned identical results for Qwen and both static models.
+  The one raw Qwen cosine threshold crossing remains documented. At 50k synthetic
+  passages, stored data decreases from 216 to 63 MB and incremental vector-index
+  memory from 5.15 to 2.10 KB/passage. No coverage thresholds were changed.
+- Order stable context evidence before volatile task metadata. Share resolved outgoing
+  import postings within each existing code generation to bound repository-map work.
+- Drift with persisted relocation may update canonical claim anchors; `dry_run=true`
+  and CLI `--no-ledger` preserve the stored state. Read-only bindings do not record usage.
+
+See [memory evolution](docs/guides/memory-evolution.md) for configuration, guarantees
+and evaluation limits. This work is not tagged or published as a release.
 
 ## [2.8.7] - 2026-09-22
 

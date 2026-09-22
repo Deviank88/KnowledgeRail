@@ -1,6 +1,12 @@
 import { normalizeRepositoryPath, staleClaimsByPage } from "../core/drift-detection.js";
-import { readEvidenceIrStore } from "../core/ingestion/evidence-store.js";
+import { pagePathsByClaim, readEvidenceIrStore } from "../core/ingestion/evidence-store.js";
+import { claimValidAt } from "../core/ingestion/evidence-claim.js";
+import { tokenizeSearchText } from "../core/text-analysis.js";
+import { wikiPageUri } from "./resource-uri.js";
 import { expandCodeImpact, taskCodePaths, type CodeImpactFields } from "./code-impact.js";
+import { dirname } from "node:path";
+import { PersistentCodeEvidenceIndex } from "../core/code-evidence/index.js";
+import type { RepositoryMap } from "../core/code-evidence/types.js";
 import type { GraphEdge, GraphEdgeKind, GraphNode } from "../core/graph-index.js";
 import { getRuntimeWikiGraph, type RuntimeGraph } from "../core/graph-runtime.js";
 import {
@@ -54,7 +60,7 @@ export interface TaskContextAttempt {
 }
 
 export interface TaskContextRetrieval {
-  strategy: "hybrid_progressive_widening";
+  strategy: "hybrid_progressive_widening" | "temporal_claims";
   coverageMode: RetrievalCoverage["coverageMode"];
   coverageWarnings: string[];
   query: string;
@@ -118,6 +124,8 @@ export interface TaskContext {
   contradictions: TaskEvidenceRef[];
   unknowns: KnowledgeGap[];
   changeImpact: ChangeImpact;
+  repositoryMap?: RepositoryMap;
+  temporal?: { asOf: string; claims: Array<{ id: string; text: string; kind: string; status: string; sourceUri: string; segmentId: string; validFrom: string; validUntil?: string }> };
   retrieval: TaskContextRetrieval;
   /** Compatibility view for clients that consumed ContextManifest v1. */
   intent: ContextIntent;
@@ -145,6 +153,8 @@ export interface CompileTaskContextParams {
   retrievalProfile?: RetrievalProfile;
   maxEvidence?: number;
   heuristicTokenBudget?: number;
+  includeRepositoryMap?: boolean;
+  asOf?: string;
   /** Opt-in persistence for disposable indexes. Context compilation is read-only by default. */
   persistDerivedIndexes?: boolean;
   /** Additional accuracy requirements for a bounded consumer such as an editorial section. */
@@ -820,6 +830,7 @@ function resolvedIntentPolicy(
 }
 
 export async function compileTaskContext(params: CompileTaskContextParams): Promise<TaskContext> {
+  if (params.asOf !== undefined) return compileHistoricalTaskContext(params);
   const objective = boundedText(params.objective, "Task objective");
   const query = boundedText(params.query ?? objective, "Task retrieval query");
   if ((params.changedPaths?.length ?? 0) > 20) throw new Error("At most 20 changed paths are supported.");
@@ -901,7 +912,7 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
       .join(", ") || "supporting evidence";
     const evidence = evidenceFromRetrievalHit(
       candidate.hit,
-      `task ${params.intent}; ${categoryLabels}; hybrid ${profile} W${hybrid.wideningLevel}`
+      `task ${params.intent}; ${categoryLabels}; hybrid ${profile} W${hybrid.wideningLevel}${candidate.hit.usageReason ? `; ${candidate.hit.usageReason}` : ""}`
     );
     candidate.evidence = candidate.driftClaimIds?.length ? {
       ...evidence,
@@ -974,14 +985,39 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
     }), tokenBudget);
   }
   const mentionedPaths = taskCodePaths(`${objective}\n${query}`);
+  const attachMap = async (base: TaskContext): Promise<TaskContext> => {
+    if (!policy.impact || params.includeRepositoryMap === false) return base;
+    const roots = base.changeImpact.codeRoots ?? [];
+    if (!sourcePaths.length && !mentionedPaths.length && !roots.length && !/`[\w.]+`|\b\w+[A-Z]\w+|\b\w+_\w+\b/u.test(objective)) return base;
+    try {
+      const index = new PersistentCodeEvidenceIndex({ repositoryRoot: dirname(params.wikiRoot), wikiRoot: params.wikiRoot });
+      const map = await index.repositoryMap({ query: `${objective} ${query}`, paths: [...sourcePaths, ...mentionedPaths], anchors: roots.map((r) => r.uri) });
+      if (!map.nodes.length) return base;
+      const { size: _size, ...rest } = base;
+      const fit = (count: number): TaskContext => {
+        const nodes = map.nodes.slice(0, count), included = new Set(nodes.map((node) => node.uri));
+        return withSize({ ...rest, repositoryMap: { ...map, nodes,
+          relations: map.relations.filter((edge) => included.has(edge.from) && included.has(edge.to)),
+          truncated: map.truncated || count < map.nodes.length } }, tokenBudget);
+      };
+      let low = 0, high = map.nodes.length;
+      while (low < high) {
+        const count = Math.ceil((low + high) / 2);
+        if (fit(count).size.heuristicTokens <= tokenBudget) low = count;
+        else high = count - 1;
+      }
+      if (low) return fit(low);
+    } catch { /* Existing code-impact gaps remain authoritative; never rebuild from a context query. */ }
+    return base;
+  };
   const anchoredPages = policy.impact ? context.evidence.filter((evidence) => !evidence.stale &&
     candidateByPath.get(evidence.path)?.hit.record.body.includes("code://repo/")).map((evidence) => evidence.path) : [];
-  if (!sourcePaths.length && !mentionedPaths.length && !anchoredPages.length) return context;
+  if (!sourcePaths.length && !mentionedPaths.length && !anchoredPages.length) return attachMap(context);
   const expansion = await expandCodeImpact({
     wikiRoot: params.wikiRoot, explicitPaths: sourcePaths, taskPaths: mentionedPaths,
     selectedPages: anchoredPages, inferClaims: policy.impact, readStore, staleClaims, graph: runtime,
   });
-  if (!expansion.fields.codeRoots) return context;
+  if (!expansion.fields.codeRoots) return attachMap(context);
   const fields = expansion.fields;
   const extraGaps = [...expansion.gaps];
   let budgetTrimmed = false;
@@ -1037,5 +1073,56 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
     trimNotice(); expanded = assemble();
   }
   fitPrefix("codeRoots");
-  return expanded;
+  return attachMap(expanded);
+}
+
+async function compileHistoricalTaskContext(params: CompileTaskContextParams): Promise<TaskContext> {
+  const asOf = params.asOf!;
+  if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/u.test(asOf) || !Number.isFinite(Date.parse(asOf))) throw new Error("as_of requires a UTC ISO timestamp.");
+  const objective = boundedText(params.objective, "Task objective");
+  const query = boundedText(params.query ?? objective, "Task retrieval query");
+  const terms = new Set(tokenizeSearchText(query));
+  const store = await readEvidenceIrStore(params.wikiRoot), paths = pagePathsByClaim(store);
+  const candidates = store.claims.filter((claim) => claimValidAt(claim, asOf)).flatMap((claim) => {
+    const page = paths.get(claim.id)?.[0] ?? claim.target?.pagePath;
+    if (!page || (params.pageTypes && !params.pageTypes.includes(claim.target?.pageType ?? "concept"))) return [];
+    const words = new Set(tokenizeSearchText(`${claim.text} ${claim.target?.pageTitle ?? ""} ${page}`));
+    const score = [...terms].filter((term) => words.has(term)).length;
+    return score ? [{ claim, page, score }] : [];
+  }).sort((a, b) => b.score - a.score || a.claim.id.localeCompare(b.claim.id));
+  const maximum = Math.max(1, Math.min(20, params.maxEvidence ?? 8));
+  const tokenBudget = Math.max(256, Math.min(12_000, params.heuristicTokenBudget ?? 2_000));
+  let selected = candidates.slice(0, maximum);
+  const assemble = (): TaskContext => {
+    const buckets = buildBuckets([]);
+    const evidence: EvidenceRef[] = uniqueEvidence(selected.map(({ claim, page, score }) => {
+      const uri = wikiPageUri(page);
+      const ref = { uri, path: page };
+      const category: Partial<Record<string, TaskContextEvidenceField>> = { decision: "decisions", requirement: "requirements", invariant: "invariants",
+        constraint: "constraints", behavior: "implementationEvidence", incident: "incidents", risk: "risks" };
+      buckets[category[claim.kind] ?? "currentState"].push(ref);
+      if (["ambiguous", "contradicted"].includes(claim.status)) buckets.contradictions.push(ref);
+      return { uri, pageUri: uri, path: page, title: claim.target?.pageTitle ?? page, type: claim.target?.pageType ?? "concept", score,
+        reason: `claim valid at ${asOf}; historical text is in temporal.claims; page URI opens the current page`,
+        sourceRefs: [`${claim.sourceUri}#${claim.segmentId}`], preview: claim.text.slice(0, 180), size: estimateContextSize(claim.text) };
+    }));
+    for (const field of TASK_CONTEXT_EVIDENCE_FIELDS) buckets[field] = uniqueTaskEvidence(buckets[field]);
+    const unknowns: KnowledgeGap[] = [];
+    if (!selected.length) unknowns.push({ kind: "missing_evidence", description: "No matching claim with recorded validity at as_of. Unversioned page prose cannot establish historical validity.", widenable: false });
+    if (buckets.contradictions.length) unknowns.push({ kind: "contradiction", description: "Matching claims have unresolved ambiguity or contradiction; their historical status is not reconstructed." });
+    if (selected.length < candidates.length) unknowns.push({ kind: "budget_limited", description: "Additional historical claims were omitted by the evidence or token budget." });
+    const retrieval: TaskContextRetrieval = { strategy: "temporal_claims", coverageMode: "lexical", coverageWarnings: ["Historical lookup uses claim validity; current page prose and current code are not historical evidence."],
+      query, profile: params.retrievalProfile ?? "balanced", wideningLevel: 0, coverageSufficient: selected.length > 0 && !buckets.contradictions.length,
+      evidenceGaps: unknowns.map((gap) => gap.kind), estimatedContextTokens: 0, hitCount: selected.length, coverageCandidateCount: candidates.length,
+      selectedEvidenceCount: selected.length, fallbackUsed: false, fullGraphScanAttempted: false, attempts: [] };
+    return withSize({ version: 2, task: { intent: params.intent, objective }, intent: params.intent, objective, ...buckets, evidence, unknowns, gaps: unknowns,
+      changeImpact: { mode: "not_applicable", requestedPaths: [], changedComponents: [], incomingDependencies: [], outgoingDependencies: [],
+        requirements: [], decisions: [], invariants: [], tests: [], incidents: [], risks: [], relations: [] }, retrieval,
+      temporal: { asOf, claims: selected.map(({ claim }) => ({ id: claim.id, text: claim.text, kind: claim.kind, status: claim.status,
+        sourceUri: claim.sourceUri, segmentId: claim.segmentId, validFrom: claim.validFrom ?? claim.createdAt, ...(claim.validUntil ? { validUntil: claim.validUntil } : {}) })) },
+      budget: { requestedHeuristicTokens: tokenBudget, withinHeuristicBudget: true, omittedEvidenceCount: candidates.length - selected.length } }, tokenBudget);
+  };
+  let result = assemble();
+  while (result.size.heuristicTokens > tokenBudget && selected.length) { selected = selected.slice(0, -1); result = assemble(); }
+  return result;
 }

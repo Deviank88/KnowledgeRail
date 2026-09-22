@@ -24,11 +24,19 @@ export interface AnnEngineDescriptor {
   bitsPerTable?: number;
   probes?: number;
   minimumScore?: number;
+  seed?: string;
 }
+
+export type SemanticVector = Float32Array | Int8Array;
+export type AnnSignatures = readonly number[] | Uint32Array;
 
 export interface AnnVectorEntry {
   id: string;
-  vector: readonly number[];
+  vector: readonly number[] | SemanticVector;
+  /** Normalized, owned by the index; the engine shares this immutable storage. */
+  normalized?: boolean;
+  scale?: number;
+  signatures?: AnnSignatures;
 }
 
 export interface AnnSearchHit {
@@ -40,6 +48,7 @@ export interface AnnSearchDiagnostics {
   candidateCount: number;
   visitedBuckets: number;
   vectorCount: number;
+  indexMode?: "ann" | "exact";
 }
 
 export interface AnnSearchResult {
@@ -53,6 +62,10 @@ export interface AnnEngine {
   upsert(entry: AnnVectorEntry): void;
   remove(id: string): void;
   search(vector: readonly number[], k: number): AnnSearchResult;
+  signatures?(id: string): AnnSignatures | undefined;
+  restore?(entries: readonly AnnVectorEntry[], normalized?: boolean): void;
+  ready?(): Promise<void>;
+  dispose?(): void;
 }
 
 export interface SemanticHit {
@@ -70,12 +83,18 @@ export interface SemanticIndexDescriptor {
   passageCount: number;
   pageCount: number;
   generatedAt?: string;
+  state?: "absent" | "building" | "ready" | "degraded";
+  totalPages?: number;
+  pendingPages?: number;
+  reason?: string;
+  dtype?: "f32" | "i8";
 }
 
 export interface SemanticSearchDiagnostics {
   candidateCount: number;
   visitedBuckets: number;
   vectorCount: number;
+  indexMode?: "ann" | "exact";
 }
 
 export interface SemanticSearchResult {
@@ -108,6 +127,7 @@ export interface SemanticIndex {
   upsertPassages(pagePath: string, passages: WikiPassage[]): Promise<void>;
   removePage(pagePath: string): Promise<void>;
   search(query: string, k: number): Promise<SemanticHit[]>;
+  prioritize?(pagePaths: readonly string[], budgetMs?: number): Promise<void>;
   /**
    * Scores coverage concepts against indexed passages on the requested pages.
    * Implementations that cannot expose this operation still support semantic
@@ -120,7 +140,7 @@ export interface SemanticIndex {
 }
 
 export interface SynchronizableSemanticIndex extends SemanticIndex {
-  synchronize(records: readonly WikiPageRecord[]): Promise<{
+  synchronize(records: readonly WikiPageRecord[], options?: { signal?: AbortSignal }): Promise<{
     reusedPages: number;
     embeddedPages: number;
     removedPages: number;

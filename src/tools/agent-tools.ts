@@ -8,6 +8,10 @@ import {
   type StandardSchemaWithJSON,
 } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
+import { recordUsageDisclosure, recordUsageMaterialization, recordUsageFallback, recordUsageOutcome, usageStatus, withUsageSession } from "../core/usage-ledger.js";
+import { wikiPageUri } from "../context/resource-uri.js";
+import { normalizeWikiPagePath } from "../core/wiki-page-path.js";
 import { EDITORIAL_EVIDENCE_KINDS } from "../config/editorial-plans.js";
 import { DIAGRAM_MODES } from "../config/document-options.js";
 import {
@@ -63,6 +67,8 @@ const ContextSchema = z.object({
   max_evidence: z.number().int().min(1).max(20).default(8),
   heuristic_token_budget: z.number().int().min(256).max(12_000).default(2_000),
   response_detail: z.enum(["compact", "full"]).default("compact"),
+  include_repository_map: z.boolean().optional(),
+  as_of: z.string().optional().describe("Claim validity at a UTC ISO timestamp."),
   max_results: z.number().int().min(1).max(100).default(10),
   max_nodes: z.number().int().min(1).max(100).default(12),
   max_depth: z.number().int().min(0).max(8).default(1),
@@ -81,7 +87,7 @@ const ContextSchema = z.object({
 
 const PageSchema = z.object({
   action: z.enum(["read", "write", "edit", "move", "delete", "append_log"])
-    .describe("read=open;write=create;edit=replace;move=rename;delete=remove;append_log=event."),
+    .describe("write=create;edit=replace;move=rename;append_log=event."),
   path: z.string().optional().describe("Wiki .md path; wiki/ maps to root."),
   resource_uri: z.string().startsWith("knowledge-rail://page/").optional(),
   max_chars: z.number().int().min(1).max(50_000).default(6_000),
@@ -118,8 +124,7 @@ const PageSchema = z.object({
 });
 
 const FilesSchema = z.object({
-  action: z.enum(["list", "read", "normalize"]).default("list")
-    .describe("list=sources;read=open;normalize=Markdown."),
+  action: z.enum(["list", "read", "normalize"]).default("list").describe("normalize=Markdown."),
   category: z.enum(CATEGORY_ENUM).optional(),
   pattern: z.string().default("**/*"),
   path: z.string().optional(),
@@ -149,7 +154,7 @@ const IngestSchema = z.object({
   segment_max_chars: z.number().int().min(256).max(50_000).optional(),
   segment_id: z.string().optional(),
   claims: z.array(z.record(z.string(), z.unknown())).min(1).optional()
-    .describe("target:page_path,page_title,page_type;code_resource_uri=knowledge_code URI. Stakeholders:entity_key,role,organization,email_domain,affiliation."),
+    .describe("target:page_path,page_title,page_type,code_resource_uri. Stakeholders:entity_key,role,organization,email_domain,affiliation."),
   segment_status: z.enum(["irrelevant", "unresolved", "legacy_unverified"]).optional(),
   evidence_refs: z.array(z.string()).optional(),
   page_refs: z.array(z.string()).optional(),
@@ -273,9 +278,11 @@ const DocumentSchema = z.object({
 });
 
 const AdminSchema = z.object({
-  action: z.enum(["init", "status", "checkpoint", "client_setup", "lint", "drift", "migrate"])
-    .describe("init=bootstrap;status=state;checkpoint=rebuild;client_setup=hooks;lint=validate links/repair;drift=anchors;migrate=upgrade."),
+  action: z.enum(["init", "status", "checkpoint", "usage", "semantic_setup", "consolidate", "client_setup", "lint", "drift", "migrate"])
+    .describe("init=bootstrap;checkpoint=rebuild;usage=stats/reset;semantic_setup=models;consolidate=review;client_setup=hooks;lint=broken links/orphan pages;migrate=upgrade."),
   force: z.boolean().default(false).describe("lint: repair nested wiki."),
+  options: z.record(z.string(), z.unknown()).optional()
+    .describe("usage:{action:status|reset|outcome,outcome:succeeded|failed};semantic_setup:{model};consolidate:{days,proposals}."),
   integrity_mode: z.enum(["metadata", "content"]).default("metadata"),
   include_orphans: z.boolean().default(true),
   include_missing: z.boolean().default(true),
@@ -345,6 +352,9 @@ export const AGENT_STATES = [
   "document_needs_revision",
   "workspace_initialized",
   "checkpoint_complete",
+  "usage_status_complete",
+  "semantic_setup_complete",
+  "consolidation_complete",
   "client_setup_ready",
   "lint_complete",
   "drift_complete",
@@ -355,7 +365,7 @@ export const AGENT_STATES = [
 
 type AgentState = (typeof AGENT_STATES)[number];
 
-const AgentOutputSchema = fromJsonSchema({
+const AgentOutputSchema = compactCatalogSchema(fromJsonSchema({
   type: "object",
   properties: {
     state: { type: "string" },
@@ -365,10 +375,13 @@ const AgentOutputSchema = fromJsonSchema({
   },
   required: ["state", "nextAction"],
   additionalProperties: true,
-});
+}));
 
 function withoutRootDialect(schema: Record<string, unknown>): Record<string, unknown> {
   const { $schema: _dialect, ...catalogSchema } = schema;
+  // JSON Schema permits additional properties by default; eliding explicit true
+  // preserves the same contract and saves repetition across every tool result.
+  if (catalogSchema.additionalProperties === true) delete catalogSchema.additionalProperties;
   return catalogSchema;
 }
 
@@ -470,6 +483,7 @@ async function checkpointStatus(): Promise<Record<string, unknown>> {
     import("../core/graph-index.js"),
     import("../core/graph-checkpoint.js"),
   ]);
+  const { semanticIndexStatus } = await import("../core/semantic/index.js");
   const root = wikiDir();
   const metadataRoot = `${root}/.knowledge-rail`;
   const metadataStat = await lstat(metadataRoot).catch(() => null);
@@ -503,7 +517,12 @@ async function checkpointStatus(): Promise<Record<string, unknown>> {
       fallbackReason: graphCheckpoint.fallbackReason,
       ...(graphCheckpoint.kind === "v3" ? { inputCorpusRevision: graphCheckpoint.inputCorpusRevision } : {}),
     },
-    files: { directory, retrievalSnapshot, retrievalJournal, graphSnapshot, graphJournal },
+    semantic: semanticIndexStatus(root),
+    files: { directory, retrievalSnapshot, retrievalJournal, graphSnapshot, graphJournal,
+      semanticSnapshot: await fileStatus("semantic-index.json"),
+      semanticVectors: await fileStatus("semantic-vectors.bin"),
+      semanticJournal: await fileStatus("semantic-journal.bin"),
+    },
   };
 }
 
@@ -535,6 +554,10 @@ async function applyEvidenceSegment(args: z.output<typeof IngestSchema>): Promis
       kind: claim.kind,
       origin: claim.origin,
       confidence: claim.confidence,
+      validFrom: claim.valid_from,
+      validUntil: claim.valid_until,
+      provenance: claim.provenance,
+      verifiedBy: claim.verified_by,
       target: claim.target ? {
         entityKey: claim.target.entity_key,
         pagePath: claim.target.page_path,
@@ -602,8 +625,9 @@ function omit<T extends Record<string, unknown>>(value: T, keys: readonly string
 export function registerAgentTools(
   server: McpServer,
   era: ProtocolEra = "modern",
-  options: { includeWorkspaceBinding?: boolean } = {}
+  options: { includeWorkspaceBinding?: boolean; usageSession?: string } = {}
 ): void {
+  const usageSession = options.usageSession ?? randomUUID();
   let operationsReady: Promise<ReturnType<
     (typeof import("./operation-registry.js"))["createOperationRegistry"]
   >> | undefined;
@@ -614,14 +638,29 @@ export function registerAgentTools(
     }
     return operationsReady;
   };
-  const call = async (key: ToolKey, args: unknown, context: ServerContext) =>
-    (await operations()).call(
-      key,
-      args && typeof args === "object" && !Array.isArray(args)
-        ? omit(args as Record<string, unknown>, ["workspace_binding"])
-        : args,
-      context
-    );
+  const call = async (key: ToolKey, args: unknown, context: ServerContext) => withUsageSession(usageSession, async () => {
+    const parameters = args && typeof args === "object" && !Array.isArray(args)
+      ? omit(args as Record<string, unknown>, ["workspace_binding"]) : {};
+    const result = await (await operations()).call(key, parameters, context);
+    if (!isCallToolResult(result) || result.isError) return result;
+    try {
+      if (key === "context" || (key === "codeEvidence" && ["search", "symbol", "references"].includes(String(parameters.action)))) {
+        const links = result.content.flatMap((item) => item.type === "resource_link" ? [item.uri] : []);
+        const data = result.structuredContent as Record<string, unknown> | undefined;
+        for (const item of [data?.hits, data?.references]) if (Array.isArray(item)) {
+          for (const hit of item) if (hit && typeof hit.resourceUri === "string") links.push(hit.resourceUri);
+        }
+        const gaps = data?.gaps ?? data?.unknowns;
+        await recordUsageDisclosure(wikiDir(), String(parameters.objective ?? parameters.query ?? parameters.symbol ?? ""), links,
+          links.length === 0 || (Array.isArray(gaps) && gaps.length > 0));
+      } else if (key === "readPage" || (key === "codeEvidence" && parameters.action === "read")) {
+        const uri = typeof parameters.resource_uri === "string" ? parameters.resource_uri
+          : wikiPageUri(normalizeWikiPagePath(String(parameters.path), { allowWikiRootPrefix: true }));
+        await recordUsageMaterialization(wikiDir(), uri);
+      } else if (key === "codeEvidence" && parameters.action === "record_fallback") await recordUsageFallback(wikiDir());
+    } catch { /* Derived usage must never make an otherwise valid operation fail. */ }
+    return result;
+  });
   const bindingField = {
     workspace_binding: z.string().min(20).optional()
       .describe("Opaque binding returned by knowledge_workspace; desktop/catalog profile only."),
@@ -731,7 +770,7 @@ export function registerAgentTools(
     description: "Page CRUD and durable log.",
     inputSchema: schemas.page,
     outputSchema: AgentOutputSchema,
-    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, async (args, context) => {
     const keys = {
       read: "readPage", write: "writePage", edit: "editPage", move: "movePage",
@@ -753,10 +792,10 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.files, {
-    description: "Controlled source files and PDFs: list, read, normalize to Markdown.",
+    description: "Source files/PDFs: list, read, normalize to Markdown.",
     inputSchema: schemas.files,
     outputSchema: AgentOutputSchema,
-    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, async (args, context) => {
     try {
       if (args.action === "normalize") {
@@ -788,7 +827,7 @@ export function registerAgentTools(
     description: "Source ingestion, claims, coverage, recovery.",
     inputSchema: schemas.ingest,
     outputSchema: AgentOutputSchema,
-    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, async (args, context) => {
     try {
       if (args.action === "report") {
@@ -908,7 +947,7 @@ export function registerAgentTools(
     description: "Code index, symbols, callers, fallback.",
     inputSchema: schemas.code,
     outputSchema: AgentOutputSchema,
-    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, async (args, context) => {
     try {
       const result = await call("codeEvidence", args, context);
@@ -969,10 +1008,10 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.document, {
-    description: "Write or review evidence-backed documents.",
+    description: "Evidence-backed document writing/review.",
     inputSchema: schemas.document,
     outputSchema: AgentOutputSchema,
-    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, async (args, context) => {
     try {
       const keys = { write: "writeDocument", review: "reviewDocument" } as const;
@@ -1027,10 +1066,10 @@ export function registerAgentTools(
   });
 
   server.registerTool(AGENT_TOOL_NAMES.admin, {
-    description: "Initialize/inspect/rebuild, client setup, lint/repair, drift, and migration.",
+    description: "Workspace setup, maintenance and diagnostics.",
     inputSchema: schemas.admin,
     outputSchema: AgentOutputSchema,
-    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, async (args, context) => {
     try {
       if (args.action === "init") {
@@ -1038,6 +1077,33 @@ export function registerAgentTools(
           tool: "knowledge_context", requiredArguments: ["mode", "objective"],
           suggestedArguments: { mode: "task" },
         });
+      }
+      if (args.action === "usage") {
+        const options = z.object({ action: z.enum(["status", "reset", "outcome"]).default("status"), outcome: z.enum(["succeeded", "failed"]).optional() }).strict().parse(args.options ?? {});
+        let outcomeRecorded: boolean | undefined;
+        if (options.action === "outcome") {
+          if (!options.outcome) return errorResult("usage action=outcome requires options.outcome=succeeded|failed.");
+          outcomeRecorded = await withUsageSession(usageSession, () => recordUsageOutcome(wikiDir(), options.outcome!));
+        }
+        const usage = await usageStatus(wikiDir(), options.action === "reset");
+        return withGuidance({ content: [{ type: "text", text: `Usage ledger: ${usage.disclosed} disclosures, ${usage.materialized} materializations, ${usage.fallbacks} reported fallbacks.` }],
+          structuredContent: { action: "usage", usage, ...(outcomeRecorded !== undefined ? { outcomeRecorded } : {}) } }, "usage_status_complete", null);
+      }
+      if (args.action === "semantic_setup") {
+        const options = z.object({ model: z.enum(["potion-retrieval-32M", "potion-multilingual-128M"]) }).strict().parse(args.options ?? {});
+        const { setupStaticModel } = await import("../core/semantic/static-provider.js");
+        const setup = await setupStaticModel(wikiDir(), options.model, args.setup_mode === "apply");
+        return withGuidance({ content: [{ type: "text", text: JSON.stringify(setup) }], structuredContent: { action: "semantic_setup", setup } }, "semantic_setup_complete", null);
+      }
+      if (args.action === "consolidate") {
+        const options = z.object({ days: z.number().int().min(1).max(180).default(90), proposals: z.array(z.string().min(1).max(4096)).max(8).optional() }).strict().parse(args.options ?? {});
+        const { consolidateKnowledge } = await import("../core/consolidation.js");
+        const report = await consolidateKnowledge(wikiDir(), { apply: args.setup_mode === "apply", days: options.days, proposals: options.proposals });
+        if (report.applied) {
+          const written = await call("writePage", { path: report.reviewPath, content: report.review }, context);
+          if (isCallToolResult(written) && written.isError) return written;
+        }
+        return withGuidance({ content: [{ type: "text", text: report.review }], structuredContent: { action: "consolidate", report } }, "consolidation_complete", null);
       }
       if (args.action === "status") {
         const [{ refreshRetrievalIndex }, codeStatus] = await Promise.all([
@@ -1073,6 +1139,9 @@ export function registerAgentTools(
           rebuild: args.force,
         });
         await getRuntimeWikiGraph(wikiDir(), args.force, { persist: true });
+        const { configuredSemanticIndex } = await import("../core/semantic/index.js");
+        const semantic = await configuredSemanticIndex(wikiDir(), { background: true });
+        await semantic?.checkpoint(args.force);
         const knowledgeRuntime = await checkpointStatus();
         return withGuidance({
           content: [{
@@ -1121,12 +1190,13 @@ export function registerAgentTools(
         const result = await detectCodeDrift({
           repositoryRoot: getWikiRoot(),
           wikiRoot: wikiDir(),
+          writeLedger: args.dry_run !== true,
           ...(args.scope === "paths" ? { paths: args.paths } : {}),
         });
         const summary = result.summary;
         const lines = [
           `Drift check complete: ${summary.checkedAnchors}/${summary.totalAnchors} anchor(s) checked; ` +
-            `${summary.fresh} fresh, ${summary.driftSuspected} drift suspected, ` +
+            `${summary.fresh} fresh, ${summary.relocated ?? 0} relocated, ${summary.driftSuspected} drift suspected, ` +
             `${summary.anchorUnresolvable} unresolvable.`,
           ...summary.topDrifted.map((entry) =>
             `${entry.claimId}: ${entry.path}:${entry.startLine}-${entry.endLine} (${entry.reason}); ` +

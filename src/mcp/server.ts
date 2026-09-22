@@ -19,6 +19,7 @@ import { registerWorkspaceTool } from "../tools/workspace-tool.js";
 import type { WorkspaceBindingManager } from "../workspaces/bindings.js";
 import { PRODUCT_VERSION } from "../product.js";
 import { logger } from "../core/logger.js";
+import { randomUUID } from "node:crypto";
 
 const STATIC_CATALOG_TTL_MS = 5 * 60 * 1_000;
 
@@ -141,9 +142,10 @@ export function buildServer(
     }
   );
 
-  registerAgentTools(server, context.era, { includeWorkspaceBinding: profile.kind === "catalog" });
+  const usageSession = randomUUID();
+  registerAgentTools(server, context.era, { includeWorkspaceBinding: profile.kind === "catalog", usageSession });
   registerWikiPrompts(server, context.era, { includeWorkspaceBinding: profile.kind === "catalog" });
-  registerWikiResources(server, { includeWorkspaceBinding: profile.kind === "catalog" });
+  registerWikiResources(server, { includeWorkspaceBinding: profile.kind === "catalog", usageSession });
 
   if (profile.kind === "catalog") {
     registerWorkspaceTool(server, profile.bindings, profile.principalId);

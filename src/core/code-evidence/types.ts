@@ -41,6 +41,18 @@ export interface CodeAnchor {
   rangeHash: string;
   parserVersion: string;
   capturedAt: string;
+  revision?: string;
+  history?: Array<Omit<CodeAnchor, "history">>;
+}
+
+export interface RepositoryMap {
+  snapshot: string;
+  nodes: Array<{ uri: string; path: string; symbol: string; signature: string; kind: CodeFragmentKind;
+    isTest: boolean; depth: number; centrality: number; origin: "task_symbol" | "changed_path" | "anchor" | "relation" }>;
+  relations: Array<{ from: string; to: string; relation: "call" | "import"; basis: "lexical_call" | "resolved_import" }>;
+  components: Array<{ path: string; manifest: string }>;
+  truncated: boolean;
+  widenable: false;
 }
 
 export interface CodeRoute {

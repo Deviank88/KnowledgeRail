@@ -27,5 +27,15 @@ export async function finalizePageMutation(relPaths: string[]): Promise<string> 
   if (!runtimeUpdated) invalidateWikiGraph(wikiDir());
   const pageCount = await rebuildIndex();
   await invalidateManifestEntries(wikiDir(), ["index.md"]);
-  return `Index updated (${pageCount} pages).`;
+  let semanticNotice = "";
+  try {
+    const { configuredSemanticIndex } = await import("../core/semantic/index.js");
+    const semantic = await configuredSemanticIndex(wikiDir(), { background: true });
+    await semantic?.prioritize(relPaths);
+    if (semantic?.descriptor.state === "degraded") semanticNotice = " Semantic indexing will retry; canonical pages were saved.";
+    else if ((semantic?.descriptor.pendingPages ?? 0) > 0) semanticNotice = " Semantic indexing continues in the background.";
+  } catch {
+    semanticNotice = " Semantic indexing is unavailable; canonical pages were saved and indexing will retry.";
+  }
+  return `Index updated (${pageCount} pages).${semanticNotice}`;
 }

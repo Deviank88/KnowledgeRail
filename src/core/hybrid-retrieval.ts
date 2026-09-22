@@ -33,6 +33,7 @@ import type {
 } from "./semantic/types.js";
 import { registerWorkspaceState } from "./workspace-state.js";
 import { selectLexicalEvidence } from "./retrieval-selection.js";
+import { rerankWithUsage } from "./usage-ledger.js";
 
 export type RetrievalWideningLevel = 0 | 1 | 2 | 3;
 
@@ -53,6 +54,8 @@ export interface HybridRetrievalChannels {
 
 export interface HybridRetrievalHit extends RetrievalHit {
   channels: HybridRetrievalChannels;
+  usageReason?: string;
+  usageBoost?: number;
 }
 
 export interface HybridRetrievalAttempt {
@@ -134,7 +137,7 @@ export interface HybridRetrievalParams {
   /** Replaceable semantic backend, primarily for local providers and deterministic evaluation. */
   semanticIndex?: SemanticIndex;
   semanticPoolSize?: number;
-  /** Persist disposable retrieval/graph/semantic indexes. Read-only consumers disable this. */
+  /** Persist disposable lexical/graph indexes. Semantic work is always journaled. */
   persistDerivedIndexes?: boolean;
 }
 
@@ -219,7 +222,8 @@ function safeSemanticPagePath(value: string): string | null {
 
 async function resolveSemantic(
   request: HybridRetrievalParams,
-  maxResults: number
+  maxResults: number,
+  lexicalPaths: readonly string[]
 ): Promise<ResolvedSemantic> {
   const enabled = request.semanticEnabled === true || request.semanticIndex !== undefined;
   const unavailable: HybridSemanticDiagnostics = {
@@ -232,12 +236,13 @@ async function resolveSemantic(
   if (!enabled) return { hits: [], diagnostics: unavailable };
   try {
     const index = request.semanticIndex ?? await configuredSemanticIndex(request.wikiRoot, {
-      persist: request.persistDerivedIndexes,
+      background: true,
     });
     if (!index) {
       emitMissingEmbeddingNotice(request.wikiRoot);
       return { hits: [], diagnostics: unavailable };
     }
+    await index.prioritize?.(lexicalPaths, 1_000);
     const poolSize = Math.min(1_000, Math.max(
       maxResults,
       positiveInteger(request.semanticPoolSize, Math.max(maxResults * 4, 20))
@@ -488,7 +493,7 @@ async function retrieveAttempt(params: {
   budget: RetrievalBudget;
   maxResults: number;
   fallbackHits: readonly RetrievalHit[];
-  resolveSemantic: () => Promise<ResolvedSemantic>;
+  resolveSemantic: (paths: readonly string[]) => Promise<ResolvedSemantic>;
 }): Promise<AttemptResult> {
   const { request, level, budget, maxResults } = params;
   const baseLexicalPool = Math.max(
@@ -515,7 +520,7 @@ async function retrieveAttempt(params: {
   );
   // The lexical search refreshes canonical page records first; the semantic
   // index can now synchronize its disposable derived state to that generation.
-  const semantic = await params.resolveSemantic();
+  const semantic = await params.resolveSemantic(lexicalHits.map((hit) => hit.path));
   const semanticHits = semantic.hits;
 
   const runtime = await getRuntimeWikiGraph(request.wikiRoot, false, {
@@ -653,6 +658,7 @@ async function retrieveAttempt(params: {
     if (b.path === exactAnchorPath && a.path !== exactAnchorPath) return 1;
     return b.score - a.score || a.path.localeCompare(b.path);
   });
+  await rerankWithUsage(request.wikiRoot, request.query, fused);
   const evidenceSignals = createRetrievalEvidenceSignals(request.query);
   const hits = limitHitsByBudget(selectLexicalEvidence(request.query, fused, request.coverageRequirements, evidenceSignals), maxResults, budget);
   return {
@@ -677,10 +683,7 @@ function lexicalCoverageWarning(semantic: HybridSemanticDiagnostics): string[] {
     return [`Semantic coverage degraded to lexical mode: ${semantic.error}`];
   }
   if (!semantic.available) {
-    return [
-      "Lexical coverage mode is active. Configure a local Ollama or remote OpenAI-compatible " +
-      "embedding provider with KNOWLEDGE_RAIL_EMBEDDING_* to improve GAP precision.",
-    ];
+    return [];
   }
   return ["Semantic retrieval is active, but this backend does not support semantic coverage; lexical coverage is active."];
 }
@@ -698,8 +701,11 @@ async function assessAttemptCoverage(
         semanticCoverageQueries(request.query, request.coverageRequirements),
         result.coverageHits.map((hit) => hit.path)
       );
-      coverageMode = "semantic";
-      warnings = [];
+      const descriptor = result.semanticIndex.descriptor;
+      result.semantic.descriptor = { ...descriptor };
+      coverageMode = descriptor.state === "building" || (descriptor.pendingPages ?? 0) > 0 ? "semantic-partial" : "semantic";
+      warnings = coverageMode === "semantic-partial"
+        ? [`Semantic index building: ${descriptor.pageCount}/${descriptor.totalPages} pages ready. Unembedded pages retain lexical coverage.`] : [];
     } catch (error: unknown) {
       const safeError = safeSemanticError(error);
       result.semantic = {
@@ -761,8 +767,8 @@ export async function retrieveWikiHybrid(
       budget,
       maxResults,
       fallbackHits,
-      resolveSemantic: () => {
-        semanticPromise ??= resolveSemantic(params, maxResults);
+      resolveSemantic: (paths) => {
+        semanticPromise ??= resolveSemantic(params, maxResults, paths);
         return semanticPromise;
       },
     });

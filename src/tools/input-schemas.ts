@@ -35,6 +35,10 @@ export const EvidenceClaimInputSchema = z.object({
   kind: z.enum(CLAIM_KINDS),
   origin: z.enum(CLAIM_ORIGINS),
   confidence: z.number().min(0).max(1),
+  valid_from: z.iso.datetime().optional(),
+  valid_until: z.iso.datetime().optional(),
+  provenance: z.array(z.object({ kind: z.enum(["commit", "pull_request"]), reference: z.string().max(4_096) })).max(16).optional(),
+  verified_by: z.array(z.string().startsWith("code://repo/").max(4_096)).max(8).optional(),
   target: z.object({
     entity_key: z.string().optional().describe("Stable stakeholder/entity identity reused across sources."),
     page_path: z.string().optional().describe(

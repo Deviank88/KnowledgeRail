@@ -190,6 +190,10 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
             kind: claim.kind,
             origin: claim.origin,
             confidence: claim.confidence,
+            validFrom: claim.valid_from,
+            validUntil: claim.valid_until,
+            provenance: claim.provenance,
+            verifiedBy: claim.verified_by,
             target: claim.target ? {
               entityKey: claim.target.entity_key,
               pagePath: claim.target.page_path,

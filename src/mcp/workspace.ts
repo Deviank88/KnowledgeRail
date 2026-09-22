@@ -81,6 +81,8 @@ export async function resolveWorkspace(
 
 export function activateWorkspace(resolution: WorkspaceResolution): WorkspaceResolution {
   setWikiRoot(resolution.root);
+  void import("../core/semantic/index.js").then(({ warmSemanticIndex }) =>
+    warmSemanticIndex(nodePath.join(resolution.root, "wiki")));
   return resolution;
 }
 

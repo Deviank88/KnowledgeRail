@@ -4,7 +4,7 @@ import type { SemanticCoverageQuery, SemanticCoverageScore } from "./semantic/ty
 import { tokenizeSearchText } from "./text-analysis.js";
 import { wikiPassageId } from "../context/passage-id.js";
 
-export type RetrievalCoverageMode = "semantic" | "lexical";
+export type RetrievalCoverageMode = "semantic" | "semantic-partial" | "lexical";
 
 export interface RetrievalCoverage {
   coverageMode: RetrievalCoverageMode;
@@ -471,7 +471,7 @@ export function assessRetrievalCoverage(params: {
     };
     const facetCoverage = queryTerms.length === 0
       ? 1
-      : mode === "semantic"
+      : mode !== "lexical"
         ? semanticFacetCoverage("", "page")
         : queryTerms.filter((term) => signals.has(`facet:${term}`)).length / queryTerms.length;
     // Broad task queries intentionally span multiple evidence passages. The
@@ -480,14 +480,14 @@ export function assessRetrievalCoverage(params: {
       ? 0
       : queryTerms.length === 0
         ? 1
-      : mode === "semantic"
+      : mode !== "lexical"
         ? semanticFacetCoverage(passageText, "passage")
         : lexicalCoverage(passageText, queryTerms);
     const entityConcepts = concepts.filter((concept) => concept.kind === "entity");
     const missingEntities = entityConcepts.filter((concept) => {
       const lexicalMatch = signals.has(`entity:${concept.value}`);
       return !lexicalMatch && !(
-        mode === "semantic" &&
+        mode !== "lexical" &&
         semanticConceptCovered(concept.id, paths, semanticScores, SEMANTIC_ENTITY_THRESHOLD)
       );
     }).map((concept) => concept.value);
@@ -500,7 +500,7 @@ export function assessRetrievalCoverage(params: {
         // Explicit page-type filters and incidental body mentions remain strict.
         (headingPattern && headingPattern.test(hit.heading)));
       return !classifiedMatch && !(
-        mode === "semantic" &&
+        mode !== "lexical" &&
         semanticConceptCovered(concept.id, paths, semanticScores, SEMANTIC_ARTIFACT_THRESHOLD)
       );
     }).map((concept) => concept.value);

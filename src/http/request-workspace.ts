@@ -39,6 +39,10 @@ export function isMutatingDomainCall(name: string, args: Record<string, unknown>
   if (name === "knowledge_admin") {
     return action === "init" ||
       action === "checkpoint" ||
+      (action === "drift" && args.dry_run !== true) ||
+      (action === "usage" && ["reset", "outcome"].includes(String(record(args.options)?.action))) ||
+      (action === "semantic_setup" && args.setup_mode === "apply") ||
+      (action === "consolidate" && args.setup_mode === "apply") ||
       (action === "client_setup" && args.setup_mode === "apply") ||
       (action === "lint" && args.force === true && args.dry_run === false) ||
       (action === "migrate" && args.migration_action !== "plan");

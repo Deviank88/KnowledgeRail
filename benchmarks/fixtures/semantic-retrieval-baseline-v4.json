@@ -36,7 +36,8 @@
     "tables": 12,
     "bitsPerTable": 16,
     "probes": 4,
-    "minimumScore": 0.95
+    "minimumScore": 0.95,
+    "seed": "knowledge-rail-semantic-golden-v1"
   },
   "minimumBaselineRecall": 0.875,
   "minimumSemanticRecall": 1,

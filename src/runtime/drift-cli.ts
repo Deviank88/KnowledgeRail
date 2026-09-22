@@ -53,7 +53,7 @@ function entryLine(entry: DriftLedgerEntry): string {
 }
 
 export function formatDriftText(result: DriftResult): string {
-  const nonFresh = result.entries.filter((entry) => entry.verdict !== "fresh");
+  const nonFresh = result.entries.filter((entry) => entry.verdict !== "fresh" && entry.verdict !== "relocated");
   if (nonFresh.length === 0) return "";
   const summary = result.summary;
   const lines = [
@@ -165,7 +165,7 @@ export async function runDriftCli(
       const text = formatDriftText(outcome.result);
       if (text) io.stdout.write(text);
     }
-    const nonFresh = outcome.result.entries.some((entry) => entry.verdict !== "fresh");
+    const nonFresh = outcome.result.entries.some((entry) => entry.verdict !== "fresh" && entry.verdict !== "relocated");
     return options.check && nonFresh ? 2 : 0;
   } catch (error: unknown) {
     io.stderr.write(`${errorLine(error)}\n`);

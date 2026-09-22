@@ -4,13 +4,16 @@ import { readCodeResource } from "../core/code-evidence/resource-reader.js";
 import { getWikiRoot } from "../core/paths.js";
 import { logFile, schemaFile, wikiDir } from "../core/paths.js";
 import { readFileSafe } from "../core/utils.js";
+import { randomUUID } from "node:crypto";
+import { recordUsageMaterialization, withUsageSession } from "../core/usage-ledger.js";
 
 const DEFAULT_RESOURCE_MAX_CHARS = 6_000;
 
 export function registerWikiResources(
   server: McpServer,
-  options: { includeWorkspaceBinding?: boolean } = {}
+  options: { includeWorkspaceBinding?: boolean; usageSession?: string } = {}
 ): void {
+  const usageSession = options.usageSession ?? randomUUID();
   const schemaReader = async () => ({
     contents: [{ uri: "wiki://schema", text: await readFileSafe(schemaFile()) ?? "SCHEMA.md not found." }],
   });
@@ -50,6 +53,7 @@ export function registerWikiResources(
       resourceUri: uri.href,
       maxCharacters: DEFAULT_RESOURCE_MAX_CHARS,
     });
+    await withUsageSession(usageSession, () => recordUsageMaterialization(wikiDir(), read.uri)).catch(() => undefined);
     const returnedCharacters = [...read.text].length;
     const label = read.heading ? `${read.title} — ${read.heading}` : read.title;
     const truncation = read.truncated
@@ -112,6 +116,7 @@ export function registerWikiResources(
         resourceUri: uri.href,
         maxCharacters: DEFAULT_RESOURCE_MAX_CHARS,
       });
+      await withUsageSession(usageSession, () => recordUsageMaterialization(wikiDir(), uri.href)).catch(() => undefined);
       const returnedCharacters = [...read.text].length;
       const truncation = read.truncated
         ? `\n\n[Truncated: ${returnedCharacters}/${read.totalCharacters} characters returned]`

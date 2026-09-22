@@ -62,6 +62,7 @@ interface ReferenceIndex {
   calls: Map<string, number[]>;
   references: Map<string, number[]>;
   imports: Map<string, number[]>;
+  outgoingImports: Map<number, number[]>;
   declaredReferences: Map<string, number[]>;
   importDiagnostics: CodeImportDiagnostics;
   importCounts: Record<string, CodeImportResolutionCounts>;
@@ -217,6 +218,16 @@ export class CodeQueryRuntime {
     return [...(this.structure?.warnings ?? []), ...this.metadataWarnings];
   }
 
+  declaredComponents(paths: readonly string[]): Array<{ path: string; manifest: string }> {
+    const components: Array<{ path: string; manifest: string }> = [];
+    for (const [manifestPath, manifest] of this.structure?.manifests ?? []) {
+      if (manifest.warning || !/^(?:package\.json|go\.mod|Cargo\.toml|tsconfig[^/]*\.json|pom\.xml|[^/]+\.csproj)$/.test(posix.basename(manifestPath))) continue;
+      const directory = posix.dirname(manifestPath);
+      if (paths.some((p) => directory === "." || p.startsWith(directory + "/"))) components.push({ path: directory, manifest: manifestPath });
+    }
+    return components.sort((a, b) => a.path.localeCompare(b.path) || a.manifest.localeCompare(b.manifest)).slice(0, 12);
+  }
+
   projectStructureEstimatedBytes(): number {
     return (this.structureReader?.estimatedBytes ?? 0) + this.metadataEstimatedBytes + (this.incoming?.estimatedBytes ?? 0) +
       (this.generationCache.unindexedEstimatedBytes ?? 0) +
@@ -282,6 +293,7 @@ export class CodeQueryRuntime {
       }
       const diagnostics = new ImportResolutionCollector(modulePaths);
       const incoming: ReferenceIndex = { byId: new Map(), calls: new Map(), references: new Map(), imports: new Map(),
+        outgoingImports: new Map(),
         declaredReferences: new Map(),
         importDiagnostics: diagnostics.result(), importCounts: diagnostics.byLanguage, diagnosticBytes: 0, estimatedBytes: 0 };
       const issues: CodeImportIssue[] = [];
@@ -386,7 +398,19 @@ export class CodeQueryRuntime {
       incoming.diagnosticBytes = 2 * JSON.stringify([incoming.importDiagnostics, incoming.importCounts]).length + 2048;
       // Conservative string/map/array allowance. Postings contain ordinals, not
       // fragment objects, so retaining them cannot retain an oversized snapshot.
+      const moduleOrdinals = new Map(this.snapshot.fragments.flatMap((fragment, ordinal) =>
+        fragment.kind === "module" && fragment.qualifiedName === fragment.path ? [[fragment.path, ordinal] as const] : []));
+      for (const [targetPath, sources] of incoming.imports) {
+        const target = moduleOrdinals.get(targetPath);
+        if (target === undefined) continue;
+        for (const source of sources) {
+          const targets = incoming.outgoingImports.get(source);
+          if (targets) targets.push(target);
+          else incoming.outgoingImports.set(source, [target]);
+        }
+      }
       incoming.estimatedBytes = incoming.diagnosticBytes;
+      for (const ordinals of incoming.outgoingImports.values()) incoming.estimatedBytes += 160 + ordinals.length * 16;
       for (const [key] of incoming.byId) incoming.estimatedBytes += 128 + key.length * 4;
       for (const index of [incoming.calls, incoming.references, incoming.imports, incoming.declaredReferences]) {
         for (const [key, ordinals] of index) incoming.estimatedBytes += 160 + key.length * 4 + ordinals.length * 16;
@@ -439,11 +463,7 @@ export class CodeQueryRuntime {
       const matches = exactSymbols.get(name) ?? [];
       if (matches.length === 1) add(matches[0]!.fragment, "call", "outgoing");
     }
-    const importedPaths = new Set<string>();
-    for (const [path, sources] of incoming.imports) if (sources.includes(ordinal)) importedPaths.add(path);
-    if (importedPaths.size) for (const fragment of this.snapshot.fragments) {
-      if (fragment.kind === "module" && fragment.qualifiedName === fragment.path && importedPaths.has(fragment.path)) add(fragment, "import", "outgoing");
-    }
+    for (const source of incoming.outgoingImports.get(ordinal) ?? []) add(this.snapshot.fragments[source]!, "import", "outgoing");
     const best = new TopResults<NonNullable<ReturnType<typeof result.get>>>(maxResults, (a, b) =>
       (a.relation === "call" ? 0 : 1) - (b.relation === "call" ? 0 : 1) ||
       a.fragment.path.localeCompare(b.fragment.path) || a.fragment.range.startLine - b.fragment.range.startLine ||

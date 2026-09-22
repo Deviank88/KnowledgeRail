@@ -60,6 +60,31 @@ async function diskState(root: string): Promise<Record<string, string>> {
   return entries;
 }
 
+test("repository map follows literal code edges with signatures, stays in budget and can be disabled", async (t) => {
+  const p = await project(t, { "package.json": '{"name":"fixture"}' });
+  const context = await p.context({ objective: "Modificare `applyCredit`", changedPaths: ["odd/ledger.ts"] });
+  assert.ok(context.repositoryMap?.nodes.some((node) => node.path === "odd/ledger.ts" && node.symbol === "applyCredit"));
+  assert.ok(context.repositoryMap?.nodes.some((node) => node.path === "callers/web.ts"));
+  assert.ok(context.repositoryMap?.nodes.every((node) => node.depth <= 2 && !node.signature.includes("return")));
+  assert.ok(context.budget.withinHeuristicBudget);
+  assert.ok(context.repositoryMap?.components.some((component) => component.manifest === "package.json"));
+  assert.equal((await p.context({ objective: "Modificare `applyCredit`", includeRepositoryMap: false })).repositoryMap, undefined);
+  assert.equal((await p.context({ objective: "Chiarire il contratto commerciale" })).repositoryMap, undefined);
+});
+
+test("repository map excludes annotated single-line Python and endless Ruby bodies", async (t) => {
+  const p = await project(t, {
+    "credit.py": "def credit(value: int = 5) -> int: return value + 781\n",
+    "credit.rb": "def credit(value = 5) = value + 782\n",
+  });
+  for (const file of ["credit.py", "credit.rb"]) {
+    const map = await p.index.repositoryMap({ query: "credit", paths: [file] });
+    const nodes = map.nodes.filter((node) => node.path === file);
+    assert.ok(nodes.length);
+    assert.ok(nodes.every((node) => !/return|781|782/u.test(node.signature)));
+  }
+});
+
 test("task source paths preserve quoted spaces and reject URLs, absolute paths and inferred directory guesses", () => {
   assert.deepEqual(taskCodePaths('Modifica `odd folder/unit.ts` e callers/web.ts:12-17. Vedi https://host/a.ts /outside.ts ../escape.py plainSymbol wiki/notes.md'),
     ["callers/web.ts", "odd folder/unit.ts"]);

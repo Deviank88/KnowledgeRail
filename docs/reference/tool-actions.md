@@ -18,16 +18,17 @@ Every successful domain operation returns `structuredContent.state` and `structu
 
 ## `knowledge_admin`
 
-Initialize/inspect/rebuild, client setup, lint/repair, drift, and migration.
+Workspace setup, maintenance and diagnostics.
 
 For `action="lint"`, `force=true` enables nested-wiki recovery. Omit `dry_run` or set it to `true` to preview; set `dry_run=false` to apply. Recovery removes nested `wiki` path segments, updates relative links, and blocks the complete operation if any destination collides.
 
-Actions/modes: `init`, `status`, `checkpoint`, `client_setup`, `lint`, `drift`, `migrate`.
+Actions/modes: `init`, `status`, `checkpoint`, `usage`, `semantic_setup`, `consolidate`, `client_setup`, `lint`, `drift`, `migrate`.
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
 |---|---|---:|---|---|---|
-| `action` | `init` &#124; `status` &#124; `checkpoint` &#124; `client_setup` &#124; `lint` &#124; `drift` &#124; `migrate` | yes | — | — | init=bootstrap;status=state;checkpoint=rebuild;client_setup=hooks;lint=validate links/repair;drift=anchors;migrate=upgrade. |
+| `action` | `init` &#124; `status` &#124; `checkpoint` &#124; `usage` &#124; `semantic_setup` &#124; `consolidate` &#124; `client_setup` &#124; `lint` &#124; `drift` &#124; `migrate` | yes | — | — | init=bootstrap;checkpoint=rebuild;usage=stats/reset;semantic_setup=models;consolidate=review;client_setup=hooks;lint=broken links/orphan pages;migrate=upgrade. |
 | `force` | boolean | no | `false` | — | lint: repair nested wiki. |
+| `options` | object | no | — | — | usage:{action:status&#124;reset&#124;outcome,outcome:succeeded&#124;failed};semantic_setup:{model};consolidate:{days,proposals}. |
 | `integrity_mode` | `metadata` &#124; `content` | no | `"metadata"` | — | — |
 | `include_orphans` | boolean | no | `true` | — | — |
 | `include_missing` | boolean | no | `true` | — | — |
@@ -86,6 +87,8 @@ Actions/modes: `task`, `list`, `search`, `graph`.
 | `max_evidence` | integer | no | `8` | ≥ 1; ≤ 20 | — |
 | `heuristic_token_budget` | integer | no | `2000` | ≥ 256; ≤ 12000 | — |
 | `response_detail` | `compact` &#124; `full` | no | `"compact"` | — | — |
+| `include_repository_map` | boolean | no | — | — | — |
+| `as_of` | string | no | — | — | Claim validity at a UTC ISO timestamp. |
 | `max_results` | integer | no | `10` | ≥ 1; ≤ 100 | — |
 | `max_nodes` | integer | no | `12` | ≥ 1; ≤ 100 | — |
 | `max_depth` | integer | no | `1` | ≥ 0; ≤ 8 | — |
@@ -93,7 +96,7 @@ Actions/modes: `task`, `list`, `search`, `graph`.
 
 ## `knowledge_document`
 
-Write or review evidence-backed documents.
+Evidence-backed document writing/review.
 
 Actions/modes: `write`, `review`.
 
@@ -144,13 +147,13 @@ Actions/modes: `plan`, `section`.
 
 ## `knowledge_files`
 
-Controlled source files and PDFs: list, read, normalize to Markdown.
+Source files/PDFs: list, read, normalize to Markdown.
 
 Actions/modes: `list`, `read`, `normalize`.
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
 |---|---|---:|---|---|---|
-| `action` | `list` &#124; `read` &#124; `normalize` | no | `"list"` | — | list=sources;read=open;normalize=Markdown. |
+| `action` | `list` &#124; `read` &#124; `normalize` | no | `"list"` | — | normalize=Markdown. |
 | `category` | `client` &#124; `transcripts` &#124; `reports` &#124; `changelogs` &#124; `normalized` &#124; `deliverables` &#124; `assets` | no | — | — | — |
 | `pattern` | string | no | `"**/*"` | — | — |
 | `path` | string | no | — | — | — |
@@ -172,7 +175,7 @@ Actions/modes: `start`, `next`, `apply_claims`, `record_segment`, `source_status
 | `max_chars` | integer | no | `12000` | ≥ 1; ≤ 50000 | — |
 | `segment_max_chars` | integer | no | — | ≥ 256; ≤ 50000 | — |
 | `segment_id` | string | no | — | — | — |
-| `claims` | array<object> | no | — | items ≥ 1 | target:page_path,page_title,page_type;code_resource_uri=knowledge_code URI. Stakeholders:entity_key,role,organization,email_domain,affiliation. |
+| `claims` | array<object> | no | — | items ≥ 1 | target:page_path,page_title,page_type,code_resource_uri. Stakeholders:entity_key,role,organization,email_domain,affiliation. |
 | `segment_status` | `irrelevant` &#124; `unresolved` &#124; `legacy_unverified` | no | — | — | — |
 | `evidence_refs` | array<string> | no | — | — | — |
 | `page_refs` | array<string> | no | — | — | — |
@@ -195,7 +198,7 @@ Actions/modes: `read`, `write`, `edit`, `move`, `delete`, `append_log`.
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
 |---|---|---:|---|---|---|
-| `action` | `read` &#124; `write` &#124; `edit` &#124; `move` &#124; `delete` &#124; `append_log` | yes | — | — | read=open;write=create;edit=replace;move=rename;delete=remove;append_log=event. |
+| `action` | `read` &#124; `write` &#124; `edit` &#124; `move` &#124; `delete` &#124; `append_log` | yes | — | — | write=create;edit=replace;move=rename;append_log=event. |
 | `path` | string | no | — | — | Wiki .md path; wiki/ maps to root. |
 | `resource_uri` | string | no | — | pattern "^knowledge-rail:\\/\\/page\\/.*" | — |
 | `max_chars` | integer | no | `6000` | ≥ 1; ≤ 50000 | — |

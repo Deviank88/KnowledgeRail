@@ -12,6 +12,7 @@ const gates = [
   "eval:recovery:gate",
   "eval:task-context:gate",
   "eval:semantic:gate",
+  "eval:semantic:lifecycle",
   "eval:migration:gate",
   "eval:editorial:gate",
   "eval:documents:gate",

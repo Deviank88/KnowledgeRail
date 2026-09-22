@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import type { EmbeddingProvider, EmbeddingProviderDescriptor } from "./types.js";
+import { StaticEmbeddingProvider } from "./static-provider.js";
+import { STATIC_MODELS, type StaticModelName } from "./static-models.js";
 
 export interface OpenAiCompatibleEmbeddingOptions {
   baseUrl: string;
@@ -146,6 +148,13 @@ function envInteger(name: string): number | undefined {
 }
 
 export function configuredEmbeddingProvider(): EmbeddingProvider | null {
+  if (process.env["KNOWLEDGE_RAIL_EMBEDDING_PROVIDER"] === "static") {
+    const model = process.env["KNOWLEDGE_RAIL_EMBEDDING_MODEL"] as StaticModelName;
+    const spec = STATIC_MODELS[model];
+    const directory = process.env["KNOWLEDGE_RAIL_STATIC_MODEL_DIR"];
+    if (!spec || !directory) throw new Error("Static embeddings require a supported model and KNOWLEDGE_RAIL_STATIC_MODEL_DIR; run explicit semantic_setup first.");
+    return new StaticEmbeddingProvider(directory, model, spec, (envInteger("KNOWLEDGE_RAIL_STATIC_MEMORY_MB") ?? 256) * 1024 * 1024);
+  }
   const baseUrl = process.env["KNOWLEDGE_RAIL_EMBEDDING_BASE_URL"]?.trim();
   const model = process.env["KNOWLEDGE_RAIL_EMBEDDING_MODEL"]?.trim();
   const dimensions = envInteger("KNOWLEDGE_RAIL_EMBEDDING_DIMENSIONS");
