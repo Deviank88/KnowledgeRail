@@ -26,30 +26,47 @@ function stamp(stat: BigIntStats): string {
 function candidatesFor(paths: Iterable<string>, registry: KnowledgeAdapterRegistry, companions: boolean): Candidate[] {
   const candidates = new Map<string, ProjectManifestSpec>();
   const registrations = registry.registrations.filter(({ adapter }) => adapter.projectManifests?.length);
+  const specsByAdapter = new Map(registrations.map(({ adapter }) =>
+    [adapter, adapter.projectManifests!.filter((spec) => Boolean(spec.companion) === companions)]));
+  const specsByName = new Map<string, ProjectManifestSpec>();
+  const conflicting = new Set<string>();
+  for (const specs of specsByAdapter.values()) for (const spec of specs) {
+    if (specsByName.has(spec.fileName) && specsByName.get(spec.fileName) !== spec) conflicting.add(spec.fileName);
+    specsByName.set(spec.fileName, spec);
+  }
+  const visited = new Map<ProjectManifestSpec, Set<string>>();
   for (const path of paths) {
-    const specs = registrations.find(({ adapter, extensionClaims }) =>
-      extensionClaims.some((claim) => path.toLowerCase().endsWith(claim)) && adapter.supports({ path })
-    )?.adapter.projectManifests?.filter((spec) => Boolean(spec.companion) === companions);
+    const normalizedPath = path.toLowerCase();
+    const adapter = registrations.find(({ adapter, extensionClaims }) =>
+      extensionClaims.some((claim) => normalizedPath.endsWith(claim)) && adapter.supports({ path })
+    )?.adapter;
+    const specs = adapter && specsByAdapter.get(adapter);
     if (!specs?.length) continue;
     if (companions) {
-      for (const spec of specs) if (spec.companion!.extensions.some((extension) => path.toLowerCase().endsWith(extension))) {
+      for (const spec of specs) if (spec.companion!.extensions.some((extension) => normalizedPath.endsWith(extension))) {
         if (!/^[A-Za-z0-9._-]+$/u.test(spec.companion!.suffix)) throw new Error("Invalid companion suffix.");
         candidates.set(path + spec.companion!.suffix, spec);
       }
       continue;
     }
-    let directory = posix.dirname(path);
-    while (true) {
-      for (const spec of specs) {
-        if (!/^(?:[A-Za-z0-9][A-Za-z0-9._-]*|\*\.[A-Za-z0-9_-]+)$/u.test(spec.fileName)) throw new Error("Invalid adapter manifest filename.");
+    for (const spec of specs) {
+      if (!/^(?:[A-Za-z0-9][A-Za-z0-9._-]*|\*\.[A-Za-z0-9_-]+)$/u.test(spec.fileName)) throw new Error("Invalid adapter manifest filename.");
+      const seen = visited.get(spec) ?? new Set<string>();
+      visited.set(spec, seen);
+      let directory = posix.dirname(path);
+      while (true) {
+        // Distinct custom parsers for the same filename preserve the original
+        // last-source-wins behavior. Shared specs visit each ancestor once.
+        if (!conflicting.has(spec.fileName) && seen.has(directory)) break;
+        seen.add(directory);
         candidates.set(posix.join(directory, spec.fileName), spec);
+        if (directory === ".") break;
+        const parent = posix.dirname(directory);
+        if (directory === parent || directory === ".." || directory.startsWith("../") || posix.isAbsolute(directory)) {
+          throw new Error("Manifest inventory must contain repository-relative paths.");
+        }
+        directory = parent;
       }
-      if (directory === ".") break;
-      const parent = posix.dirname(directory);
-      if (directory === parent || directory === ".." || directory.startsWith("../") || posix.isAbsolute(directory)) {
-        throw new Error("Manifest inventory must contain repository-relative paths.");
-      }
-      directory = parent;
     }
   }
   return [...candidates].sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)

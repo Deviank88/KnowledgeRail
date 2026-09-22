@@ -1,0 +1,812 @@
+{
+  "version": 1,
+  "provenance": "Authored synthetic handoff tasks frozen before model evaluation; independent of code-cache optimizations. Development and evaluation use disjoint product names and values; no historical user traffic. Rubrics verify structured answer facts, uncertainty and citations, not arbitrary code-generation quality.",
+  "pages": [
+    {
+      "path": "requirements/AsterRetry.md",
+      "content": "---\ntitle: Aster retry policy\ntype: requirement\nsources: [\"specifications/Aster.md\"]\n---\n# Aster retry policy\n\nAster retry policy: max_attempts = 3; delay_ms = 200. These values are current. max_attempts includes the initial attempt.\n"
+    },
+    {
+      "path": "implementations/AsterRetry.md",
+      "content": "---\ntitle: Aster retry configuration\ntype: implementation\nsources: [\"specifications/Aster.md\"]\n---\n# Aster retry configuration\n\nAster retry configuration must be written to config/aster-retry.json. The JSON keys are max_attempts and delay_ms and their values must follow the Aster retry policy.\n\n[[Aster retry policy]]\n"
+    },
+    {
+      "path": "implementations/AsterQueue.md",
+      "content": "---\ntitle: Aster queue ownership\ntype: implementation\nsources: [\"specifications/Aster.md\"]\n---\n# Aster queue ownership\n\nAster queue change_paths are src/aster/queue.ts and tests/aster/queue.test.ts. Both files must change when retry scheduling changes. The queue contract check is ASTER_RETRY_BOUNDARY.\n"
+    },
+    {
+      "path": "concepts/AsterIncident.md",
+      "content": "---\ntitle: Aster duplicate acknowledgement incident\ntype: concept\nsources: [\"specifications/Aster.md\"]\n---\n# Aster duplicate acknowledgement incident\n\nAster incident root_cause = ACK_BEFORE_COMMIT_0; mitigation = ACK_AFTER_COMMIT_0. The incident is resolved and these facts are verified. Do not change retry counts to repair acknowledgement ordering.\n"
+    },
+    {
+      "path": "requirements/AsterTimeout.md",
+      "content": "---\ntitle: Aster timeout requirement\ntype: requirement\nsources: [\"specifications/Aster.md\"]\n---\n# Aster timeout requirement\n\nAster timeout_seconds = 30. This requirement is active. The architecture decision states a different active timeout; neither source supersedes the other. This is an unresolved conflict.\n\n[[Aster timeout decision]]\n"
+    },
+    {
+      "path": "decisions/AsterTimeout.md",
+      "content": "---\ntitle: Aster timeout decision\ntype: decision\nsources: [\"specifications/Aster.md\"]\n---\n# Aster timeout decision\n\nAster timeout_seconds = 45. This decision is active. The requirement states a different active timeout; neither source supersedes the other. This is an unresolved conflict.\n\n[[Aster timeout requirement]]\n"
+    },
+    {
+      "path": "concepts/AsterLegacy.md",
+      "content": "---\ntitle: Aster legacy retention note\ntype: concept\nsources: [\"specifications/Aster.md\"]\n---\n# Aster legacy retention note\n\nAster historical retention_days = 14. Evidence status: stale. This archived value has not been revalidated after migration. A current value is unknown; refresh the source before using it operationally.\n"
+    },
+    {
+      "path": "requirements/CedroRetry.md",
+      "content": "---\ntitle: Cedro retry policy\ntype: requirement\nsources: [\"specifications/Cedro.md\"]\n---\n# Cedro retry policy\n\nCedro retry policy: max_attempts = 4; delay_ms = 275. These values are current. max_attempts includes the initial attempt.\n"
+    },
+    {
+      "path": "implementations/CedroQueue.md",
+      "content": "---\ntitle: Cedro queue ownership\ntype: implementation\nsources: [\"specifications/Cedro.md\"]\n---\n# Cedro queue ownership\n\nCedro queue change_paths are src/cedro/queue.ts and tests/cedro/queue.test.ts. Both files must change when retry scheduling changes. The queue contract check is CEDRO_RETRY_BOUNDARY.\n"
+    },
+    {
+      "path": "concepts/CedroIncident.md",
+      "content": "---\ntitle: Cedro duplicate acknowledgement incident\ntype: concept\nsources: [\"specifications/Cedro.md\"]\n---\n# Cedro duplicate acknowledgement incident\n\nCedro incident root_cause = ACK_BEFORE_COMMIT_1; mitigation = ACK_AFTER_COMMIT_1. The incident is resolved and these facts are verified. Do not change retry counts to repair acknowledgement ordering.\n"
+    },
+    {
+      "path": "requirements/CedroTimeout.md",
+      "content": "---\ntitle: Cedro timeout requirement\ntype: requirement\nsources: [\"specifications/Cedro.md\"]\n---\n# Cedro timeout requirement\n\nCedro timeout_seconds = 31. This requirement is active. The architecture decision states a different active timeout; neither source supersedes the other. This is an unresolved conflict.\n\n[[Cedro timeout decision]]\n"
+    },
+    {
+      "path": "decisions/CedroTimeout.md",
+      "content": "---\ntitle: Cedro timeout decision\ntype: decision\nsources: [\"specifications/Cedro.md\"]\n---\n# Cedro timeout decision\n\nCedro timeout_seconds = 46. This decision is active. The requirement states a different active timeout; neither source supersedes the other. This is an unresolved conflict.\n\n[[Cedro timeout requirement]]\n"
+    },
+    {
+      "path": "concepts/CedroLegacy.md",
+      "content": "---\ntitle: Cedro legacy retention note\ntype: concept\nsources: [\"specifications/Cedro.md\"]\n---\n# Cedro legacy retention note\n\nCedro historical retention_days = 15. Evidence status: stale. This archived value has not been revalidated after migration. A current value is unknown; refresh the source before using it operationally.\n"
+    },
+    {
+      "path": "requirements/LumenRetry.md",
+      "content": "---\ntitle: Lumen retry policy\ntype: requirement\nsources: [\"specifications/Lumen.md\"]\n---\n# Lumen retry policy\n\nLumen retry policy: max_attempts = 5; delay_ms = 350. These values are current. max_attempts includes the initial attempt.\n"
+    },
+    {
+      "path": "implementations/LumenRetry.md",
+      "content": "---\ntitle: Lumen retry configuration\ntype: implementation\nsources: [\"specifications/Lumen.md\"]\n---\n# Lumen retry configuration\n\nLumen retry configuration must be written to config/lumen-retry.json. The JSON keys are max_attempts and delay_ms and their values must follow the Lumen retry policy.\n\n[[Lumen retry policy]]\n"
+    },
+    {
+      "path": "implementations/LumenQueue.md",
+      "content": "---\ntitle: Lumen queue ownership\ntype: implementation\nsources: [\"specifications/Lumen.md\"]\n---\n# Lumen queue ownership\n\nLumen queue change_paths are src/lumen/queue.ts and tests/lumen/queue.test.ts. Both files must change when retry scheduling changes. The queue contract check is LUMEN_RETRY_BOUNDARY.\n"
+    },
+    {
+      "path": "concepts/LumenIncident.md",
+      "content": "---\ntitle: Lumen duplicate acknowledgement incident\ntype: concept\nsources: [\"specifications/Lumen.md\"]\n---\n# Lumen duplicate acknowledgement incident\n\nLumen incident root_cause = ACK_BEFORE_COMMIT_2; mitigation = ACK_AFTER_COMMIT_2. The incident is resolved and these facts are verified. Do not change retry counts to repair acknowledgement ordering.\n"
+    },
+    {
+      "path": "requirements/LumenTimeout.md",
+      "content": "---\ntitle: Lumen timeout requirement\ntype: requirement\nsources: [\"specifications/Lumen.md\"]\n---\n# Lumen timeout requirement\n\nLumen timeout_seconds = 32. This requirement is active. The architecture decision states a different active timeout; neither source supersedes the other. This is an unresolved conflict.\n\n[[Lumen timeout decision]]\n"
+    },
+    {
+      "path": "decisions/LumenTimeout.md",
+      "content": "---\ntitle: Lumen timeout decision\ntype: decision\nsources: [\"specifications/Lumen.md\"]\n---\n# Lumen timeout decision\n\nLumen timeout_seconds = 47. This decision is active. The requirement states a different active timeout; neither source supersedes the other. This is an unresolved conflict.\n\n[[Lumen timeout requirement]]\n"
+    },
+    {
+      "path": "concepts/LumenLegacy.md",
+      "content": "---\ntitle: Lumen legacy retention note\ntype: concept\nsources: [\"specifications/Lumen.md\"]\n---\n# Lumen legacy retention note\n\nLumen historical retention_days = 16. Evidence status: stale. This archived value has not been revalidated after migration. A current value is unknown; refresh the source before using it operationally.\n"
+    },
+    {
+      "path": "requirements/PortoRetry.md",
+      "content": "---\ntitle: Porto retry policy\ntype: requirement\nsources: [\"specifications/Porto.md\"]\n---\n# Porto retry policy\n\nPorto retry policy: max_attempts = 6; delay_ms = 425. These values are current. max_attempts includes the initial attempt.\n"
+    },
+    {
+      "path": "implementations/PortoQueue.md",
+      "content": "---\ntitle: Porto queue ownership\ntype: implementation\nsources: [\"specifications/Porto.md\"]\n---\n# Porto queue ownership\n\nPorto queue change_paths are src/porto/queue.ts and tests/porto/queue.test.ts. Both files must change when retry scheduling changes. The queue contract check is PORTO_RETRY_BOUNDARY.\n"
+    },
+    {
+      "path": "concepts/PortoIncident.md",
+      "content": "---\ntitle: Porto duplicate acknowledgement incident\ntype: concept\nsources: [\"specifications/Porto.md\"]\n---\n# Porto duplicate acknowledgement incident\n\nPorto incident root_cause = ACK_BEFORE_COMMIT_3; mitigation = ACK_AFTER_COMMIT_3. The incident is resolved and these facts are verified. Do not change retry counts to repair acknowledgement ordering.\n"
+    },
+    {
+      "path": "requirements/PortoTimeout.md",
+      "content": "---\ntitle: Porto timeout requirement\ntype: requirement\nsources: [\"specifications/Porto.md\"]\n---\n# Porto timeout requirement\n\nPorto timeout_seconds = 33. This requirement is active. The architecture decision states a different active timeout; neither source supersedes the other. This is an unresolved conflict.\n\n[[Porto timeout decision]]\n"
+    },
+    {
+      "path": "decisions/PortoTimeout.md",
+      "content": "---\ntitle: Porto timeout decision\ntype: decision\nsources: [\"specifications/Porto.md\"]\n---\n# Porto timeout decision\n\nPorto timeout_seconds = 48. This decision is active. The requirement states a different active timeout; neither source supersedes the other. This is an unresolved conflict.\n\n[[Porto timeout requirement]]\n"
+    },
+    {
+      "path": "concepts/PortoLegacy.md",
+      "content": "---\ntitle: Porto legacy retention note\ntype: concept\nsources: [\"specifications/Porto.md\"]\n---\n# Porto legacy retention note\n\nPorto historical retention_days = 17. Evidence status: stale. This archived value has not been revalidated after migration. A current value is unknown; refresh the source before using it operationally.\n"
+    },
+    {
+      "path": "concepts/Background0.md",
+      "content": "---\ntitle: Background0 interface convention\ntype: concept\nsources: [\"specifications/Background0.md\"]\n---\n# Background0 interface convention\n\nBackground0 concerns UI spacing and theme choice. It defines no retry, timeout, acknowledgement or retention policy for other products.\n"
+    },
+    {
+      "path": "concepts/Background1.md",
+      "content": "---\ntitle: Background1 interface convention\ntype: concept\nsources: [\"specifications/Background1.md\"]\n---\n# Background1 interface convention\n\nBackground1 concerns UI spacing and theme choice. It defines no retry, timeout, acknowledgement or retention policy for other products.\n"
+    },
+    {
+      "path": "concepts/Background2.md",
+      "content": "---\ntitle: Background2 interface convention\ntype: concept\nsources: [\"specifications/Background2.md\"]\n---\n# Background2 interface convention\n\nBackground2 concerns UI spacing and theme choice. It defines no retry, timeout, acknowledgement or retention policy for other products.\n"
+    },
+    {
+      "path": "concepts/Background3.md",
+      "content": "---\ntitle: Background3 interface convention\ntype: concept\nsources: [\"specifications/Background3.md\"]\n---\n# Background3 interface convention\n\nBackground3 concerns UI spacing and theme choice. It defines no retry, timeout, acknowledgement or retention policy for other products.\n"
+    },
+    {
+      "path": "concepts/Background4.md",
+      "content": "---\ntitle: Background4 interface convention\ntype: concept\nsources: [\"specifications/Background4.md\"]\n---\n# Background4 interface convention\n\nBackground4 concerns UI spacing and theme choice. It defines no retry, timeout, acknowledgement or retention policy for other products.\n"
+    },
+    {
+      "path": "concepts/Background5.md",
+      "content": "---\ntitle: Background5 interface convention\ntype: concept\nsources: [\"specifications/Background5.md\"]\n---\n# Background5 interface convention\n\nBackground5 concerns UI spacing and theme choice. It defines no retry, timeout, acknowledgement or retention policy for other products.\n"
+    },
+    {
+      "path": "concepts/Background6.md",
+      "content": "---\ntitle: Background6 interface convention\ntype: concept\nsources: [\"specifications/Background6.md\"]\n---\n# Background6 interface convention\n\nBackground6 concerns UI spacing and theme choice. It defines no retry, timeout, acknowledgement or retention policy for other products.\n"
+    },
+    {
+      "path": "concepts/Background7.md",
+      "content": "---\ntitle: Background7 interface convention\ntype: concept\nsources: [\"specifications/Background7.md\"]\n---\n# Background7 interface convention\n\nBackground7 concerns UI spacing and theme choice. It defines no retry, timeout, acknowledgement or retention policy for other products.\n"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "aster-understand",
+      "split": "development",
+      "language": "en",
+      "intent": "understand",
+      "objective": "Explain Aster retry policy with the exact max_attempts and delay_ms values.",
+      "query": "Aster retry policy max_attempts delay_ms",
+      "expectedFacts": [
+        {
+          "key": "max_attempts",
+          "values": [
+            "3"
+          ],
+          "sources": [
+            "requirements/AsterRetry.md"
+          ],
+          "status": "supported"
+        },
+        {
+          "key": "delay_ms",
+          "values": [
+            "200"
+          ],
+          "sources": [
+            "requirements/AsterRetry.md"
+          ],
+          "status": "supported"
+        }
+      ],
+      "expectedOutcome": "ready"
+    },
+    {
+      "id": "aster-implement",
+      "split": "development",
+      "language": "en",
+      "intent": "implement",
+      "objective": "Prepare the implementation handoff for Aster retry configuration: name config_path and provide max_attempts and delay_ms.",
+      "query": "Aster retry configuration policy max_attempts delay_ms",
+      "expectedFacts": [
+        {
+          "key": "config_path",
+          "values": [
+            "config/aster-retry.json"
+          ],
+          "sources": [
+            "implementations/AsterRetry.md"
+          ],
+          "status": "supported"
+        },
+        {
+          "key": "max_attempts",
+          "values": [
+            "3"
+          ],
+          "sources": [
+            "requirements/AsterRetry.md"
+          ],
+          "status": "supported"
+        },
+        {
+          "key": "delay_ms",
+          "values": [
+            "200"
+          ],
+          "sources": [
+            "requirements/AsterRetry.md"
+          ],
+          "status": "supported"
+        }
+      ],
+      "expectedOutcome": "ready"
+    },
+    {
+      "id": "aster-modify",
+      "split": "development",
+      "language": "en",
+      "intent": "modify",
+      "objective": "Prepare the multi-file change handoff for Aster retry scheduling: list change_paths and contract_check.",
+      "query": "Aster queue change_paths contract check",
+      "expectedFacts": [
+        {
+          "key": "change_paths",
+          "values": [
+            "src/aster/queue.ts",
+            "tests/aster/queue.test.ts"
+          ],
+          "sources": [
+            "implementations/AsterQueue.md"
+          ],
+          "status": "supported"
+        },
+        {
+          "key": "contract_check",
+          "values": [
+            "ASTER_RETRY_BOUNDARY"
+          ],
+          "sources": [
+            "implementations/AsterQueue.md"
+          ],
+          "status": "supported"
+        }
+      ],
+      "expectedOutcome": "ready"
+    },
+    {
+      "id": "aster-debug",
+      "split": "development",
+      "language": "en",
+      "intent": "debug",
+      "objective": "Diagnose Aster duplicate acknowledgement: provide root_cause and mitigation.",
+      "query": "Aster duplicate acknowledgement incident root_cause mitigation",
+      "expectedFacts": [
+        {
+          "key": "root_cause",
+          "values": [
+            "ACK_BEFORE_COMMIT_0"
+          ],
+          "sources": [
+            "concepts/AsterIncident.md"
+          ],
+          "status": "supported"
+        },
+        {
+          "key": "mitigation",
+          "values": [
+            "ACK_AFTER_COMMIT_0"
+          ],
+          "sources": [
+            "concepts/AsterIncident.md"
+          ],
+          "status": "supported"
+        }
+      ],
+      "expectedOutcome": "ready"
+    },
+    {
+      "id": "aster-review",
+      "split": "development",
+      "language": "en",
+      "intent": "review",
+      "objective": "Review Aster timeout_seconds before approval. Report every conflicting value and block approval if the sources disagree.",
+      "query": "Aster timeout requirement decision unresolved conflict",
+      "expectedFacts": [
+        {
+          "key": "timeout_seconds",
+          "values": [
+            "30",
+            "45"
+          ],
+          "sources": [
+            "requirements/AsterTimeout.md",
+            "decisions/AsterTimeout.md"
+          ],
+          "status": "conflicting"
+        }
+      ],
+      "expectedOutcome": "blocked"
+    },
+    {
+      "id": "aster-document",
+      "split": "development",
+      "language": "en",
+      "intent": "document",
+      "objective": "Draft the Aster retention handoff: report historical_retention_days with its evidence status; do not present it as current policy.",
+      "query": "Aster legacy retention note stale historical",
+      "expectedFacts": [
+        {
+          "key": "historical_retention_days",
+          "values": [
+            "14"
+          ],
+          "sources": [
+            "concepts/AsterLegacy.md"
+          ],
+          "status": "stale"
+        }
+      ],
+      "expectedOutcome": "needs_refresh"
+    },
+    {
+      "id": "cedro-understand",
+      "split": "development",
+      "language": "it",
+      "intent": "understand",
+      "objective": "Spiega la regola retry di Cedro indicando i valori esatti max_attempts e delay_ms.",
+      "query": "Cedro retry policy max_attempts delay_ms",
+      "expectedFacts": [
+        {
+          "key": "max_attempts",
+          "values": [
+            "4"
+          ],
+          "sources": [
+            "requirements/CedroRetry.md"
+          ],
+          "status": "supported"
+        },
+        {
+          "key": "delay_ms",
+          "values": [
+            "275"
+          ],
+          "sources": [
+            "requirements/CedroRetry.md"
+          ],
+          "status": "supported"
+        }
+      ],
+      "expectedOutcome": "ready"
+    },
+    {
+      "id": "cedro-implement",
+      "split": "development",
+      "language": "it",
+      "intent": "implement",
+      "objective": "Prepara i parametri per implementare Cedro UnrecordedWebhookProtocol: indica signature_algorithm soltanto se documentato.",
+      "query": "CedroUnrecordedWebhookProtocol signature_algorithm",
+      "expectedFacts": [
+        {
+          "key": "signature_algorithm",
+          "values": [],
+          "sources": [],
+          "status": "missing"
+        }
+      ],
+      "expectedOutcome": "missing_information"
+    },
+    {
+      "id": "cedro-modify",
+      "split": "development",
+      "language": "it",
+      "intent": "modify",
+      "objective": "Prepara il passaggio di consegne per modificare lo scheduling retry di Cedro: elenca change_paths e contract_check.",
+      "query": "Cedro queue change_paths contract check",
+      "expectedFacts": [
+        {
+          "key": "change_paths",
+          "values": [
+            "src/cedro/queue.ts",
+            "tests/cedro/queue.test.ts"
+          ],
+          "sources": [
+            "implementations/CedroQueue.md"
+          ],
+          "status": "supported"
+        },
+        {
+          "key": "contract_check",
+          "values": [
+            "CEDRO_RETRY_BOUNDARY"
+          ],
+          "sources": [
+            "implementations/CedroQueue.md"
+          ],
+          "status": "supported"
+        }
+      ],
+      "expectedOutcome": "ready"
+    },
+    {
+      "id": "cedro-debug",
+      "split": "development",
+      "language": "it",
+      "intent": "debug",
+      "objective": "Diagnostica le conferme duplicate di Cedro: riporta root_cause e mitigation.",
+      "query": "Cedro duplicate acknowledgement incident root_cause mitigation",
+      "expectedFacts": [
+        {
+          "key": "root_cause",
+          "values": [
+            "ACK_BEFORE_COMMIT_1"
+          ],
+          "sources": [
+            "concepts/CedroIncident.md"
+          ],
+          "status": "supported"
+        },
+        {
+          "key": "mitigation",
+          "values": [
+            "ACK_AFTER_COMMIT_1"
+          ],
+          "sources": [
+            "concepts/CedroIncident.md"
+          ],
+          "status": "supported"
+        }
+      ],
+      "expectedOutcome": "ready"
+    },
+    {
+      "id": "cedro-review",
+      "split": "development",
+      "language": "it",
+      "intent": "review",
+      "objective": "Revisiona timeout_seconds di Cedro prima di approvare: riporta tutti i valori in conflitto e blocca l'approvazione se le fonti divergono.",
+      "query": "Cedro timeout requirement decision unresolved conflict",
+      "expectedFacts": [
+        {
+          "key": "timeout_seconds",
+          "values": [
+            "31",
+            "46"
+          ],
+          "sources": [
+            "requirements/CedroTimeout.md",
+            "decisions/CedroTimeout.md"
+          ],
+          "status": "conflicting"
+        }
+      ],
+      "expectedOutcome": "blocked"
+    },
+    {
+      "id": "cedro-document",
+      "split": "development",
+      "language": "it",
+      "intent": "document",
+      "objective": "Prepara la nota di consegna sulla conservazione di Cedro: riporta historical_retention_days e lo stato dell'evidenza, senza presentarlo come regola attuale.",
+      "query": "Cedro legacy retention note stale historical",
+      "expectedFacts": [
+        {
+          "key": "historical_retention_days",
+          "values": [
+            "15"
+          ],
+          "sources": [
+            "concepts/CedroLegacy.md"
+          ],
+          "status": "stale"
+        }
+      ],
+      "expectedOutcome": "needs_refresh"
+    },
+    {
+      "id": "lumen-understand",
+      "split": "evaluation",
+      "language": "en",
+      "intent": "understand",
+      "objective": "Explain Lumen retry policy with the exact max_attempts and delay_ms values.",
+      "query": "Lumen retry policy max_attempts delay_ms",
+      "expectedFacts": [
+        {
+          "key": "max_attempts",
+          "values": [
+            "5"
+          ],
+          "sources": [
+            "requirements/LumenRetry.md"
+          ],
+          "status": "supported"
+        },
+        {
+          "key": "delay_ms",
+          "values": [
+            "350"
+          ],
+          "sources": [
+            "requirements/LumenRetry.md"
+          ],
+          "status": "supported"
+        }
+      ],
+      "expectedOutcome": "ready"
+    },
+    {
+      "id": "lumen-implement",
+      "split": "evaluation",
+      "language": "en",
+      "intent": "implement",
+      "objective": "Prepare the implementation handoff for Lumen retry configuration: name config_path and provide max_attempts and delay_ms.",
+      "query": "Lumen retry configuration policy max_attempts delay_ms",
+      "expectedFacts": [
+        {
+          "key": "config_path",
+          "values": [
+            "config/lumen-retry.json"
+          ],
+          "sources": [
+            "implementations/LumenRetry.md"
+          ],
+          "status": "supported"
+        },
+        {
+          "key": "max_attempts",
+          "values": [
+            "5"
+          ],
+          "sources": [
+            "requirements/LumenRetry.md"
+          ],
+          "status": "supported"
+        },
+        {
+          "key": "delay_ms",
+          "values": [
+            "350"
+          ],
+          "sources": [
+            "requirements/LumenRetry.md"
+          ],
+          "status": "supported"
+        }
+      ],
+      "expectedOutcome": "ready"
+    },
+    {
+      "id": "lumen-modify",
+      "split": "evaluation",
+      "language": "en",
+      "intent": "modify",
+      "objective": "Prepare the multi-file change handoff for Lumen retry scheduling: list change_paths and contract_check.",
+      "query": "Lumen queue change_paths contract check",
+      "expectedFacts": [
+        {
+          "key": "change_paths",
+          "values": [
+            "src/lumen/queue.ts",
+            "tests/lumen/queue.test.ts"
+          ],
+          "sources": [
+            "implementations/LumenQueue.md"
+          ],
+          "status": "supported"
+        },
+        {
+          "key": "contract_check",
+          "values": [
+            "LUMEN_RETRY_BOUNDARY"
+          ],
+          "sources": [
+            "implementations/LumenQueue.md"
+          ],
+          "status": "supported"
+        }
+      ],
+      "expectedOutcome": "ready"
+    },
+    {
+      "id": "lumen-debug",
+      "split": "evaluation",
+      "language": "en",
+      "intent": "debug",
+      "objective": "Diagnose Lumen duplicate acknowledgement: provide root_cause and mitigation.",
+      "query": "Lumen duplicate acknowledgement incident root_cause mitigation",
+      "expectedFacts": [
+        {
+          "key": "root_cause",
+          "values": [
+            "ACK_BEFORE_COMMIT_2"
+          ],
+          "sources": [
+            "concepts/LumenIncident.md"
+          ],
+          "status": "supported"
+        },
+        {
+          "key": "mitigation",
+          "values": [
+            "ACK_AFTER_COMMIT_2"
+          ],
+          "sources": [
+            "concepts/LumenIncident.md"
+          ],
+          "status": "supported"
+        }
+      ],
+      "expectedOutcome": "ready"
+    },
+    {
+      "id": "lumen-review",
+      "split": "evaluation",
+      "language": "en",
+      "intent": "review",
+      "objective": "Review Lumen timeout_seconds before approval. Report every conflicting value and block approval if the sources disagree.",
+      "query": "Lumen timeout requirement decision unresolved conflict",
+      "expectedFacts": [
+        {
+          "key": "timeout_seconds",
+          "values": [
+            "32",
+            "47"
+          ],
+          "sources": [
+            "requirements/LumenTimeout.md",
+            "decisions/LumenTimeout.md"
+          ],
+          "status": "conflicting"
+        }
+      ],
+      "expectedOutcome": "blocked"
+    },
+    {
+      "id": "lumen-document",
+      "split": "evaluation",
+      "language": "en",
+      "intent": "document",
+      "objective": "Draft the Lumen retention handoff: report historical_retention_days with its evidence status; do not present it as current policy.",
+      "query": "Lumen legacy retention note stale historical",
+      "expectedFacts": [
+        {
+          "key": "historical_retention_days",
+          "values": [
+            "16"
+          ],
+          "sources": [
+            "concepts/LumenLegacy.md"
+          ],
+          "status": "stale"
+        }
+      ],
+      "expectedOutcome": "needs_refresh"
+    },
+    {
+      "id": "porto-understand",
+      "split": "evaluation",
+      "language": "it",
+      "intent": "understand",
+      "objective": "Spiega la regola retry di Porto indicando i valori esatti max_attempts e delay_ms.",
+      "query": "Porto retry policy max_attempts delay_ms",
+      "expectedFacts": [
+        {
+          "key": "max_attempts",
+          "values": [
+            "6"
+          ],
+          "sources": [
+            "requirements/PortoRetry.md"
+          ],
+          "status": "supported"
+        },
+        {
+          "key": "delay_ms",
+          "values": [
+            "425"
+          ],
+          "sources": [
+            "requirements/PortoRetry.md"
+          ],
+          "status": "supported"
+        }
+      ],
+      "expectedOutcome": "ready"
+    },
+    {
+      "id": "porto-implement",
+      "split": "evaluation",
+      "language": "it",
+      "intent": "implement",
+      "objective": "Prepara i parametri per implementare Porto UnrecordedWebhookProtocol: indica signature_algorithm soltanto se documentato.",
+      "query": "PortoUnrecordedWebhookProtocol signature_algorithm",
+      "expectedFacts": [
+        {
+          "key": "signature_algorithm",
+          "values": [],
+          "sources": [],
+          "status": "missing"
+        }
+      ],
+      "expectedOutcome": "missing_information"
+    },
+    {
+      "id": "porto-modify",
+      "split": "evaluation",
+      "language": "it",
+      "intent": "modify",
+      "objective": "Prepara il passaggio di consegne per modificare lo scheduling retry di Porto: elenca change_paths e contract_check.",
+      "query": "Porto queue change_paths contract check",
+      "expectedFacts": [
+        {
+          "key": "change_paths",
+          "values": [
+            "src/porto/queue.ts",
+            "tests/porto/queue.test.ts"
+          ],
+          "sources": [
+            "implementations/PortoQueue.md"
+          ],
+          "status": "supported"
+        },
+        {
+          "key": "contract_check",
+          "values": [
+            "PORTO_RETRY_BOUNDARY"
+          ],
+          "sources": [
+            "implementations/PortoQueue.md"
+          ],
+          "status": "supported"
+        }
+      ],
+      "expectedOutcome": "ready"
+    },
+    {
+      "id": "porto-debug",
+      "split": "evaluation",
+      "language": "it",
+      "intent": "debug",
+      "objective": "Diagnostica le conferme duplicate di Porto: riporta root_cause e mitigation.",
+      "query": "Porto duplicate acknowledgement incident root_cause mitigation",
+      "expectedFacts": [
+        {
+          "key": "root_cause",
+          "values": [
+            "ACK_BEFORE_COMMIT_3"
+          ],
+          "sources": [
+            "concepts/PortoIncident.md"
+          ],
+          "status": "supported"
+        },
+        {
+          "key": "mitigation",
+          "values": [
+            "ACK_AFTER_COMMIT_3"
+          ],
+          "sources": [
+            "concepts/PortoIncident.md"
+          ],
+          "status": "supported"
+        }
+      ],
+      "expectedOutcome": "ready"
+    },
+    {
+      "id": "porto-review",
+      "split": "evaluation",
+      "language": "it",
+      "intent": "review",
+      "objective": "Revisiona timeout_seconds di Porto prima di approvare: riporta tutti i valori in conflitto e blocca l'approvazione se le fonti divergono.",
+      "query": "Porto timeout requirement decision unresolved conflict",
+      "expectedFacts": [
+        {
+          "key": "timeout_seconds",
+          "values": [
+            "33",
+            "48"
+          ],
+          "sources": [
+            "requirements/PortoTimeout.md",
+            "decisions/PortoTimeout.md"
+          ],
+          "status": "conflicting"
+        }
+      ],
+      "expectedOutcome": "blocked"
+    },
+    {
+      "id": "porto-document",
+      "split": "evaluation",
+      "language": "it",
+      "intent": "document",
+      "objective": "Prepara la nota di consegna sulla conservazione di Porto: riporta historical_retention_days e lo stato dell'evidenza, senza presentarlo come regola attuale.",
+      "query": "Porto legacy retention note stale historical",
+      "expectedFacts": [
+        {
+          "key": "historical_retention_days",
+          "values": [
+            "17"
+          ],
+          "sources": [
+            "concepts/PortoLegacy.md"
+          ],
+          "status": "stale"
+        }
+      ],
+      "expectedOutcome": "needs_refresh"
+    }
+  ]
+}

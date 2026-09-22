@@ -44,6 +44,25 @@ export function registerWikiResources(
       logReader
     );
   }
+  const readWikiEvidence = async (uri: URL) => {
+    const read = await readWikiResource({
+      wikiRoot: wikiDir(),
+      resourceUri: uri.href,
+      maxCharacters: DEFAULT_RESOURCE_MAX_CHARS,
+    });
+    const returnedCharacters = [...read.text].length;
+    const label = read.heading ? `${read.title} — ${read.heading}` : read.title;
+    const truncation = read.truncated
+      ? `\n\n[Truncated: ${returnedCharacters}/${read.totalCharacters} characters returned]`
+      : "";
+    return {
+      contents: [{
+        uri: read.uri,
+        mimeType: "text/markdown",
+        text: `# ${label}\n\n${read.text}${truncation}`,
+      }],
+    };
+  };
   server.registerResource(
     "wiki-evidence",
     new ResourceTemplate(
@@ -58,25 +77,19 @@ export function registerWikiResources(
       mimeType: "text/markdown",
       cacheHint: { ttlMs: 0, cacheScope: "private" },
     },
-    async (uri) => {
-      const read = await readWikiResource({
-        wikiRoot: wikiDir(),
-        resourceUri: uri.href,
-        maxCharacters: DEFAULT_RESOURCE_MAX_CHARS,
-      });
-      const returnedCharacters = [...read.text].length;
-      const label = read.heading ? `${read.title} — ${read.heading}` : read.title;
-      const truncation = read.truncated
-        ? `\n\n[Truncated: ${returnedCharacters}/${read.totalCharacters} characters returned]`
-        : "";
-      return {
-        contents: [{
-          uri: read.uri,
-          mimeType: "text/markdown",
-          text: `# ${label}\n\n${read.text}${truncation}`,
-        }],
-      };
-    }
+    readWikiEvidence
+  );
+  // The SDK matcher requires query expansions even when RFC 6570 permits
+  // their absence. Keep the passage template and register the whole-page form
+  // explicitly, including the bound form used by the desktop proxy.
+  server.registerResource(
+    "wiki-page",
+    new ResourceTemplate(options.includeWorkspaceBinding
+      ? "knowledge-rail://page/{+path}{?workspace_binding}"
+      : "knowledge-rail://page/{+path}", { list: undefined }),
+    { title: "Wiki page", description: "Read one bounded wiki page when no passage is selected.",
+      mimeType: "text/markdown", cacheHint: { ttlMs: 0, cacheScope: "private" } },
+    readWikiEvidence
   );
   server.registerResource(
     "code-evidence",

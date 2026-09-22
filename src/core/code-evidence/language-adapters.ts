@@ -1236,6 +1236,7 @@ export class KotlinKnowledgeAdapter extends BraceKnowledgeAdapter {
 }
 
 export class ApexKnowledgeAdapter extends BraceKnowledgeAdapter {
+  readonly sourceMetadataVersion = "apex-status-v2";
   readonly projectManifests = [SALESFORCE_MANIFEST, APEX_STATUS_MANIFEST];
   readonly enrichSourceMetadata = applyApexStatuses;
   readonly createReferenceResolver = createSalesforceReferenceResolver;

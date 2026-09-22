@@ -54,8 +54,16 @@ export function salesforceOwner(structure: ProjectStructure | undefined, source:
 }
 
 export function applyApexStatuses(fragments: readonly KnowledgeFragment[], structure: ProjectStructure): KnowledgeFragment[] {
+  const extensions = APEX_STATUS_MANIFEST.companion!.extensions;
   return fragments.map((fragment) => {
+    const path = fragment.path.toLowerCase();
+    if (!extensions.some((extension) => path.endsWith(extension))) return fragment;
     const value = structure.manifests.get(fragment.path + "-meta.xml")?.value as { status?: KnowledgeFragment["deploymentStatus"] } | undefined;
-    return value?.status ? { ...fragment, deploymentStatus: value.status } : fragment;
+    if (value?.status && ["Active", "Inactive", "Deleted"].includes(value.status)) return { ...fragment, deploymentStatus: value.status };
+    if (fragment.deploymentStatus !== undefined) {
+      const { deploymentStatus: _status, ...source } = fragment;
+      return source;
+    }
+    return fragment;
   });
 }

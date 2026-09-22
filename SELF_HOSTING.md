@@ -108,10 +108,13 @@ does not invalidate persisted files.
 
 ## Memory and workspace lifetime
 
-Code-query caches have an independent estimated admission budget of 32 MiB per
-project. The process retains up to 32 workspace states by default; set
+Code-query caches have an independent estimated admission budget of 64 MiB per
+project. The process retains up to five workspace states by default; set
 `KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP` to a positive integer to change that LRU cap.
-At the default cap, estimated admissions can sum to 1,024 MiB. This is not reserved
+The current operating target is one to five projects on the available local
+machine. A sixth project can still be opened: its query state replaces the least
+recently used workspace cache, while persisted indexes and knowledge remain on disk.
+At the default cap, estimated code admissions can sum to 320 MiB. This is not reserved
 memory or a limit on measured heap/RSS: uncached large snapshots, in-flight work,
 result copies and other indexes consume additional memory. Multiple server
 processes each have their own state.

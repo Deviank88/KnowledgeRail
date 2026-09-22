@@ -1,0 +1,9 @@
+[
+  {
+    "id": "self-resource-import",
+    "target": "src/core/code-evidence/resource-reader.ts",
+    "source": "src/tools/code-evidence-tools.ts",
+    "negative": "src/core/code-evidence/types.ts",
+    "relation": "import"
+  }
+]

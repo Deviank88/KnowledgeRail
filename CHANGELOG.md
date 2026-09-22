@@ -6,14 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.8.7] - 2026-09-22
+
+### Internal milestone history
+
+- **2.8.1+ — closed 2026-09-22 (internal, unreleased):** T1–T6 are formally closed
+  after 79 test files, 18 quality gates, 1,600 parity comparisons and 17/17
+  positive declared-reference checks on an authorized real repository. T7/T8 are
+  explicitly deferred as non-blocking validation backlog; they require broader
+  real-workspace and anonymized user data. Package metadata was still `2.8.0` at that checkpoint; the work is included in this release.
+
 ### Added
 
 - Extend declared references across Salesforce, Poetry/Hatch/Flit/PDM, Rust module attributes and re-exports, JS/TS projects and local package exports, and literal CMake/Go/JVM/C#/Ruby build declarations. Reuse bounded manifest readers, XML/TOML projections, glob matching and generation-local indexes without adding dependencies.
 - Expose import inventory causes separately from request/fallback telemetry: platform modules, declared dependencies, verified unindexed paths and unsupported syntax. Keep actionable examples bounded and preserve ambiguous candidates.
 - Add Salesforce functional routing, immutable public manifests, declaration regressions and read-only probes for real code and overview/detail wiki selection.
+- Add a reproducible code-efficiency benchmark with alternating runtimes, phase timings, process restarts, concurrent queries, CPU/memory observations, filesystem API accounting and serialized MCP replay including telemetry and resource reads. This code replay does not measure model token usage.
+- Make all 13 adapter families active targets in the default efficiency workload, with positive/negative reference checks, per-family measurements and 1/5/20-batch sessions. Retain the historical Salesforce profile explicitly. Add 22 bilingual documentary task replays for full/compact context and passage/page reads.
+- Add an opt-in local Ollama evaluator with independent development/evaluation handoff tasks, exact fact/citation/uncertainty checks, actual chat-token counters and separate embedding usage. Verify both semantic retrieval and the lexical fallback; keep model-specific measurements distinct from general coding quality.
+- Compare manifest strategies and experimental 32/64 MiB admission budgets in disposable runtime copies, including one/four/five-project memory measurements. Select 64 MiB per project with five retained workspaces from the measured local workload.
+
+### Changed
+
+- Retain up to five workspace caches by default, matching the current local operating target. Reuse existing LRU eviction and persisted indexes when switching projects; the configurable cap remains available and the code admission budget is 64 MiB per project (320 MiB of estimated admissions across five workspaces, not a process RAM limit).
+- Normalize paths and repeated identifiers once, build shared file inventories in one pass, and resolve repeated declared names once while building each reference index; overlap independent manifest and unindexed-import reads without changing evidence or diagnostics.
+- Share in-flight code snapshot loads and generation-bound unindexed-import probes even outside full-snapshot cache admission; reuse Salesforce name/ownership preparation and manifest ancestor traversal within the existing per-project budget.
+- Prepare versioned, adapter-owned companion metadata during explicit index writes and restore it after restart; Apex deployment status uses this generic contract. Preserve source IDs and anchors for metadata-only updates, with read-only fallback for older snapshots and incompatible projections.
+- Reuse the validated code query generation when materializing resources, preserving source hash checks, index replacement detection, corruption errors and workspace cache limits across languages.
 
 ### Fixed
 
+- Refresh the locked transitive Hono dependency from 4.13.2 to 4.13.8 to include upstream security fixes for query parsing, nested form parsing and static-output path validation.
+- Confine Apex companion enrichment to its declared source extensions, preserving deployment metadata owned by other language adapters. Older companion projections use the existing compatibility fallback.
+- Route whole-page wiki resource URIs through MCP with or without desktop workspace bindings, preserving passage reads, provenance, confinement and truncation.
+- Stop treating database names consumed inside a physical source-file module as aliases for that file. Preserve database evidence and entity aliases while restoring actual import edges and excluding unrelated files that merely use the same database name.
 - Treat Apex trigger headers as declared object references instead of calls, preserving SOQL evidence. Exclude enclosing class inventories from callers of their own methods; retain actual sibling callers.
 - Refresh Apex deployment status through generation-bound sidecar metadata, including bounded reuse when a source snapshot exceeds cache admission. Keep inactive/deleted evidence searchable.
 

@@ -1,0 +1,375 @@
+{
+  "version": 1,
+  "provenance": "Synthetic reviewed tool/resource replay tasks; not historical user traffic or completed model tasks. Some Italian objectives intentionally share exact technical retrieval terms with English.",
+  "baseFixture": "hybrid-retrieval-golden.json",
+  "maxEvidence": 10,
+  "heuristicTokenBudget": 4000,
+  "tasks": [
+    {
+      "id": "understand-topology-en",
+      "intent": "understand",
+      "queryId": "two-hop-evidence",
+      "objective": "Understand the Quartz failover topology and its isolation decision.",
+      "expectedCategories": {
+        "currentState": [
+          "concepts/TwoHopSeed.md"
+        ],
+        "decisions": [
+          "concepts/TwoHopTarget.md"
+        ]
+      },
+      "language": "en",
+      "query": "Quartz failover topology initiation"
+    },
+    {
+      "id": "understand-topology-it",
+      "intent": "understand",
+      "queryId": "two-hop-evidence",
+      "objective": "Comprendere la topologia di failover Quartz e la decisione di isolamento.",
+      "expectedCategories": {
+        "currentState": [
+          "concepts/TwoHopSeed.md"
+        ],
+        "decisions": [
+          "concepts/TwoHopTarget.md"
+        ]
+      },
+      "language": "it",
+      "query": "Quartz failover topology isolamento"
+    },
+    {
+      "id": "implement-traceability-en",
+      "intent": "implement",
+      "queryId": "traceability-chain",
+      "objective": "Implement Pine correlation propagation with requirements, decisions and tests.",
+      "expectedCategories": {
+        "requirements": [
+          "requirements/TraceRequirement.md"
+        ],
+        "decisions": [
+          "decisions/TraceDecision.md"
+        ],
+        "implementationEvidence": [
+          "implementations/TraceImplementation.md"
+        ],
+        "tests": [
+          "tests/TraceTest.md"
+        ]
+      },
+      "language": "en",
+      "query": "Pine exports originating transaction identifier requirement"
+    },
+    {
+      "id": "implement-traceability-it",
+      "intent": "implement",
+      "queryId": "traceability-chain",
+      "objective": "Implementare la propagazione della correlazione Pine con requisiti, decisioni e test.",
+      "expectedCategories": {
+        "requirements": [
+          "requirements/TraceRequirement.md"
+        ],
+        "decisions": [
+          "decisions/TraceDecision.md"
+        ],
+        "implementationEvidence": [
+          "implementations/TraceImplementation.md"
+        ],
+        "tests": [
+          "tests/TraceTest.md"
+        ]
+      },
+      "language": "it",
+      "query": "Pine exports originating transaction identifier requisito"
+    },
+    {
+      "id": "modify-traceability-en",
+      "intent": "modify",
+      "queryId": "traceability-chain",
+      "objective": "Modify the Pine emitter without breaking traceability.",
+      "changedPaths": [
+        "implementations/TraceImplementation.md"
+      ],
+      "expectedCategories": {
+        "affectedComponents": [
+          "implementations/TraceImplementation.md"
+        ],
+        "requirements": [
+          "requirements/TraceRequirement.md"
+        ],
+        "decisions": [
+          "decisions/TraceDecision.md"
+        ],
+        "implementationEvidence": [
+          "implementations/TraceImplementation.md"
+        ],
+        "tests": [
+          "tests/TraceTest.md"
+        ]
+      },
+      "expectedImpact": {
+        "incomingDependencies": [
+          "requirements/TraceRequirement.md"
+        ],
+        "outgoingDependencies": [
+          "tests/TraceTest.md"
+        ]
+      },
+      "language": "en",
+      "query": "Pine exports originating transaction identifier requirement"
+    },
+    {
+      "id": "modify-traceability-it",
+      "intent": "modify",
+      "queryId": "traceability-chain",
+      "objective": "Modificare il trasmettitore Pine preservando la tracciabilità.",
+      "changedPaths": [
+        "implementations/TraceImplementation.md"
+      ],
+      "expectedCategories": {
+        "affectedComponents": [
+          "implementations/TraceImplementation.md"
+        ],
+        "requirements": [
+          "requirements/TraceRequirement.md"
+        ],
+        "decisions": [
+          "decisions/TraceDecision.md"
+        ],
+        "implementationEvidence": [
+          "implementations/TraceImplementation.md"
+        ],
+        "tests": [
+          "tests/TraceTest.md"
+        ]
+      },
+      "expectedImpact": {
+        "incomingDependencies": [
+          "requirements/TraceRequirement.md"
+        ],
+        "outgoingDependencies": [
+          "tests/TraceTest.md"
+        ]
+      },
+      "language": "it",
+      "query": "Pine exports originating transaction identifier modifica"
+    },
+    {
+      "id": "debug-historical-incident-en",
+      "intent": "debug",
+      "queryId": "historical-incident",
+      "objective": "Debug the Copper circuit behavior using the historical recovery incident.",
+      "expectedCategories": {
+        "implementationEvidence": [
+          "implementations/CurrentCircuit.md"
+        ],
+        "incidents": [
+          "analysis/CircuitIncident.md"
+        ]
+      },
+      "language": "en",
+      "query": "Copper circuit opens eight timeout failures current behavior"
+    },
+    {
+      "id": "debug-historical-incident-it",
+      "intent": "debug",
+      "queryId": "historical-incident",
+      "objective": "Diagnosticare il circuito Copper usando l’incidente storico di recupero.",
+      "expectedCategories": {
+        "implementationEvidence": [
+          "implementations/CurrentCircuit.md"
+        ],
+        "incidents": [
+          "analysis/CircuitIncident.md"
+        ]
+      },
+      "language": "it",
+      "query": "Copper circuit eight timeout failures comportamento"
+    },
+    {
+      "id": "review-contradiction-en",
+      "intent": "review",
+      "queryId": "contradictory-evidence",
+      "objective": "Review Atlas retention against unresolved contradictory evidence.",
+      "expectedCategories": {
+        "requirements": [
+          "requirements/Retention365.md"
+        ],
+        "decisions": [
+          "decisions/Retention90.md"
+        ],
+        "contradictions": [
+          "requirements/Retention365.md",
+          "decisions/Retention90.md"
+        ]
+      },
+      "expectedUnknownKinds": [
+        "contradiction"
+      ],
+      "language": "en",
+      "query": "Atlas production audit evidence retention 365"
+    },
+    {
+      "id": "review-contradiction-it",
+      "intent": "review",
+      "queryId": "contradictory-evidence",
+      "objective": "Revisionare la conservazione Atlas e le evidenze contraddittorie.",
+      "expectedCategories": {
+        "requirements": [
+          "requirements/Retention365.md"
+        ],
+        "decisions": [
+          "decisions/Retention90.md"
+        ],
+        "contradictions": [
+          "requirements/Retention365.md",
+          "decisions/Retention90.md"
+        ]
+      },
+      "expectedUnknownKinds": [
+        "contradiction"
+      ],
+      "language": "it",
+      "query": "Atlas production audit evidence retention 365"
+    },
+    {
+      "id": "document-multiple-sources-en",
+      "intent": "document",
+      "queryId": "multiple-sources",
+      "objective": "Document Omega shipment release from requirement, decision and verification evidence.",
+      "expectedCategories": {
+        "requirements": [
+          "requirements/ShipmentRule.md"
+        ],
+        "decisions": [
+          "decisions/ShipmentDecision.md"
+        ],
+        "tests": [
+          "tests/ShipmentTest.md"
+        ]
+      },
+      "language": "en",
+      "query": "Omega shipment customs clearance evidence release"
+    },
+    {
+      "id": "document-multiple-sources-it",
+      "intent": "document",
+      "queryId": "multiple-sources",
+      "objective": "Documentare lo sblocco delle spedizioni Omega con requisiti, decisioni e verifiche.",
+      "expectedCategories": {
+        "requirements": [
+          "requirements/ShipmentRule.md"
+        ],
+        "decisions": [
+          "decisions/ShipmentDecision.md"
+        ],
+        "tests": [
+          "tests/ShipmentTest.md"
+        ]
+      },
+      "language": "it",
+      "query": "Omega shipment customs clearance evidence release"
+    },
+    {
+      "id": "exact-identifier-en",
+      "language": "en",
+      "intent": "understand",
+      "objective": "Find the exact REQ-771 quota and rejection contract.",
+      "queryId": "exact-identifier",
+      "query": "REQ-771 ALPHA-42 240 HTTP 429 Retry-After",
+      "expectedCategories": {}
+    },
+    {
+      "id": "exact-identifier-it",
+      "language": "it",
+      "intent": "understand",
+      "objective": "Trova la quota esatta REQ-771 e il contratto di rifiuto.",
+      "queryId": "exact-identifier",
+      "query": "REQ-771 ALPHA-42 240 HTTP 429 Retry-After",
+      "expectedCategories": {}
+    },
+    {
+      "id": "relevant-deep-passage-en",
+      "language": "en",
+      "intent": "debug",
+      "objective": "Find the emergency revocation deadline hidden in operational detail.",
+      "queryId": "relevant-deep-passage",
+      "query": "violet credential compromise revoked under seven minutes",
+      "expectedCategories": {}
+    },
+    {
+      "id": "relevant-deep-passage-it",
+      "language": "it",
+      "intent": "debug",
+      "objective": "Trova il termine di revoca urgente nei dettagli operativi.",
+      "queryId": "relevant-deep-passage",
+      "query": "violet credential compromise revoked under seven minutes",
+      "expectedCategories": {}
+    },
+    {
+      "id": "ambiguous-entity-en",
+      "language": "en",
+      "intent": "review",
+      "objective": "Review Mercury merchant settlement without confusing the other Mercury.",
+      "queryId": "ambiguous-entity",
+      "query": "Mercury merchant capture settlement card funds",
+      "expectedCategories": {}
+    },
+    {
+      "id": "ambiguous-entity-it",
+      "language": "it",
+      "intent": "review",
+      "objective": "Revisiona il regolamento commerciale Mercury senza confonderlo con l’altro Mercury.",
+      "queryId": "ambiguous-entity",
+      "query": "Mercury merchant capture settlement card funds",
+      "expectedCategories": {}
+    },
+    {
+      "id": "stale-en",
+      "language": "en",
+      "intent": "modify",
+      "objective": "Change the StaleDispatch rule.",
+      "query": "StaleDispatch shipment policy regola spedizioni",
+      "scenario": "stale",
+      "expectedCategories": {},
+      "expectedUnknownKinds": [
+        "stale_evidence"
+      ]
+    },
+    {
+      "id": "missing-en",
+      "language": "en",
+      "intent": "implement",
+      "objective": "Implement the missing Zephyrium protocol.",
+      "query": "ZephyriumUnrecordedProtocol",
+      "scenario": "missing",
+      "expectedCategories": {},
+      "expectedUnknownKinds": [
+        "missing_evidence"
+      ]
+    },
+    {
+      "id": "stale-it",
+      "language": "it",
+      "intent": "modify",
+      "objective": "Modifica la regola StaleDispatch.",
+      "query": "StaleDispatch shipment policy regola spedizioni",
+      "scenario": "stale",
+      "expectedCategories": {},
+      "expectedUnknownKinds": [
+        "stale_evidence"
+      ]
+    },
+    {
+      "id": "missing-it",
+      "language": "it",
+      "intent": "implement",
+      "objective": "Implementa il protocollo Zephyrium mancante.",
+      "query": "ZephyriumUnrecordedProtocol",
+      "scenario": "missing",
+      "expectedCategories": {},
+      "expectedUnknownKinds": [
+        "missing_evidence"
+      ]
+    }
+  ]
+}

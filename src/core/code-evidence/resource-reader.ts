@@ -3,7 +3,7 @@ import * as fs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { safeResolveWithin } from "../paths.js";
 import { defaultParserVersionForPath } from "./adapter-registry.js";
-import { readCodeEvidenceSnapshot } from "./index.js";
+import { readCodeResourceRecords } from "./index.js";
 import { parseCodeResourceUri } from "./resource-uri.js";
 import type { CodeResourceRead } from "./types.js";
 
@@ -46,11 +46,7 @@ export async function readCodeResource(params: {
   if (relativeReal === "" || relativeReal.startsWith("..") || nodePath.isAbsolute(relativeReal)) {
     throw new Error(`Code resource resolves outside the repository root: ${ref.path}`);
   }
-  const snapshot = await readCodeEvidenceSnapshot(params.wikiRoot);
-  const file = snapshot.files.find((record) => record.path === ref.path);
-  const fragment = snapshot.fragments.find((candidate) =>
-    candidate.id === ref.fragmentId && candidate.path === ref.path
-  );
+  const { file, fragment } = await readCodeResourceRecords(params.wikiRoot, ref.path, ref.fragmentId);
   if (!file || !fragment) throw new Error(`Code evidence symbol no longer exists: ${params.resourceUri}`);
   const currentParserVersion = defaultParserVersionForPath(ref.path);
   if (currentParserVersion && file.parserVersion !== currentParserVersion) {

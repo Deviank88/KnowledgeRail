@@ -2,6 +2,119 @@
 
 The v4 roadmap treats performance, retrieval quality, context efficiency and migration preservation as simultaneous constraints. A faster implementation is not considered an improvement if it loses relevant evidence or degrades downstream document/context quality.
 
+## Code efficiency across query lifecycles
+
+```bash
+npm run bench:code-efficiency -- --baseline=/path/to/preserved/runtime --scales=1000,10000 --iterations=20 --json=/tmp/code-efficiency.json
+npm run bench:code-efficiency -- --baseline=/path/to/preserved/runtime --layout=sparse --iterations=20
+npm run bench:code-efficiency -- --baseline=/path/to/preserved/runtime --scales=1000 --sessions=1,5,20 --modes=publicSession1,publicSession5,publicSession20
+npm run bench:code-efficiency -- --profile=salesforce --iterations=20
+npm run bench:code-efficiency -- --baseline=/path/to/preserved/runtime --repository=/path/to/authorized/checkout --oracle=/path/to/reviewed-edges.json --iterations=20
+```
+
+The default profile is multilingual: every batch queries a reviewed target in each
+of the 13 adapter families, including a positive reference and a negative control.
+It covers TypeScript/JavaScript, Java, Kotlin, C#, Go, Rust, PHP, C, C++, Python,
+Ruby, Apex and Salesforce metadata. These are active query targets, not filler
+files surrounding an Apex-only query. `--profile=salesforce` preserves the original
+Salesforce-oriented fixture separately. Timings from the two profiles measure
+different workloads and must not be compared as single-query speedups.
+
+The baseline must preserve `src/`, package metadata and access to the same installed
+dependencies. Each report records a source digest for both runtimes, fixture/corpus
+digests, Node/OS/CPU and actual fragment counts (scales are approximate targets).
+The benchmark alternates version order, excludes two application warm-ups and
+requires identical reference/diagnostic digests. It measures first indexing,
+application-cold batches, warm batches, eight concurrent batches and fresh child
+processes with an existing index. Restart request latency and whole process wall
+time are reported separately. The OS filesystem cache is exercised, not flushed.
+
+Synthetic projects also exercise public MCP dispatch with JSON in both directions,
+request telemetry and one reviewed code resource per family. Latency per family is
+reported alongside the complete batch; later targets can reuse the first target's
+preparation. Optional sessions include a fresh index, one explicit update and
+1/5/20 batches. They are deterministic tool workloads, not completed model tasks.
+Real checkouts are read-only;
+their indexes stay temporary and only their internal query path is measured.
+CPU, sampled heap/RSS/external buffers, retained/released process memory and
+`fs/promises`/file-handle calls and bytes are included. Memory sampling may miss
+synchronous peaks; paired in-process runtimes coexist. IO counters are API-level,
+exclude callback-based glob discovery, and do not represent physical disk IO.
+
+This is deterministic tool/resource replay, not a verified model task. Host-client
+payload exposure, model input/output/cache/reasoning tokens and model task success
+remain unobserved. `totalModelTokens` is `null`; token savings are not measured.
+The [initial report](code-efficiency-2.8.7.md) identifies its Salesforce-oriented
+measurement scope. The [follow-up report](code-efficiency-multilingual-2.8.7.md)
+adds active coverage per language family, documentary knowledge, real TypeScript
+observations and isolated experimental memory budgets.
+
+Experimental manifest concurrency, bounded directory prefiltering and compact JSON
+can be compared in disposable runtime copies with `npm run bench:code-preparation`.
+These experiments preserve the same reference oracle; compact JSON retains the
+original conservative admission estimate instead of admitting more parsed objects
+merely because the file is smaller. Experimental switches do not affect production.
+
+`npm run bench:task-efficiency -- --baseline=/path/to/preserved/runtime --gate`
+replays 22 synthetic Italian/English tasks across all six intents through MCP.
+It compares existing full/compact projections and passage/page materialization,
+including every selected resource, ambiguity, contradictions, stale and missing
+evidence. It reports content and structured channel sizes separately. The direct
+page-byte comparison assumes evidence has already been selected; it does not
+represent equivalent source discovery or a model-completed task. No provider is
+called and model token savings remain unmeasured.
+
+`npm run bench:code-memory -- --scale=10000 --iterations=20 --repetitions=3`
+compares 32/64 MiB code admission budgets in disposable source copies, using
+fresh child processes for one/four/five independent projects, with a five-workspace
+retention cap. `--workspaces=5` selects the upper end of the current local scope.
+It checks all 13
+positive/negative reference cases and materializes their source resources.
+Post-GC retained heap, external buffers, RSS, sampled peaks and process maximum
+RSS are distinct observations. The estimated cache budget is not a process RAM
+limit; other caches, clients and model runtimes are outside this experiment.
+Production uses 64 MiB per code cache and retains five workspaces by default.
+The report records the machine's installed RAM. All measurements use a warm OS filesystem cache,
+so they do not measure physical SSD streaming or a slower disk.
+
+`npm run bench:code-cold -- --baseline=/path/to/v2.8.0 --repository=/path/to/project
+--oracle=/path/to/reviewed-edges.json --iterations=40 --gate` compares alternating
+application-cold queries on the same read-only corpus. The first shared oracle
+ID determines the timed target; coverage includes all reviewed targets, including
+those absent from the older release. OS filesystem caches remain warm.
+
+`npm run bench:task-model -- --baseline=/path/to/preserved/runtime --live
+--retrieval=ollama --split=evaluation --modes=baseline-full,current-compact --gate`
+completes synthetic evidence-grounded handoff artifacts with an installed local
+Ollama model. Configure the existing `KNOWLEDGE_RAIL_EMBEDDING_*` settings for
+semantic retrieval. `--retrieval=lexical` tests the non-semantic path explicitly.
+Without `--live`, only retrieval and required-source checks run; there are no
+chat-model calls (Ollama retrieval still calls the configured embedding model).
+The evaluator never downloads models and accepts only loopback model endpoints.
+`--model`, `--tasks`, `--repetitions` and `--json` select the experiment.
+
+The fixture has 24 authored English/Italian tasks, six intents and disjoint
+12-task development/evaluation splits. Exact facts, source paths, missing/stale
+states and unresolved conflicts form the frozen rubric. Both MCP response channels
+and every selected resource are exposed through a fixed evaluation client.
+`direct` mode reads the entire same corpus without preselecting relevant pages.
+Actual chat input/output counters and embedding usage are separate; absent counts
+are unknown. A neutral source edit before the sixth task includes maintenance.
+The explicit output contract extracts canonical field names from the visible task
+objective and scopes the handoff outcome to those fields. It does not expose
+expected values, source paths or statuses. `--client-contract=legacy` reproduces
+the initial client's permissive schema and its recorded formatting/scope failures.
+The exact-answer rubric is unchanged; repair attempts must be counted.
+The full/compact comparison evaluates an existing workflow choice; it does not
+attribute token savings to the 2.8.7 cache changes or establish general coding
+quality or behavior in other clients.
+
+`node --import tsx benchmarks/code-efficiency-self-check.ts --baseline=/path/to/preserved/runtime`
+checks one fixed real TypeScript import and a negative source in this checkout,
+both unscoped and within `src/`, plus independent resource freshness. Baseline
+failures remain visible and the current oracle controls the exit status. This
+narrow oracle does not establish repository-wide precision.
+
 ## Retrieval quality
 
 Run the domain-agnostic golden dataset:
@@ -215,13 +328,13 @@ collection and include workspace eviction. The benchmark isolates query costs;
 it does not measure source parsing, resource reads or real-world extraction recall.
 
 Query state belongs to one project's resolved wiki root. Each workspace has its
-own 32 MiB estimated cache admission budget; activity in another project does not
+own 64 MiB estimated cache admission budget; activity in another project does not
 consume that budget or invalidate its generation. Parsed snapshots and lazy
 symbol/reference maps are covered by the estimate, which is not an exact V8 heap
 limit. With N resident workspaces the sum of these independent admission budgets
-is N × 32 MiB: the default workspace LRU cap of 32 permits 1,024 MiB of estimated
+is N × 64 MiB: the default workspace LRU cap of five permits 320 MiB of estimated
 admissions in one process. `KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP` changes the number
-of resident workspaces (a positive integer; invalid values use 32). This is neither
+of resident workspaces (a positive integer; invalid values use five). This is neither
 a memory reservation nor a global RAM cap. Oversized uncached snapshots, concurrent
 loads, result copies, lexical/graph/semantic caches and runtime overhead add costs
 outside that number. Separate processes add their memory usage at system level.
@@ -534,8 +647,8 @@ without extracting source files. This avoids rescanning every directory per quer
 Malformed, oversized and unsafe manifests produce at most 12 `manifestWarnings`
 in the MCP reference response, with `manifestWarningCount` for the total. They do
 not trigger fallback to a guessed module identity. Parser data shares the existing
-32 MiB estimated admission budget; oversized generations remain queryable without
-full snapshot retention. Compact sidecar data and the manifest reader can remain within a shared 1 MiB sub-budget, with ordinal postings capped at another 16 MiB; both count against the same 32 MiB ceiling. Source snapshot schema remains v2; Ruby/C/C++ syntax provenance and the
+64 MiB estimated admission budget; oversized generations remain queryable without
+full snapshot retention. Compact sidecar data and the manifest reader can remain within a shared 1 MiB sub-budget, with ordinal postings capped at another 16 MiB; both count against the same 64 MiB ceiling. Source snapshot schema remains v2; Ruby/C/C++ syntax provenance and the
 TS inventory fix advance their extraction versions independently of manifest parsing.
 
 Run `npm run bench:project-structure -- --iterations=30` for Go discovery,
@@ -558,7 +671,7 @@ the complete `compileTaskContext` call, with 40 paired warm samples against the 
 document-only request. The 2,000-token case requests one source root; the 4,000-token
 case requests three. Both must actually disclose code relations and stay within the
 manifest's heuristic budget. `--gate` requires both paired p50 and p95 overhead to remain at
-most 5 ms; it is a separate performance gate, not a change to the 15 quality gates.
+most 5 ms; it is a separate performance gate, not a change to the deterministic quality gates.
 Pass `--baseline=/path/to/preserved/runtime` to check document-only context parity.
 Cold snapshot loading, retained heap, admitted cache size, root/relation counts and
 display tokens are reported separately. Fixture extraction is outside the interval;

@@ -104,7 +104,8 @@ test(`desktop adapter exposes portable per-chat bindings over ${desktopProtocolV
     assert.deepEqual(wireNormalized((await desktopClient.listResources()).resources), wireNormalized(remoteCatalog.resources));
     const templates = (await desktopClient.listResourceTemplates()).resourceTemplates;
     assert.deepEqual(wireNormalized(templates), wireNormalized(remoteCatalog.resourceTemplates));
-    assert.equal(templates.length, 4);
+    assert.equal(templates.length, 5);
+    assert.ok(templates.some((item) => item.name === "wiki-page"));
     assert.equal(templates.every((item) => item.uriTemplate.includes("workspace_binding")), true);
 
     const choose = async (workspaceId: string): Promise<string> => {
@@ -128,6 +129,13 @@ test(`desktop adapter exposes portable per-chat bindings over ${desktopProtocolV
     assert.equal(await fs.access(path.join(rootA, "wiki", "SCHEMA.md")).then(() => true), true);
     assert.equal(await fs.access(path.join(rootB, "wiki", "SCHEMA.md")).then(() => true), true);
     assert.notEqual(bindingA, bindingB);
+    for (const [root, label, binding] of [[rootA, "Workspace A", bindingA], [rootB, "Workspace B", bindingB]]) {
+      await fs.mkdir(path.join(root!, "wiki", "requirements"), { recursive: true });
+      await fs.writeFile(path.join(root!, "wiki", "requirements/Scope.md"), `---\ntitle: ${label}\ntype: requirement\n---\n# ${label}\nScoped evidence.`);
+      const page = await desktopClient.readResource({ uri: `knowledge-rail://page/requirements/Scope.md?workspace_binding=${binding}` });
+      const content = page.contents[0];
+      assert.ok(content && "text" in content && content.text.includes(label!), "whole-page reads must preserve the selected workspace");
+    }
   } finally {
     await desktopClient.close();
     await proxy.close();

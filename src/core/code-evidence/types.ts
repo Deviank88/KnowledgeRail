@@ -88,6 +88,8 @@ export interface KnowledgeAdapter {
   /** Declarative manifests needed by this adapter; read as bounded text, never executed. */
   readonly projectManifests?: readonly ProjectManifestSpec[];
   enrichSourceMetadata?(fragments: readonly KnowledgeFragment[], structure: ProjectStructure): KnowledgeFragment[];
+  /** Opt into persisted companion projections. Bump when their interpretation changes. */
+  readonly sourceMetadataVersion?: string;
 }
 
 export interface ProjectManifestSpec {
@@ -209,6 +211,17 @@ export interface CodeEvidenceSnapshot {
   generatedAt: string;
   files: CodeEvidenceFileRecord[];
   fragments: KnowledgeFragment[];
+  /** Optional additive projection. Older/unsupported projections fall back to
+   * generation-local reads; read-only queries never migrate the snapshot. */
+  sourceMetadata?: CodeSourceMetadata;
+}
+
+export interface CodeSourceMetadata {
+  version: 1;
+  adapterSignature: string;
+  identity: string;
+  manifests: ProjectManifest[];
+  warnings: Array<{ path: string; reason: string }>;
 }
 
 export interface CodeSearchOptions {

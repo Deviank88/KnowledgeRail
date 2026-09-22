@@ -271,7 +271,8 @@ test("oversized snapshots retain bounded sidecar metadata until explicit generat
     "Controller.cls-meta.xml": "<ApexClass><status>Active</status></ApexClass>",
   });
   const snapshot = await p.index.snapshot();
-  snapshot.fragments[0]!.docComment = "x".repeat(9 * 1024 * 1024);
+  delete snapshot.sourceMetadata; // Legacy snapshots still use the bounded in-memory fallback.
+  snapshot.fragments[0]!.docComment = "x".repeat(Math.ceil(getCodeQueryCacheDiagnostics(path.join(p.root, "wiki")).maxEstimatedBytes / 4) + 1024 * 1024);
   await fs.writeFile(codeEvidenceIndexFile(path.join(p.root, "wiki")), JSON.stringify(snapshot));
   assert.equal((await p.index.symbol("Controller"))[0]!.fragment.deploymentStatus, "Active");
   const cache = getCodeQueryCacheDiagnostics(path.join(p.root, "wiki"));
@@ -318,7 +319,7 @@ test("oversized snapshots reuse bounded postings and invalidate them on manifest
     "padding.ts": "export const padding = 1;",
   });
   const snapshot = await p.index.snapshot();
-  snapshot.fragments.find((entry) => entry.path === "padding.ts")!.docComment = "x".repeat(9 * 1024 * 1024);
+  snapshot.fragments.find((entry) => entry.path === "padding.ts")!.docComment = "x".repeat(Math.ceil(getCodeQueryCacheDiagnostics(path.join(p.root, "wiki")).maxEstimatedBytes / 4) + 1024 * 1024);
   await fs.writeFile(codeEvidenceIndexFile(path.join(p.root, "wiki")), JSON.stringify(snapshot));
   const adapter = p.index.registry.resolve({ path: "main.ts" })!;
   const original = adapter.createImportResolver!;

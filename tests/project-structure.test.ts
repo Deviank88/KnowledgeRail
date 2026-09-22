@@ -13,6 +13,23 @@ import { setWikiRoot } from "../src/core/paths.js";
 import { registerCodeEvidenceTools } from "../src/tools/code-evidence-tools.js";
 import type { McpServer } from "@modelcontextprotocol/server";
 
+test("ancestor deduplication preserves custom parsers competing for the same manifest name", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "kr-manifest-specs-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await fs.mkdir(path.join(root, "one"));
+  await fs.mkdir(path.join(root, "two"));
+  await fs.writeFile(path.join(root, "shared.json"), "{}");
+  const registration = (extension: string, marker: string) => ({
+    extensionClaims: [extension], adapter: {
+      parserVersion: marker, supports: ({ path }: { path: string }) => path.endsWith(extension),
+      async extract() { return []; }, projectManifests: [{ fileName: "shared.json", parse: () => ({ marker }) }],
+    },
+  });
+  const registry = new KnowledgeAdapterRegistry([registration(".one", "first"), registration(".two", "second")]);
+  const reader = new ProjectStructureReader(root, ["one/a.one", "two/b.two", "one/c.one"], registry);
+  assert.deepEqual((await reader.load()).manifests.get("shared.json")?.value, { marker: "first" });
+});
+
 async function project(t: TestContext, files: Record<string, string>, adapter = new GoKnowledgeAdapter()) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "kr-project-structure-"));
   const wikiRoot = path.join(root, "wiki");
@@ -197,7 +214,7 @@ test("manifest identity depends on project bytes and relative paths, not directo
 test("manifest retention shares the existing per-project admission limit without losing query results", async (t) => {
   class LargeManifest extends GoKnowledgeAdapter {
     override readonly projectManifests = [{ ...GO_MODULE_MANIFEST, parse(content: string) {
-      return { ...(GO_MODULE_MANIFEST.parse(content) as object), extra: "x".repeat(9 * 1024 * 1024) };
+      return { ...(GO_MODULE_MANIFEST.parse(content) as object), extra: "x".repeat(Math.ceil(getCodeQueryCacheDiagnostics("").maxEstimatedBytes / 4) + 1024 * 1024) };
     } }];
   }
   const files = {

@@ -13,6 +13,7 @@ import {
 } from "../src/core/workspace-state.js";
 import { WorkspaceBindingManager } from "../src/workspaces/bindings.js";
 import { WorkspaceRegistry } from "../src/workspaces/registry.js";
+import { codeEvidenceIndexFile, getCodeQueryCacheDiagnostics, PersistentCodeEvidenceIndex } from "../src/core/code-evidence/index.js";
 
 async function workspaceFixture(prefix: string): Promise<string> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -99,5 +100,44 @@ test("LRU eviction follows access order when timestamps tie or the clock moves b
     clearWorkspaceStates();
     if (previousCap === undefined) delete process.env["KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP"];
     else process.env["KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP"] = previousCap;
+  }
+});
+
+test("the default retains five projects and reopens an evicted project's persisted code", async () => {
+  const previousCap = process.env["KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP"];
+  delete process.env["KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP"];
+  clearWorkspaceStates();
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "kr-five-projects-"));
+  const projects = Array.from({ length: 6 }, (_, i) => {
+    const repositoryRoot = path.join(directory, `project-${i}`), wikiRoot = path.join(repositoryRoot, "wiki");
+    return new PersistentCodeEvidenceIndex({ repositoryRoot, wikiRoot });
+  });
+  try {
+    for (const [i, project] of projects.entries()) {
+      await fs.mkdir(project.repositoryRoot);
+      await fs.writeFile(path.join(project.repositoryRoot, "source.ts"), `export function projectValue${i}() { return ${i}; }`);
+    }
+    for (const project of projects.slice(0, 5)) await project.rebuild();
+    const expected = await projects[1]!.symbol("projectValue1");
+    const persisted = await fs.readFile(codeEvidenceIndexFile(projects[1]!.wikiRoot));
+    for (const [i, project] of projects.slice(0, 5).entries()) {
+      assert.equal((await project.symbol(`projectValue${i}`))[0]?.fragment.symbol, `projectValue${i}`);
+    }
+    assert.equal(workspaceStateCount(), 5);
+    assert.ok(projects.slice(0, 5).every((p) => getCodeQueryCacheDiagnostics(p.wikiRoot).cached));
+    await projects[0]!.symbol("projectValue0");
+    await projects[5]!.rebuild();
+    assert.equal((await projects[5]!.symbol("projectValue5"))[0]?.fragment.symbol, "projectValue5");
+    assert.equal(workspaceStateCount(), 5);
+    assert.equal(getCodeQueryCacheDiagnostics(projects[0]!.wikiRoot).cached, true, "recently used project stays warm");
+    assert.equal(getCodeQueryCacheDiagnostics(projects[1]!.wikiRoot).estimatedBytes, 0, "least recently used code cache is released");
+    assert.deepEqual(await fs.readFile(codeEvidenceIndexFile(projects[1]!.wikiRoot)), persisted, "eviction does not delete or rewrite the index");
+    assert.deepEqual(await projects[1]!.symbol("projectValue1"), expected, "reopening restores the same evidence");
+    assert.equal(workspaceStateCount(), 5);
+  } finally {
+    clearWorkspaceStates();
+    if (previousCap === undefined) delete process.env["KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP"];
+    else process.env["KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP"] = previousCap;
+    await fs.rm(directory, { recursive: true, force: true });
   }
 });

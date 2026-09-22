@@ -6,6 +6,35 @@ reference with the claim and render it as a directly readable code resource.
 Operational notes, requirements without an implementation, and unsupported
 targets do not need invented code links.
 
+KnowledgeRail tracks project knowledge across domains: requirements, decisions,
+business rules, incidents and documents can stand on their own provenance. Code
+evidence adds direct links for TypeScript/JavaScript, Java, Kotlin, C#, Go, Rust,
+PHP, C, C++, Python, Ruby, Apex and Salesforce metadata. Salesforce is one supported
+ecosystem; it does not define which knowledge the wiki retains. Unsupported code
+syntax needs an explicit limit or a new adapter, rather than an invented link.
+
+Resource reads reuse an identity-checked code generation within the existing
+workspace memory limit. They still read and hash the source on every request, so
+an indexed fragment cannot hide a file changed since indexing. An externally
+replaced or corrupt index invalidates reuse; resource reads do not repair it.
+
+The process retains five workspace caches by default. Opening another project
+releases the least recently used workspace's cached state; its persisted index
+and knowledge remain available and load again when requested. This matches the
+current one-to-five-project local workload. The code admission budget is
+64 MiB per project; it is an estimate, not a reservation or process RAM limit.
+
+Companion metadata belongs to the language-adapter contract: an adapter opts into
+persistence with a versioned interpretation. Explicit index writes prepare it;
+queries reuse it or fall back to the shared bounded reader. The contract is also
+verified with a TypeScript adapter, independently of Salesforce. Repeated identifier
+normalization and declared-reference resolution are shared during construction of
+each generation and discarded afterwards; evidence and diagnostic fields stay intact.
+
+Wiki resources support both whole-page and content-addressed passage links,
+including desktop workspace bindings. Both use the same confined, bounded reader
+and signal truncation. A whole-page link does not require a `passage` parameter.
+
 ## Record an implementation claim
 
 1. Use `knowledge_code action="symbol"` with the qualified declaration name, or
@@ -199,7 +228,7 @@ is not a validator for unrelated configuration. Manifest readers retain 256 KiB/
 and 32 direct references. Selected workspace/build graphs opt into at most eight
 levels and 256 followed references. Wildcard enumeration has limits of 32 patterns,
 32 results, 16 path segments and 16,384 directory entries; recursive `**` manifest
-discovery is unsupported. Confinement, freshness and the 32 MiB project query-cache
+discovery is unsupported. Confinement, freshness and the 64 MiB project query-cache
 admission budget remain enforced. These are bounded
 declaration readers, not validators for every build tool's grammar.
 
@@ -249,9 +278,30 @@ updates; they remain outside the source roster and telemetry reports them as
 unsupported source extensions. Up to 1 MiB of compact sidecar data and manifest-reader state can survive an
 oversized uncached snapshot. Ordinal reference postings can also be retained under
 a separate 16 MiB cap, without retaining fragment objects. Both count against the
-unchanged 32 MiB project ceiling. Source generations invalidate both; manifest edits
+64 MiB project ceiling. Source generations invalidate both; manifest edits
 invalidate postings. This avoids repeated sidecar discovery and resolver construction
 when the full snapshot cannot be admitted. Status never removes evidence.
+
+Explicit rebuild/update/remove operations now persist a versioned companion
+projection in snapshot v2. Queries can restore Apex status after a process restart
+without reading sidecars. A sidecar-only update preserves source fragment IDs,
+fingerprints and anchor hashes; removal, invalid XML or absent status clears the
+status on the owning Apex sources. Companion enrichment preserves metadata
+belonging to other language adapters, including deployment status. Source updates
+with unchanged code also refresh companion metadata. The
+projection follows explicit index freshness, including the first query after a
+rebuild. Older snapshots and incompatible projections use the bounded in-memory
+reader without migrating or writing the snapshot from a query. Metadata preparation
+is included in index-update cost and currently checks the generation's companions.
+
+Concurrent queries share in-flight snapshot loading even when the full snapshot
+cannot stay cached. Verified unindexed-import paths, including an empty result,
+are retained per generation under a 1 MiB sub-budget of the same 64 MiB ceiling.
+Explicit index updates and workspace eviction invalidate this state. Manifest
+readers share in-flight discovery; Salesforce resolvers share prepared names and
+ownership while keeping diagnostic callbacks separate. Ancestor discovery reuses
+visited directories for each manifest specification; filesystem confinement and
+known-manifest freshness checks remain unchanged.
 
 The public `imports` array retains raw specifiers; optional `importStatements` on
 file modules preserve these syntax distinctions. Mixed resolved/unresolved forms
@@ -332,19 +382,23 @@ changed paths and page-type filters. Existing adapter limitations still apply:
 lexical call/reference matches and heuristic imports are candidates, and an empty
 result does not establish that a module is unused.
 
+A database name used inside a source file is not an alias for that file. Incoming
+file references follow the file/module identity and resolved imports; database
+usage remains searchable evidence, and named entity fragments keep their aliases.
+
 ## Verified project example
 
 Run `npm run dogfood:import-knowledge` from the KnowledgeRail checkout. It records
-implementation claims on six local wiki pages, with code anchors for runtime
-classes, language resolvers, Salesforce metadata and knowledge synthesis. It uses
+implementation claims on local wiki pages, with code anchors for runtime
+classes, language resolvers, metadata, wiki resources and knowledge synthesis. It uses
 the same record/link/synthesis and mutation-finalization services as the tools.
 Existing unrelated pages are preserved.
 
 The script verifies every anchor with drift detection, checks that function links
-expose implementation statements rather than just signatures, retrieves all six pages
+expose implementation statements rather than just signatures, retrieves all generated pages
 through task context with a 2,000-token budget and opens all current cited code
 resources. The local result is written to
-`benchmarks/results/274-import-knowledge.json`. This is a functional path check,
+`benchmarks/results/281-import-knowledge.json`. This is a functional path check,
 not a claim about retrieval accuracy or speed on all projects.
 
 On source revisions, the script explicitly supersedes its own previous claims.

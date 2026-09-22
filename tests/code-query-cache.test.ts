@@ -152,7 +152,7 @@ test("each project has its own cache budget and oversized snapshots remain searc
   assert.ok(roots.every((wikiRoot) => getCodeQueryCacheDiagnostics(wikiRoot).cached), "one project's admission must not evict other projects");
   const oversizedRoot = path.join(root, "oversized", "wiki");
   await fs.mkdir(path.dirname(codeEvidenceIndexFile(oversizedRoot)), { recursive: true });
-  snapshot.fragments[0]!.definition = "x".repeat(9 * 1024 * 1024);
+  snapshot.fragments[0]!.definition = "x".repeat(Math.ceil(getCodeQueryCacheDiagnostics(oversizedRoot).maxEstimatedBytes / 4) + 1024 * 1024);
   await fs.writeFile(codeEvidenceIndexFile(oversizedRoot), JSON.stringify(snapshot));
   const oversized = new PersistentCodeEvidenceIndex({ repositoryRoot: root, wikiRoot: oversizedRoot });
   assert.equal((await oversized.symbol("cacheFixtureAlpha"))[0]?.fragment.symbol, "cacheFixtureAlpha");

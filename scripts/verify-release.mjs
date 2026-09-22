@@ -9,6 +9,7 @@ async function json(relativePath) {
 const packageJson = await json("package.json");
 const packageLock = await json("package-lock.json");
 const server = await json("server.json");
+const desktopBundle = await json("packaging/mcpb/manifest.json");
 const product = await readFile(new URL("src/product.ts", root), "utf8");
 const changelog = await readFile(new URL("CHANGELOG.md", root), "utf8");
 const readme = await readFile(new URL("README.md", root), "utf8");
@@ -25,6 +26,9 @@ if (packageLock.version !== version || packageLock.packages?.[""]?.version !== v
 }
 if (server.version !== version || server.packages?.[0]?.version !== version) {
   throw new Error("server.json is not aligned with package.json.");
+}
+if (desktopBundle.version !== version) {
+  throw new Error("packaging/mcpb/manifest.json is not aligned with package.json.");
 }
 if (!packageJson.files?.includes("assets/knowledge-rail-logo.png")) {
   throw new Error("The public README logo is not included in the npm package.");

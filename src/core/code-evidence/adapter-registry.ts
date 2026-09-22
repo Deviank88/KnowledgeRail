@@ -68,10 +68,6 @@ function registration(value: KnowledgeAdapter | AdapterRegistration): AdapterReg
   return { adapter: value, extensionClaims: claimsFromAdapter(value) };
 }
 
-function pathMatchesClaim(path: string, claim: string): boolean {
-  return path.toLowerCase().endsWith(claim);
-}
-
 export class KnowledgeAdapterRegistry {
   readonly registrations: readonly AdapterRegistration[];
 
@@ -125,8 +121,9 @@ export class KnowledgeAdapterRegistry {
   }
 
   resolve(source: Pick<CodeSource, "path">): KnowledgeAdapter | undefined {
+    const normalizedPath = source.path.toLowerCase();
     const matches = this.registrations.filter((item) =>
-      item.extensionClaims.some((claim) => pathMatchesClaim(source.path, claim)) && item.adapter.supports(source)
+      item.extensionClaims.some((claim) => normalizedPath.endsWith(claim)) && item.adapter.supports(source)
     );
     if (matches.length > 1) {
       throw new Error(

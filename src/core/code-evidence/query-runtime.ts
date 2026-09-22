@@ -2,6 +2,7 @@ import { createDefaultKnowledgeAdapterRegistry, type KnowledgeAdapterRegistry } 
 import { createLegacyImportResolver } from "./import-resolution/paths.js";
 import { ImportResolutionCollector } from "./import-resolution/diagnostics.js";
 import { ProjectStructureReader } from "./project-structure.js";
+import { persistedSourceMetadata } from "./source-metadata.js";
 import { createImportClassifier, probeUnindexedImports } from "./import-resolution/classification.js";
 import { localPath } from "./import-resolution/paths.js";
 import { posix } from "node:path";
@@ -68,12 +69,16 @@ interface ReferenceIndex {
   estimatedBytes: number;
 }
 
+function addReference(index: Map<string, number[]>, value: string, ordinal: number): void {
+  const entries = index.get(value);
+  // Construction visits fragments in ordinal order. A repeated name for this
+  // fragment is already the last posting, so no temporary Set is necessary.
+  if (entries) { if (entries[entries.length - 1] !== ordinal) entries.push(ordinal); }
+  else index.set(value, [ordinal]);
+}
+
 function addReferences(index: Map<string, number[]>, values: readonly string[], ordinal: number): void {
-  for (const value of new Set(values)) {
-    const entries = index.get(value);
-    if (entries) entries.push(ordinal);
-    else index.set(value, [ordinal]);
-  }
+  for (const value of values) addReference(index, value, ordinal);
 }
 
 /** Generation-bound metadata and ordinal postings may survive a snapshot too
@@ -86,6 +91,9 @@ export interface CodeGenerationCache {
   projectEstimatedBytes?: number;
   incoming?: { identity?: string; index: ReferenceIndex };
   incomingEstimatedBytes?: number;
+  unindexedPaths?: ReadonlySet<string>;
+  unindexedPending?: Promise<ReadonlySet<string>>;
+  unindexedEstimatedBytes?: number;
 }
 
 export class CodeQueryRuntime {
@@ -94,6 +102,8 @@ export class CodeQueryRuntime {
   private incoming?: ReferenceIndex;
   private structureReader?: ProjectStructureReader;
   private structure?: ProjectStructure;
+  private paths?: ReadonlySet<string>;
+  private pathsEstimatedBytes = 0;
   private unindexedPaths?: Promise<ReadonlySet<string>>;
   private verifiedUnindexedPaths: ReadonlySet<string> = new Set();
   private metadataEstimatedBytes = 0;
@@ -105,16 +115,34 @@ export class CodeQueryRuntime {
     this.snapshot = { ...snapshot, fragments: enrichLwcBundles(snapshot.fragments) };
   }
 
+  private sourcePaths(): ReadonlySet<string> {
+    if (!this.paths) {
+      const paths = new Set<string>();
+      for (const fragment of this.snapshot.fragments) paths.add(fragment.path);
+      this.paths = paths;
+      this.pathsEstimatedBytes = [...this.paths].reduce((bytes, path) => bytes + 128 + path.length * 4, 128);
+    }
+    return this.paths;
+  }
+
   /** Sidecars follow source freshness: explicit update/remove/rebuild publishes a
    * new generation. Warm symbol/search queries perform no sidecar filesystem IO. */
   async refreshSourceMetadata(repositoryRoot: string): Promise<void> {
     const adapters = this.registry.registrations.map(({ adapter }) => adapter).filter((adapter) => adapter.enrichSourceMetadata);
     if (!adapters.length) return;
     this.metadataReady ??= (async () => {
+      const persisted = persistedSourceMetadata(this.snapshot, this.registry);
+      if (persisted) {
+        this.metadataWarnings = persisted.warnings;
+        for (const adapter of adapters) this.snapshot.fragments = adapter.enrichSourceMetadata!(this.snapshot.fragments, persisted);
+        this.symbols = undefined;
+        this.incoming = undefined;
+        return;
+      }
       const cache = this.generationCache;
       if (!cache.structure && !cache.pending) cache.pending = (async () => {
         const reader = new ProjectStructureReader(repositoryRoot,
-          new Set(this.snapshot.fragments.map((fragment) => fragment.path)), this.registry, true);
+          this.sourcePaths(), this.registry, true);
         const metadata = await reader.load();
         const estimate = metadata.manifests.size || metadata.warnings.length
           ? Buffer.byteLength(JSON.stringify([...metadata.manifests])) * 4 + metadata.manifests.size * 128 + Buffer.byteLength(JSON.stringify(metadata.warnings)) * 4 : 0;
@@ -124,7 +152,6 @@ export class CodeQueryRuntime {
       const metadata = cache.structure ?? await cache.pending!;
       this.metadataEstimatedBytes = cache.estimatedBytes;
       this.metadataWarnings = metadata.warnings;
-      if (!metadata.manifests.size) return;
       for (const adapter of adapters) this.snapshot.fragments = adapter.enrichSourceMetadata!(this.snapshot.fragments, metadata);
       this.symbols = undefined;
       this.incoming = undefined;
@@ -134,18 +161,43 @@ export class CodeQueryRuntime {
 
   /** Only reference consumers pay for manifest freshness checks. */
   async refreshProjectStructure(repositoryRoot: string): Promise<void> {
-    this.unindexedPaths ??= probeUnindexedImports(repositoryRoot, this.snapshot.fragments,
-      new Set(this.snapshot.fragments.map((fragment) => fragment.path)));
-    this.verifiedUnindexedPaths = await this.unindexedPaths;
-    if (!this.registry.registrations.some(({ adapter }) => adapter.projectManifests?.length)) return;
+    const cache = this.generationCache;
+    this.unindexedPaths ??= (async () => {
+      if (cache.unindexedPaths) return cache.unindexedPaths;
+      cache.unindexedPending ??= probeUnindexedImports(repositoryRoot, this.snapshot.fragments, this.sourcePaths())
+        .then((paths) => {
+          const estimate = [...paths].reduce((bytes, path) => bytes + 128 + path.length * 4, 128);
+          if (estimate <= 1024 * 1024) { cache.unindexedPaths = paths; cache.unindexedEstimatedBytes = estimate; }
+          return paths;
+        }).finally(() => { cache.unindexedPending = undefined; });
+      return cache.unindexedPending;
+    })().catch((error) => { this.unindexedPaths = undefined; throw error; });
+    if (!this.registry.registrations.some(({ adapter }) => adapter.projectManifests?.length)) {
+      this.verifiedUnindexedPaths = await this.unindexedPaths;
+      return;
+    }
     if (!this.structureReader || this.structureReader.repositoryRoot !== repositoryRoot) {
       this.structureReader = this.generationCache.projectReader?.repositoryRoot === repositoryRoot
         ? this.generationCache.projectReader : new ProjectStructureReader(repositoryRoot,
-          new Set(this.snapshot.fragments.map((fragment) => fragment.path)), this.registry);
+          this.sourcePaths(), this.registry);
+      // Publish before awaiting load so concurrent runtimes join the reader's
+      // pending refresh. Admission is checked once the bounded read completes.
+      this.generationCache.projectReader = this.structureReader;
       this.structure = undefined;
       this.incoming = undefined;
     }
-    const structure = await this.structureReader.load();
+    // These confined reads are independent. Drain both before propagating an
+    // error so retries cannot race unfinished preparation from a failed request.
+    const [probes, manifests] = await Promise.allSettled([this.unindexedPaths, this.structureReader.load()]);
+    if (probes.status === "rejected" || manifests.status === "rejected") {
+      if (this.generationCache.projectReader === this.structureReader) {
+        this.generationCache.projectReader = undefined;
+        this.generationCache.projectEstimatedBytes = 0;
+      }
+      throw probes.status === "rejected" ? probes.reason : (manifests as PromiseRejectedResult).reason;
+    }
+    this.verifiedUnindexedPaths = probes.value;
+    const structure = manifests.value;
     if (this.structureReader.estimatedBytes + this.generationCache.estimatedBytes <= 1024 * 1024) {
       this.generationCache.projectReader = this.structureReader;
       this.generationCache.projectEstimatedBytes = this.structureReader.estimatedBytes;
@@ -166,7 +218,9 @@ export class CodeQueryRuntime {
   }
 
   projectStructureEstimatedBytes(): number {
-    return (this.structureReader?.estimatedBytes ?? 0) + this.metadataEstimatedBytes + (this.incoming?.estimatedBytes ?? 0);
+    return (this.structureReader?.estimatedBytes ?? 0) + this.metadataEstimatedBytes + (this.incoming?.estimatedBytes ?? 0) +
+      (this.generationCache.unindexedEstimatedBytes ?? 0) +
+      this.pathsEstimatedBytes;
   }
 
   /** Internal outcome counts are generation inventory, never request/fallback rates. */
@@ -218,17 +272,18 @@ export class CodeQueryRuntime {
   private referenceIndex(): ReferenceIndex {
     if (!this.incoming && this.generationCache.incoming?.identity === this.structure?.identity) this.incoming = this.generationCache.incoming?.index;
     if (!this.incoming) {
-      const modulePaths = new Set(this.snapshot.fragments.filter((fragment) => fragment.kind === "module").map((fragment) => fragment.path));
-      const diagnostics = new ImportResolutionCollector(modulePaths);
-      const incoming: ReferenceIndex = { byId: new Map(), calls: new Map(), references: new Map(), imports: new Map(),
-        declaredReferences: new Map(),
-        importDiagnostics: diagnostics.result(), importCounts: diagnostics.byLanguage, diagnosticBytes: 0, estimatedBytes: 0 };
+      const modulePaths = new Set<string>();
       const fragmentsByPath = new Map<string, KnowledgeFragment[]>();
       for (const fragment of this.snapshot.fragments) {
+        if (fragment.kind === "module") modulePaths.add(fragment.path);
         const siblings = fragmentsByPath.get(fragment.path);
         if (siblings) siblings.push(fragment);
         else fragmentsByPath.set(fragment.path, [fragment]);
       }
+      const diagnostics = new ImportResolutionCollector(modulePaths);
+      const incoming: ReferenceIndex = { byId: new Map(), calls: new Map(), references: new Map(), imports: new Map(),
+        declaredReferences: new Map(),
+        importDiagnostics: diagnostics.result(), importCounts: diagnostics.byLanguage, diagnosticBytes: 0, estimatedBytes: 0 };
       const issues: CodeImportIssue[] = [];
       const context = { paths: modulePaths, fragmentsByPath, structure: this.structure,
         reportIssue: (issue: CodeImportIssue) => issues.push(issue) };
@@ -236,28 +291,54 @@ export class CodeQueryRuntime {
       const resolvers = new Map<KnowledgeAdapter | undefined, CodeImportResolver>();
       const referenceResolvers = new Map<KnowledgeAdapter, CodeImportResolver>();
       let legacy: CodeImportResolver | undefined;
+      // Inventories repeat the same identifiers across enclosing fragments.
+      // Normalize once while building the postings; this map is not retained.
+      const normalized = new Map<string, string>();
+      const normalize = (value: string): string => {
+        let result = normalized.get(value);
+        if (result === undefined) { result = normalizedCodeText(value); normalized.set(value, result); }
+        return result;
+      };
       // Adapters attach the same import inventory to several fragments per file.
       // Memoize resolution only while constructing this generation's incoming map.
       const resolvedBySource = new Map<string, { resolve: CodeImportResolver; language: string; imports: Map<string, readonly string[]> }>();
+      const declaredBySource = new Map<string, { resolve: CodeImportResolver; targets: Map<string, readonly string[]> }>();
       this.snapshot.fragments.forEach((fragment, ordinal) => {
         incoming.byId.set(fragment.id, ordinal);
-        addReferences(incoming.calls, fragment.calls.flatMap((call) => {
-          const value = normalizedCodeText(call);
-          return [value, value.split(".").at(-1)!];
-        }), ordinal);
-        const declaredNames = new Set(fragment.declaredReferences?.filter((name) => name.startsWith("schema:")).map((name) => normalizedCodeText(name.slice(7))));
-        addReferences(incoming.references, [...fragment.references.map(normalizedCodeText).filter((name) => !declaredNames.has(name)),
-          ...fragment.databaseRefs.map(normalizedCodeText)], ordinal);
+        for (const call of fragment.calls) {
+          const value = normalize(call);
+          addReference(incoming.calls, value, ordinal);
+          const dot = value.lastIndexOf(".");
+          if (dot >= 0) addReference(incoming.calls, value.slice(dot + 1), ordinal);
+        }
+        const declaredNames = fragment.declaredReferences?.length
+          ? new Set(fragment.declaredReferences.filter((name) => name.startsWith("schema:")).map((name) => normalize(name.slice(7)))) : undefined;
+        for (const reference of fragment.references) {
+          const name = normalize(reference);
+          if (!declaredNames?.has(name)) addReference(incoming.references, name, ordinal);
+        }
+        for (const name of fragment.databaseRefs) addReference(incoming.references, normalize(name), ordinal);
         if (fragment.declaredReferences?.length) {
-          const adapter = this.registry.resolve({ path: fragment.path });
-          if (adapter?.createReferenceResolver) {
-            let resolve = referenceResolvers.get(adapter);
-            if (!resolve) {
-              resolve = adapter.createReferenceResolver({ ...context, reportIssue: undefined });
-              referenceResolvers.set(adapter, resolve);
+          let declared = declaredBySource.get(fragment.path);
+          if (!declared) {
+            const adapter = this.registry.resolve({ path: fragment.path });
+            if (adapter?.createReferenceResolver) {
+              let resolve = referenceResolvers.get(adapter);
+              if (!resolve) {
+                resolve = adapter.createReferenceResolver({ ...context, reportIssue: undefined });
+                referenceResolvers.set(adapter, resolve);
+              }
+              declared = { resolve, targets: new Map() };
+              declaredBySource.set(fragment.path, declared);
             }
-            addReferences(incoming.declaredReferences,
-              fragment.declaredReferences.flatMap((name) => [...resolve!(fragment.path, name)]).filter((path) => modulePaths.has(path)), ordinal);
+          }
+          if (declared) for (const name of fragment.declaredReferences) {
+            let targets = declared.targets.get(name);
+            if (!targets) {
+              targets = [...declared.resolve(fragment.path, name)].filter((path) => modulePaths.has(path));
+              declared.targets.set(name, targets);
+            }
+            addReferences(incoming.declaredReferences, targets, ordinal);
           }
         }
         if (fragment.kind === "module" && fragment.qualifiedName === fragment.path) {
@@ -280,7 +361,6 @@ export class CodeQueryRuntime {
           resolved = { resolve, language: adapter?.parserVersion.split("-deterministic-")[0] ?? "legacy", imports: new Map() };
           resolvedBySource.set(fragment.path, resolved);
         }
-        const imports: string[] = [];
         for (const specifier of fragment.imports) {
           let targets = resolved.imports.get(specifier);
           if (!targets) {
@@ -299,9 +379,8 @@ export class CodeQueryRuntime {
             diagnostics.finish(targets.length, disposition);
             resolved.imports.set(specifier, targets);
           }
-          imports.push(...targets);
+          addReferences(incoming.imports, targets, ordinal);
         }
-        addReferences(incoming.imports, imports, ordinal);
       });
       incoming.importDiagnostics = diagnostics.result();
       incoming.diagnosticBytes = 2 * JSON.stringify([incoming.importDiagnostics, incoming.importCounts]).length + 2048;
@@ -382,9 +461,13 @@ export class CodeQueryRuntime {
     const singleTarget = targets.length === 1 ? incoming.byId.get(targets[0]!.id) : undefined;
     const targetOrdinals = targets.length > 1 ? new Set(targets.map((target) => incoming.byId.get(target.id))) : undefined;
     for (const target of targets) {
+      const fileModule = target.kind === "module" && target.qualifiedName === target.path;
       for (const name of [normalizedCodeText(target.symbol), normalizedCodeText(target.qualifiedName),
-        ...(target.kind === "module" && target.qualifiedName === target.path ? [] : [normalizedCodeText(target.qualifiedName.split(".").at(-1)!)]),
-        ...target.databaseRefs.map(normalizedCodeText)]) {
+        ...(fileModule ? [] : [normalizedCodeText(target.qualifiedName.split(".").at(-1)!)]),
+        // Database names consumed inside a source file do not identify that file.
+        // Entity fragments keep their database aliases and all source-side usage
+        // remains indexed; only physical file modules exclude those target aliases.
+        ...(fileModule ? [] : target.databaseRefs.map(normalizedCodeText))]) {
         if (!targetByName.has(name)) targetByName.set(name, target);
       }
       if (target.kind === "module" && !modules.has(target.path)) modules.set(target.path, target);

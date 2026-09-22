@@ -7,6 +7,7 @@ import { atomicWriteText } from "../fs-service.js";
 import { withWikiFileLock } from "../lock-service.js";
 import { logger } from "../logger.js";
 import { wikiMetaDir } from "../manifest-service.js";
+import { prepareSourceMetadata } from "./source-metadata.js";
 import { safeResolveWithin } from "../paths.js";
 import { tokenizeSearchText } from "../text-analysis.js";
 import { readFileSafe } from "../utils.js";
@@ -51,7 +52,7 @@ const DEFAULT_MAX_RESULTS = 12;
 const MAX_RESULTS = 100;
 const MAX_CODE_FILE_BYTES = 2 * 1024 * 1024;
 const INDEX_FILE_NAME = "code-evidence-index.json";
-const MAX_QUERY_CACHE_ESTIMATED_BYTES = 32 * 1024 * 1024;
+const MAX_QUERY_CACHE_ESTIMATED_BYTES = 64 * 1024 * 1024;
 interface QueryCacheState {
   identity?: string;
   runtime?: CodeQueryRuntime;
@@ -224,10 +225,14 @@ async function writeSnapshot(wikiRoot: string, snapshot: CodeEvidenceSnapshot): 
 }
 
 function forgetQueryRuntime(state: QueryCacheState): void {
-  state.estimatedBytes = state.generationCache.estimatedBytes + (state.generationCache.projectEstimatedBytes ?? 0) + (state.generationCache.incomingEstimatedBytes ?? 0);
+  state.estimatedBytes = generationEstimatedBytes(state.generationCache);
   state.snapshotEstimatedBytes = 0;
   state.runtime = undefined;
   state.identity = undefined;
+}
+
+function generationEstimatedBytes(cache: CodeGenerationCache): number {
+  return cache.estimatedBytes + (cache.projectEstimatedBytes ?? 0) + (cache.incomingEstimatedBytes ?? 0) + (cache.unindexedEstimatedBytes ?? 0);
 }
 
 function queryState(wikiRoot: string): QueryCacheState {
@@ -268,16 +273,20 @@ async function loadQueryRuntime(
   const root = nodePath.resolve(requestedRoot);
   const state = queryState(root);
   const before = await querySnapshotIdentity(root);
+  if (state.pending) {
+    const runtime = await state.pending;
+    // A waiting caller verifies the file again: a writer may have replaced it
+    // while the first caller was reading or constructing the query structures.
+    const after = await querySnapshotIdentity(root);
+    if (before && after?.identity === before.identity && state.metadataIdentity === before.identity && state.metadataRegistry === registry && runtime.registry === registry) return runtime;
+    return loadQueryRuntime(root, registry);
+  }
+  // A caller with another registry must not replace the generation cache while
+  // the active loader is still attaching its runtime to that cache.
   if (state.metadataIdentity !== before?.identity || state.metadataRegistry !== registry) {
     state.generationCache = { estimatedBytes: 0 }; state.metadataIdentity = before?.identity; state.metadataRegistry = registry;
   }
   if (before && state.runtime && state.identity === before.identity && state.runtime.registry === registry) return state.runtime;
-  if (state.pending) {
-    await state.pending;
-    // A waiting caller verifies the file again: a writer may have replaced it
-    // while the first caller was reading or constructing the query structures.
-    return loadQueryRuntime(root, registry);
-  }
   forgetQueryRuntime(state);
   if (!before) return new CodeQueryRuntime(emptySnapshot(adapters), registry);
   state.pending = (async () => {
@@ -323,11 +332,24 @@ export function getCodeQueryCacheDiagnostics(wikiRoot: string): { cached: boolea
   };
 }
 
+/** Resource reads share an admitted, identity-checked query generation. Return
+ * detached records; source bytes and their freshness are still checked by the
+ * resource reader on every request. Corrupt indexes never trigger repair here. */
+export async function readCodeResourceRecords(wikiRoot: string, path: string, fragmentId: string): Promise<{
+  file: CodeEvidenceFileRecord | undefined; fragment: KnowledgeFragment | undefined;
+}> {
+  const runtime = await loadQueryRuntime(wikiRoot, DEFAULT_QUERY_ADAPTERS);
+  return structuredClone({
+    file: runtime.snapshot.files.find((record) => record.path === path),
+    fragment: runtime.snapshot.fragments.find((record) => record.path === path && record.id === fragmentId),
+  });
+}
+
 function accountProjectStructure(wikiRoot: string, runtime: CodeQueryRuntime): void {
   const state = queryStates.get(wikiRoot);
   if (!state) return;
   if (state.runtime !== runtime) {
-    if (!state.runtime) state.estimatedBytes = state.generationCache.estimatedBytes + (state.generationCache.projectEstimatedBytes ?? 0) + (state.generationCache.incomingEstimatedBytes ?? 0);
+    if (!state.runtime) state.estimatedBytes = generationEstimatedBytes(state.generationCache);
     return;
   }
   const estimatedBytes = state.snapshotEstimatedBytes + runtime.projectStructureEstimatedBytes();
@@ -566,6 +588,7 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
         files: files.sort((left, right) => left.path.localeCompare(right.path)),
         fragments: sortedFragments(fragments),
       };
+      await prepareSourceMetadata(this.repositoryRoot, snapshot, this.registry);
       await writeSnapshot(this.wikiRoot, snapshot);
       return report({
         scannedFiles: paths.length,
@@ -590,7 +613,13 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
       const nextFingerprint = fingerprint(normalizedPath, contentHash, adapter.parserVersion);
       const previous = before.files.find((record) => record.path === normalizedPath);
       if (previous?.fingerprint === nextFingerprint && previous.parserVersion === adapter.parserVersion) {
-        return report({ scannedFiles: 1, reusedFiles: 1, reparsedFiles: 0, removedFiles: 0, snapshot: before });
+        const snapshot = { ...before };
+        await prepareSourceMetadata(this.repositoryRoot, snapshot, this.registry);
+        if (JSON.stringify(snapshot.sourceMetadata) !== JSON.stringify(before.sourceMetadata)) {
+          snapshot.generatedAt = new Date().toISOString();
+          await writeSnapshot(this.wikiRoot, snapshot);
+        }
+        return report({ scannedFiles: 1, reusedFiles: 1, reparsedFiles: 0, removedFiles: 0, snapshot });
       }
       const extracted = await adapter.extract(source);
       const files = before.files.filter((record) => record.path !== normalizedPath);
@@ -611,6 +640,7 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
           ...extracted,
         ]),
       };
+      await prepareSourceMetadata(this.repositoryRoot, snapshot, this.registry);
       await writeSnapshot(this.wikiRoot, snapshot);
       return report({ scannedFiles: 1, reusedFiles: 0, reparsedFiles: 1, removedFiles: 0, snapshot });
     });
@@ -633,6 +663,7 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
         files: before.files.filter((record) => record.path !== normalizedPath),
         fragments: before.fragments.filter((fragment) => fragment.path !== normalizedPath),
       };
+      await prepareSourceMetadata(this.repositoryRoot, snapshot, this.registry);
       await writeSnapshot(this.wikiRoot, snapshot);
       return report({ scannedFiles: 0, reusedFiles: snapshot.files.length, reparsedFiles: 0, removedFiles: 1, snapshot });
     });
@@ -649,6 +680,7 @@ export class PersistentCodeEvidenceIndex implements CodeEvidenceIndex {
     // Publish a new derived generation so other processes also discover newly
     // created nested manifests. Existing source fragments and anchors stay intact.
     const snapshot = { ...before, generatedAt: new Date().toISOString() };
+    await prepareSourceMetadata(this.repositoryRoot, snapshot, this.registry);
     await writeSnapshot(this.wikiRoot, snapshot);
     return report({ scannedFiles: 0, reusedFiles: before.files.length, reparsedFiles: 0, removedFiles: 0, snapshot });
   }

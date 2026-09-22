@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Deviank88/KnowledgeRail/v2.8.0/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
+  <img src="https://raw.githubusercontent.com/Deviank88/KnowledgeRail/v2.8.7/assets/knowledge-rail-logo.png" alt="KnowledgeRail logo" width="180">
 </p>
 
 <h1 align="center">KnowledgeRail</h1>
@@ -8,7 +8,7 @@ KnowledgeRail is a local-first MCP server that turns project documentation and s
 
 It is designed for agents that need to understand, change, review, or document a codebase without loading the whole repository into the model context. Retrieval is bounded, provenance is preserved, missing evidence is reported explicitly, and difficult queries widen progressively instead of silently losing relevant information.
 
-> **Current status:** stable release `2.8.0`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports explicitly bound or safely inferred local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
+> **Current status:** stable release `2.8.7`. The server uses MCP SDK `2.x` and protocol `2026-07-28`. It supports explicitly bound or safely inferred local `stdio`, a self-hosted loopback HTTP gateway, and a local desktop-chat adapter. KnowledgeRail operates no hosted service and does not upload project data. See [SELF_HOSTING.md](SELF_HOSTING.md).
 
 ## What it provides
 
@@ -103,7 +103,7 @@ KnowledgeRail ships no browser or document renderer. Mermaid source remains ordi
 Run this from any directory inside the project in a terminal or another client that launches stdio servers with the project as its working directory:
 
 ```bash
-npx -y knowledge-rail@2.8.0
+npx -y knowledge-rail@2.8.7
 ```
 
 No project path is needed when the MCP client guarantees a project-scoped process cwd or supplies one unambiguous legacy MCP Root. Cursor project setup is explicit because its global MCP process may be shared across windows.
@@ -133,7 +133,7 @@ node /absolute/path/to/KnowledgeRail/dist/index.js
 Run this once from the project root or any nested directory:
 
 ```bash
-npx -y knowledge-rail@2.8.0 setup cursor
+npx -y knowledge-rail@2.8.7 setup cursor
 ```
 
 The command discovers the project upward and safely creates or merges `.cursor/mcp.json`. It preserves other MCP servers and pins an explicit `${workspaceFolder}` binding. Re-running it is idempotent.
@@ -148,7 +148,7 @@ The equivalent manual project configuration is:
       "command": "npx",
       "args": [
         "-y",
-        "knowledge-rail@2.8.0",
+        "knowledge-rail@2.8.7",
         "--root",
         "${workspaceFolder}"
       ]
@@ -184,7 +184,7 @@ For a Cursor multi-root workspace, install one project configuration in every ro
 From the project, add KnowledgeRail at project scope:
 
 ```bash
-claude mcp add --transport stdio --scope project knowledge-rail -- npx -y knowledge-rail@2.8.0
+claude mcp add --transport stdio --scope project knowledge-rail -- npx -y knowledge-rail@2.8.7
 ```
 
 Claude Code writes the shared project entry to `.mcp.json` and launches the local server in project context. Use `claude mcp list` to verify the connection. The command shape and project scope follow the [official Claude Code MCP guide](https://docs.anthropic.com/en/docs/claude-code/mcp).
@@ -198,7 +198,7 @@ For a client that explicitly guarantees one stdio process per project with the p
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.8.0"]
+      "args": ["-y", "knowledge-rail@2.8.7"]
     }
   }
 }
@@ -211,8 +211,8 @@ The workspace precedence is explicit `--root`; one unambiguous legacy MCP Root; 
 Inspect the exact choice without starting MCP:
 
 ```bash
-npx -y knowledge-rail@2.8.0 doctor
-npx -y knowledge-rail@2.8.0 doctor --root /absolute/project/path
+npx -y knowledge-rail@2.8.7 doctor
+npx -y knowledge-rail@2.8.7 doctor --root /absolute/project/path
 ```
 
 The command prints the canonical root and its resolution source, or exits non-zero with corrective guidance.
@@ -227,7 +227,7 @@ For a source/release checkout, build the deterministic bundle:
 npm run mcpb:build
 ```
 
-Then install `artifacts/knowledge-rail-2.8.0.mcpb` from **Claude Desktop → Settings → Extensions → Advanced settings → Install Extension**. The bundle contains the compiled server and its production dependencies, starts the `desktop` adapter directly, and does not require a project path. See Anthropic's [local MCP server guide](https://support.anthropic.com/en/articles/10949351/getting-started-with-local-mcp-servers-on-claude-desktop) and the [MCP Bundle specification](https://github.com/modelcontextprotocol/mcpb).
+Then install `artifacts/knowledge-rail-2.8.7.mcpb` from **Claude Desktop → Settings → Extensions → Advanced settings → Install Extension**. The bundle contains the compiled server and its production dependencies, starts the `desktop` adapter directly, and does not require a project path. See Anthropic's [local MCP server guide](https://support.anthropic.com/en/articles/10949351/getting-started-with-local-mcp-servers-on-claude-desktop) and the [MCP Bundle specification](https://github.com/modelcontextprotocol/mcpb).
 
 The manual local-development configuration remains available for hosts that have not adopted MCP Bundles:
 
@@ -236,7 +236,7 @@ The manual local-development configuration remains available for hosts that have
   "mcpServers": {
     "knowledge-rail": {
       "command": "npx",
-      "args": ["-y", "knowledge-rail@2.8.0", "desktop"]
+      "args": ["-y", "knowledge-rail@2.8.7", "desktop"]
     }
   }
 }
@@ -249,10 +249,10 @@ In a new chat, ask KnowledgeRail to list workspaces, choose one entry, and confi
 Projects opened successfully by an IDE/terminal are added to the local catalog automatically without changing their clean eight-tool workflow. Operators can also manage catalog metadata locally:
 
 ```bash
-npx -y knowledge-rail@2.8.0 workspace list
-npx -y knowledge-rail@2.8.0 workspace register
-npx -y knowledge-rail@2.8.0 workspace register /absolute/project/path
-npx -y knowledge-rail@2.8.0 workspace unregister ws_example
+npx -y knowledge-rail@2.8.7 workspace list
+npx -y knowledge-rail@2.8.7 workspace register
+npx -y knowledge-rail@2.8.7 workspace register /absolute/project/path
+npx -y knowledge-rail@2.8.7 workspace unregister ws_example
 ```
 
 Registration never copies, uploads, scans the disk, or deletes project files. `workspace register` without a path discovers only upward from cwd.
@@ -262,7 +262,7 @@ Registration never copies, uploads, scans the disk, or deletes project files. `w
 Start one gateway for many concurrent local clients and workspaces:
 
 ```bash
-npx -y knowledge-rail@2.8.0 --transport http
+npx -y knowledge-rail@2.8.7 --transport http
 ```
 
 The default endpoint is `http://127.0.0.1:3333/mcp`; liveness only is available at `/healthz`. MCP requests require the random credential stored in the OS-protected per-user KnowledgeRail state directory. The desktop adapter reads it automatically, so it never belongs in project configuration or a repository.
@@ -410,15 +410,15 @@ knowledge_admin {
 The same detector is available without an MCP server for agent hooks and CI. Hook mode reports non-fresh anchors but never blocks the calling tool; it is silent when everything checked is fresh:
 
 ```bash
-npx -y knowledge-rail@2.8.0 drift --no-ledger
-npx -y knowledge-rail@2.8.0 drift --no-ledger --path src/payments.ts --path src/invoices
+npx -y knowledge-rail@2.8.7 drift --no-ledger
+npx -y knowledge-rail@2.8.7 drift --no-ledger --path src/payments.ts --path src/invoices
 ```
 
 An absolute event path is accepted only when it is confined to the discovered project. For pre-commit or CI, `--check` exits `2` on any non-fresh anchor or timeout; operational failures exit `1`. JSON mode returns the complete shared-core result:
 
 ```bash
-npx -y knowledge-rail@2.8.0 drift --check --no-ledger
-npx -y knowledge-rail@2.8.0 drift --format json --no-ledger
+npx -y knowledge-rail@2.8.7 drift --check --no-ledger
+npx -y knowledge-rail@2.8.7 drift --format json --no-ledger
 ```
 
 Text output is capped at 20 affected anchors. Its `stale` count is the aggregate of `drift_suspected` and `anchor_unresolvable`, not a fourth detector verdict. The default timeout is three seconds: ordinary hook mode reports a timeout on stderr and exits `0`, while `--check` exits `2`. Omit `--no-ledger` only when the disposable freshness ledger should be updated for later context compilation.
@@ -427,7 +427,7 @@ The action reads current code and writes only disposable state to `wiki/.knowled
 
 ## Project client hooks integration
 
-Claude Code, Codex and Cursor can receive project-scoped KnowledgeRail rules and read-only drift hooks directly. Preview with `npx -y knowledge-rail@2.8.0 setup clients`; apply only after review with the same command plus `--apply`. From an MCP client, ask the model to call `knowledge_admin action="client_setup" setup_mode="preview"`, then explicitly request `setup_mode="apply"`. Applying through the desktop/catalog profile requires a write-scoped workspace binding; preview and status remain read-only. Ordinary initialization never installs hooks implicitly.
+Claude Code, Codex and Cursor can receive project-scoped KnowledgeRail rules and read-only drift hooks directly. Preview with `npx -y knowledge-rail@2.8.7 setup clients`; apply only after review with the same command plus `--apply`. From an MCP client, ask the model to call `knowledge_admin action="client_setup" setup_mode="preview"`, then explicitly request `setup_mode="apply"`. Applying through the desktop/catalog profile requires a write-scoped workspace binding; preview and status remain read-only. Ordinary initialization never installs hooks implicitly.
 
 The full guide, generated files, client trust steps and security boundaries are in [docs/guides/claude-code-hooks.md](docs/guides/claude-code-hooks.md).
 

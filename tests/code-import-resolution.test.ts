@@ -227,6 +227,31 @@ test("Python dotted and relative imports resolve one module or package without b
 });
 
 
+test("file module references do not use consumed database names as aliases for the file", async () => {
+  const registry = createDefaultKnowledgeAdapterRegistry();
+  for (const [targetPath, targetContent, sourcePath, sourceContent, negativePath, negativeContent] of [
+    ["reader.ts", 'export function read() { throw new Error("update the index"); }\nexport const query = "SELECT id FROM orders";',
+      "caller.ts", 'import { read } from "./reader.js";\nexport function run(the: string) { read(); return the; }',
+      "unrelated.ts", 'export const query = "SELECT id FROM orders";\nexport const the = 1;'],
+    ["reader.py", 'def read():\n    return "SELECT id FROM orders"\n',
+      "caller.py", 'from reader import read\n\ndef run():\n    return read()\n',
+      "unrelated.py", 'query = "SELECT id FROM orders"\n'],
+  ]) {
+    const fragments = [];
+    for (const [path, content] of [[targetPath!, targetContent!], [sourcePath!, sourceContent!], [negativePath!, negativeContent!]]) {
+      fragments.push(...await registry.resolve({ path: path! })!.extract({ repositoryRoot: "/fixture", path: path!, content: content! }));
+    }
+    const target = fragments.find((f) => f.path === targetPath && f.kind === "module")!;
+    assert.ok(target.databaseRefs.includes("orders"), "database usage remains available as evidence");
+    const runtime = new CodeQueryRuntime({ version: 2, adapters: registry.roster(), generatedAt: "fixture", files: [], fragments });
+    const incoming = runtime.references(target.id, {}, 100);
+    assert.ok(incoming.some((r) => r.source.path === sourcePath && r.source.kind === "module" && r.relation === "import"));
+    assert.ok(!incoming.some((r) => r.source.path === negativePath), "sharing a database does not reference the other file");
+    assert.ok(!incoming.some((r) => r.source.path === targetPath), "a file's own database usage is not an incoming file reference");
+    assert.deepEqual(runtime.referencesTo([target], {}, 100), incoming, "single and batched queries share the corrected interpretation");
+  }
+});
+
 // These are capability expectations, not parity with the old stem heuristic.
 // Missing import edges must fail visibly even when extraction itself succeeds.
 for (const [language, targetPath, targetSource, sourcePath, importingSource, specifier] of [

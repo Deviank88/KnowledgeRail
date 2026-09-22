@@ -5,7 +5,7 @@ interface WorkspaceStateEntry {
 }
 
 const entries = new Map<string, WorkspaceStateEntry>();
-const DEFAULT_WORKSPACE_STATE_CAP = 32;
+const DEFAULT_WORKSPACE_STATE_CAP = 5;
 
 function normalized(root: string): string {
   return nodePath.resolve(root);
