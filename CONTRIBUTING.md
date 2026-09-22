@@ -53,3 +53,12 @@ KnowledgeRail follows semantic versioning for its public package and MCP contrac
 `BINDING_FORMAT_VERSION` and `REGISTRY_SCHEMA_VERSION` in `src/product.ts` version local interoperability formats independently from the npm package. Increment the relevant format constant whenever older processes cannot safely read the new representation. Changes to the supported MCP protocol era must preserve the documented compatibility adapter or be released as a major version.
 
 Patch releases contain backwards-compatible fixes. Minor releases may add compatible actions, optional fields, formats with transparent migration, and new protocol-era support. Every released version must be aligned in `package.json`, `package-lock.json`, `src/product.ts`, `server.json`, and `CHANGELOG.md`; `npm run release:verify` enforces that agreement.
+
+
+### Release channels
+
+Pushing a version tag runs `publish.yml`: validation, provenance-attested npm
+publication and the GitHub release. MCP Registry metadata is a separate explicit
+operation, `publish-mcp.yml`, dispatched on an already published version tag. Both
+workflows retain the protected `release` environment and its approval requirement.
+The MCP workflow verifies the selected tag and requires the npm version to exist.
