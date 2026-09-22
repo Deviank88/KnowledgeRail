@@ -298,3 +298,10 @@ they are not relabeled as measurements of this last source digest.
 | Warm MCP batch | 514.172 / 522.770 | 23.007 / 25.626 |
 
 At 1,056 fragments, warm MCP p50/p95 is 19.144/21.005 → 19.228/22.205 ms. Both versions already admit this smaller snapshot. The final 100-sample real-corpus cold gate above and the final deterministic/distribution checks also use this source digest.
+
+The first cross-platform CI run found a nondeterministic Windows test fixture:
+continuous same-size in-place writes could leave the observed file identity
+unchanged and fail to exercise all retries. The fixture now performs actual atomic
+replacements. Its four-read and uncached-result assertions are unchanged; the
+11 cache tests and TypeScript checks pass locally. This correction changes tests
+only, preserving the final production source digest and measurements above.

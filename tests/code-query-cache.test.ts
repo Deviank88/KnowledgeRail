@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { syncBuiltinESMExports } from "node:module";
 import * as fs from "node:fs/promises";
-import { writeFileSync, unlinkSync } from "node:fs";
+import { writeFileSync, unlinkSync, renameSync } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test, type TestContext } from "node:test";
@@ -237,7 +237,11 @@ test("continuous snapshot replacements exhaust retries without caching mismatche
     const parsed = parse(text, reviver);
     if (text.includes("cacheFixture")) {
       replacements++;
-      writeFileSync(file, original.replaceAll("cacheFixtureAlpha", `cacheFixtureVersion${replacements}`));
+      // Use actual replacement: same-size in-place writes can share filesystem
+      // timestamps on Windows and would not reliably exercise the retry path.
+      const replacement = `${file}.replacement`;
+      writeFileSync(replacement, original.replaceAll("cacheFixtureAlpha", `cacheFixtureVersion${replacements}`));
+      renameSync(replacement, file);
     }
     return parsed;
   });
