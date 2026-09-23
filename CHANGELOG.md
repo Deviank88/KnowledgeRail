@@ -4,6 +4,26 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.1] - 2026-09-23
+
+### Fixed
+
+- Make observed knowledge usage inspectable through `knowledge_admin action=usage`
+  with `options.action=audit`. Correlate native hook starts and completions by
+  client, session, actor and turn; distinguish knowledge before text search from
+  absent prior retrieval and unverifiable observations. Duplicate delivery,
+  overlapping calls, failed retrievals and incomplete logs cannot establish a
+  successful knowledge-first sequence.
+- Keep audit collection opt-in and project-local, with bounded retention and hashed
+  identifiers. Administrative calls do not count as retrieval. The report describes
+  observed calls, not comprehension, policy compliance or tamper-proof certification;
+  ordinary client setup does not install the custom observer.
+- Recognize plain and CommonMark angle-wrapped `code://repo/` and
+  `knowledge-rail://page/` evidence links in wiki lint without treating them as missing
+  relative files. Preserve diagnostics for genuinely missing Markdown destinations.
+- Correct the obsolete unpublished-status note for 2.9.0 and document the usage audit
+  options and observation limits.
+
 ## [2.9.0] - 2026-09-22
 
 ### Added
@@ -53,7 +73,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   and CLI `--no-ledger` preserve the stored state. Read-only bindings do not record usage.
 
 See [memory evolution](docs/guides/memory-evolution.md) for configuration, guarantees
-and evaluation limits. This work is not tagged or published as a release.
+and evaluation limits. Released on GitHub and npm on 2026-09-22.
 
 ## [2.8.7] - 2026-09-22
 

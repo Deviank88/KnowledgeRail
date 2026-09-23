@@ -113,6 +113,50 @@ boost for comparison while leaving observations available.
 {"action":"usage","options":{"action":"outcome","outcome":"failed"}}
 ```
 
+### Native usage audit
+
+`knowledge_admin` also exposes a read-only audit of opt-in, project-local native
+hook observations:
+
+```json
+{"action":"usage","options":{"action":"audit","days":7,"max_turns":20}}
+```
+
+`client` optionally filters `codex` or `claude`. `days` is bounded to 1..30 and
+`max_turns` to 1..100. The observer stores metadata in the project root's
+`.knowledge-rail/usage-audit/`, separately from the wiki usage ledger. The existing
+`usage reset` affects the ranking ledger only. No new top-level tool is added.
+
+Native SessionStart/UserPromptSubmit (and subagent start) establish observation
+boundaries; PreToolUse records starts and PostToolUse records completions. The local
+hook bridge calls `observeUsage` from `dist/runtime/usage-observer.js`, passing a
+classified tool invocation. This observer is opt-in; the standard client setup
+currently installs awareness/drift hooks and does not install this custom collector.
+
+The audit correlates client, session, actor, turn and call IDs. Codex native turn IDs
+are preferred; without them an observed prompt boundary is used. These are not
+semantic task IDs. A successful knowledge retrieval must complete **before** a text
+search starts. Admin/status/audit calls are excluded. Coverage and successful reads
+are reported separately, so an insufficient retrieval is not presented as complete
+evidence. Reads cover observed `knowledge_page/code read` calls; direct MCP
+`resources/read` outside those hooks is not attributed.
+
+Verdicts are `knowledge_before_search`, `search_without_prior_knowledge`,
+`not_verifiable`, or `no_text_search`. The second means no prior successful retrieval
+was observed within that turn; it does not establish a policy violation (context may
+be reused, and shell searches include valid checks and output filters). Missing
+boundaries, unmatched search events, opaque results, tied timestamps, malformed data
+and conflicting duplicates cannot produce a positive attestation. No observation
+store returns `not_observed`, not proof of zero use. The audit does not assess
+comprehension or provide tamper-proof certification.
+
+The collector hashes IDs and resource URIs, retains no prompt, command, content or
+output, caps daily files at 5 MiB and prunes files older than 30 days at session start.
+Reads are bounded to 20 MiB/30,000 events with explicit incomplete results. Local
+rules, hook definitions and observation files remain ignored by Git. Adding a
+PreToolUse definition requires the client's normal review/trust flow; the observer
+never grants permission or blocks execution.
+
 Code-related task context may include `repositoryMap`: declarations, paths, known
 manifest components, and bounded call/import relations expanded to depth two. It
 contains no function bodies, performs no build, and shares the existing token budget.

@@ -279,10 +279,10 @@ const DocumentSchema = z.object({
 
 const AdminSchema = z.object({
   action: z.enum(["init", "status", "checkpoint", "usage", "semantic_setup", "consolidate", "client_setup", "lint", "drift", "migrate"])
-    .describe("init=bootstrap;checkpoint=rebuild;usage=stats/reset;semantic_setup=models;consolidate=review;client_setup=hooks;lint=broken links/orphan pages;migrate=upgrade."),
+    .describe("init=bootstrap;checkpoint=rebuild;usage=stats/audit/reset;semantic_setup=models;consolidate=review;client_setup=hooks;lint=broken links/orphan pages;migrate=upgrade."),
   force: z.boolean().default(false).describe("lint: repair nested wiki."),
   options: z.record(z.string(), z.unknown()).optional()
-    .describe("usage:{action:status|reset|outcome,outcome:succeeded|failed};semantic_setup:{model};consolidate:{days,proposals}."),
+    .describe("usage:{action:status|audit|reset|outcome,days,max_turns,client:codex|claude,outcome:succeeded|failed};semantic_setup:{model};consolidate:{days,proposals}."),
   integrity_mode: z.enum(["metadata", "content"]).default("metadata"),
   include_orphans: z.boolean().default(true),
   include_missing: z.boolean().default(true),
@@ -353,6 +353,7 @@ export const AGENT_STATES = [
   "workspace_initialized",
   "checkpoint_complete",
   "usage_status_complete",
+  "usage_audit_complete",
   "semantic_setup_complete",
   "consolidation_complete",
   "client_setup_ready",
@@ -1079,7 +1080,22 @@ export function registerAgentTools(
         });
       }
       if (args.action === "usage") {
-        const options = z.object({ action: z.enum(["status", "reset", "outcome"]).default("status"), outcome: z.enum(["succeeded", "failed"]).optional() }).strict().parse(args.options ?? {});
+        const options = z.object({
+          action: z.enum(["status", "audit", "reset", "outcome"]).default("status"),
+          outcome: z.enum(["succeeded", "failed"]).optional(),
+          days: z.number().int().min(1).max(30).optional(),
+          max_turns: z.number().int().min(1).max(100).optional(),
+          client: z.enum(["codex", "claude"]).optional(),
+        }).strict().parse(args.options ?? {});
+        if (options.action === "audit") {
+          const { usageAudit } = await import("../core/usage-audit.js");
+          const audit = await usageAudit(getWikiRoot(), { days: options.days, maxTurns: options.max_turns, client: options.client });
+          return withGuidance({
+            content: [{ type: "text", text: `Usage audit: ${audit.observationStatus}; ${audit.summary.knowledgeBeforeSearch} turn(s) with knowledge before search, ${audit.summary.searchWithoutPriorKnowledge} without a prior successful retrieval, ${audit.summary.notVerifiable} not verifiable. Local observations attest calls, not comprehension or policy compliance.` }],
+            structuredContent: { action: "usage", audit },
+          }, "usage_audit_complete", null,
+          audit.observationStatus === "not_observed" ? "No native hook events observed. Restart the client after hook activation; absence of observations is not zero usage." : undefined);
+        }
         let outcomeRecorded: boolean | undefined;
         if (options.action === "outcome") {
           if (!options.outcome) return errorResult("usage action=outcome requires options.outcome=succeeded|failed.");

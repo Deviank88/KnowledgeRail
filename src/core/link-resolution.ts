@@ -7,10 +7,15 @@ export const WIKI_LINK_RE = /\[\[([^\]]+)\]\]/g;
 export const MARKDOWN_LINK_RE = /\[([^\]]+)\]\(([^)#\s]+(?:#[^)\s]*)?)\)/g;
 
 export function isExternalLinkTarget(target: string): boolean {
+  // Generated evidence uses CommonMark angle-wrapped MCP resource destinations.
+  // These are materialized through their resource reader, not wiki filesystem paths.
+  const uri = target.startsWith("<") && target.endsWith(">") ? target.slice(1, -1) : target;
   return (
-    target.startsWith("http://") ||
-    target.startsWith("https://") ||
-    target.startsWith("#")
+    uri.startsWith("http://") ||
+    uri.startsWith("https://") ||
+    uri.startsWith("code://repo/") ||
+    uri.startsWith("knowledge-rail://page/") ||
+    uri.startsWith("#")
   );
 }
 

@@ -463,6 +463,33 @@ test("wikilinks resolve canonical frontmatter titles before legacy filenames", a
   assert.equal(lint.content[0].text, "Wiki lint passed. No problems found.");
 });
 
+test("wiki lint distinguishes MCP evidence URIs from broken relative file links", async (t) => {
+  const { root, tools } = await setupWorkspace();
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const write = await tools.get("wiki_write_page")!({
+    path: "concepts/Evidence.md",
+    content: [
+      "---", 'title: "Evidence links"', "type: concept", "tags: [evidence]",
+      "created: 2026-09-23", "updated: 2026-09-23", "sources: []", "---",
+      "# Evidence links",
+      "[Generated code citation](<code://repo/src/example.ts#symbol-example>)",
+      "[Code citation](code://repo/src/example.ts#symbol-example)",
+      "[Passage](<knowledge-rail://page/concepts/Evidence.md?passage=p-example>)",
+      "[Page](knowledge-rail://page/concepts/Evidence.md)",
+      "[Website](<https://example.com/evidence>)",
+      "[Missing page](Missing.md)",
+    ].join("\n"),
+  });
+  assert.equal(write.isError, undefined);
+  const lint = await tools.get("wiki_lint")!({
+    include_orphans: false, include_missing: true, include_broken_links: true,
+  });
+  assert.equal(lint.isError, undefined);
+  assert.match(lint.content[0].text, /ERROR BROKEN_LINK: concepts\/Evidence.md -> Missing.md/);
+  assert.doesNotMatch(lint.content[0].text, /-> <?(?:code|knowledge-rail|https):/);
+  assert.equal((lint.content[0].text.match(/ERROR BROKEN_LINK:/g) ?? []).length, 1);
+});
+
 test("wiki_move_page updates wikilinks and relative markdown links", async () => {
   const { root, tools } = await setupWorkspace();
   await fs.writeFile(path.join(docsCategoryDir("client"), "source.md"), "alpha source", "utf-8");

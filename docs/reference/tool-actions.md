@@ -26,9 +26,9 @@ Actions/modes: `init`, `status`, `checkpoint`, `usage`, `semantic_setup`, `conso
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
 |---|---|---:|---|---|---|
-| `action` | `init` &#124; `status` &#124; `checkpoint` &#124; `usage` &#124; `semantic_setup` &#124; `consolidate` &#124; `client_setup` &#124; `lint` &#124; `drift` &#124; `migrate` | yes | — | — | init=bootstrap;checkpoint=rebuild;usage=stats/reset;semantic_setup=models;consolidate=review;client_setup=hooks;lint=broken links/orphan pages;migrate=upgrade. |
+| `action` | `init` &#124; `status` &#124; `checkpoint` &#124; `usage` &#124; `semantic_setup` &#124; `consolidate` &#124; `client_setup` &#124; `lint` &#124; `drift` &#124; `migrate` | yes | — | — | init=bootstrap;checkpoint=rebuild;usage=stats/audit/reset;semantic_setup=models;consolidate=review;client_setup=hooks;lint=broken links/orphan pages;migrate=upgrade. |
 | `force` | boolean | no | `false` | — | lint: repair nested wiki. |
-| `options` | object | no | — | — | usage:{action:status&#124;reset&#124;outcome,outcome:succeeded&#124;failed};semantic_setup:{model};consolidate:{days,proposals}. |
+| `options` | object | no | — | — | usage:{action:status&#124;audit&#124;reset&#124;outcome,days,max_turns,client:codex&#124;claude,outcome:succeeded&#124;failed};semantic_setup:{model};consolidate:{days,proposals}. |
 | `integrity_mode` | `metadata` &#124; `content` | no | `"metadata"` | — | — |
 | `include_orphans` | boolean | no | `true` | — | — |
 | `include_missing` | boolean | no | `true` | — | — |
