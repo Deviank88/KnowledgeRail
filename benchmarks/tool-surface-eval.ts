@@ -248,6 +248,8 @@ const ROUTING_GOLDENS = [
   ["Bootstrap KnowledgeRail in this repository", "knowledge_admin", "init"],
   ["Validate the knowledge base for broken links and orphan pages", "knowledge_admin", "lint"],
   ["Upgrade the stored knowledge format without losing project data", "knowledge_admin", "migrate"],
+  ["Inspect usage audit to check whether knowledge preceded a text search", "knowledge_admin", "usage"],
+  ["Inspect the usage ledger stats", "knowledge_admin", "usage"],
 ] as const;
 
 function routeFromCatalog(task: string, tools: readonly CatalogTool[]): { tool: string; discriminator?: string } {

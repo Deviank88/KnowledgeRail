@@ -28,7 +28,7 @@ Actions/modes: `init`, `status`, `checkpoint`, `usage`, `semantic_setup`, `conso
 |---|---|---:|---|---|---|
 | `action` | `init` &#124; `status` &#124; `checkpoint` &#124; `usage` &#124; `semantic_setup` &#124; `consolidate` &#124; `client_setup` &#124; `lint` &#124; `drift` &#124; `migrate` | yes | — | — | init=bootstrap;checkpoint=rebuild;usage=stats/audit/reset;semantic_setup=models;consolidate=review;client_setup=hooks;lint=broken links/orphan pages;migrate=upgrade. |
 | `force` | boolean | no | `false` | — | lint: repair nested wiki. |
-| `options` | object | no | — | — | usage:{action:status&#124;audit&#124;reset&#124;outcome,days,max_turns,client:codex&#124;claude,outcome:succeeded&#124;failed};semantic_setup:{model};consolidate:{days,proposals}. |
+| `options` | object | no | — | — | usage: action=status&#124;audit&#124;reset&#124;outcome; audit accepts days(1..30), max_turns(1..100), client(codex&#124;claude); outcome requires outcome=succeeded&#124;failed. semantic_setup:{model};consolidate:{days,proposals}. |
 | `integrity_mode` | `metadata` &#124; `content` | no | `"metadata"` | — | — |
 | `include_orphans` | boolean | no | `true` | — | — |
 | `include_missing` | boolean | no | `true` | — | — |
@@ -51,7 +51,7 @@ Actions/modes: `rebuild`, `update`, `remove`, `search`, `symbol`, `references`, 
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
 |---|---|---:|---|---|---|
-| `action` | `rebuild` &#124; `update` &#124; `remove` &#124; `search` &#124; `symbol` &#124; `references` &#124; `read` &#124; `status` &#124; `record_fallback` | yes | — | — | rebuild=recreate;search=find;symbol=definition;references=callers;read=URI;record_fallback=raw lookup. |
+| `action` | `rebuild` &#124; `update` &#124; `remove` &#124; `search` &#124; `symbol` &#124; `references` &#124; `read` &#124; `status` &#124; `record_fallback` | yes | — | — | rebuild=recreate;search=find snippets;symbol=definition;references=find callers;read=URI;record_fallback=raw lookup. |
 | `path` | string | no | — | length ≥ 1 | — |
 | `query` | string | no | — | length ≥ 1; length ≤ 4096 | — |
 | `symbol` | string | no | — | length ≥ 1; length ≤ 512 | — |

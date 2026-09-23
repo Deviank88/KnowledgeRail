@@ -23,6 +23,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   relative files. Preserve diagnostics for genuinely missing Markdown destinations.
 - Correct the obsolete unpublished-status note for 2.9.0 and document the usage audit
   options and observation limits.
+- Clarify audit options and caller lookup in the tool catalog. Allow 13,650 bytes /
+  4,550 estimated tokens to preserve readable hints, with unchanged correctness
+  thresholds and additional usage-routing checks.
 
 ## [2.9.0] - 2026-09-22
 

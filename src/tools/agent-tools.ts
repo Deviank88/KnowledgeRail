@@ -282,7 +282,7 @@ const AdminSchema = z.object({
     .describe("init=bootstrap;checkpoint=rebuild;usage=stats/audit/reset;semantic_setup=models;consolidate=review;client_setup=hooks;lint=broken links/orphan pages;migrate=upgrade."),
   force: z.boolean().default(false).describe("lint: repair nested wiki."),
   options: z.record(z.string(), z.unknown()).optional()
-    .describe("usage:{action:status|audit|reset|outcome,days,max_turns,client:codex|claude,outcome:succeeded|failed};semantic_setup:{model};consolidate:{days,proposals}."),
+    .describe("usage: action=status|audit|reset|outcome; audit accepts days(1..30), max_turns(1..100), client(codex|claude); outcome requires outcome=succeeded|failed. semantic_setup:{model};consolidate:{days,proposals}."),
   integrity_mode: z.enum(["metadata", "content"]).default("metadata"),
   include_orphans: z.boolean().default(true),
   include_missing: z.boolean().default(true),

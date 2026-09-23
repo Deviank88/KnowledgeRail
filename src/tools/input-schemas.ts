@@ -91,7 +91,7 @@ export const RecoveredCodeEvidenceInputSchema = z.object({
 
 export const CodeEvidenceInputSchema = z.object({
   action: CodeActionSchema.describe(
-    "rebuild=recreate;search=find;symbol=definition;references=callers;read=URI;record_fallback=raw lookup."
+    "rebuild=recreate;search=find snippets;symbol=definition;references=find callers;read=URI;record_fallback=raw lookup."
   ),
   path: z.string().min(1).optional(),
   query: z.string().min(1).max(4_096).optional(),
