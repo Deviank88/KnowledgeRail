@@ -29,7 +29,8 @@
     "SECURITY.md",
     "assets/knowledge-rail-logo.png",
     "dist",
-    "server.json"
+    "server.json",
+    "scripts/prepare-ollama-reranker.py"
   ],
   "type": "module",
   "main": "dist/index.js",

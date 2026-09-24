@@ -77,7 +77,7 @@ Actions/modes: `task`, `list`, `search`, `graph`.
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
 |---|---|---:|---|---|---|
-| `mode` | `task` &#124; `list` &#124; `search` &#124; `graph` | no | `"task"` | — | task=evidence/gaps;list=pages;search=passages;graph=relations/dependencies. |
+| `mode` | `task` &#124; `list` &#124; `search` &#124; `graph` | no | `"task"` | — | task=context;list=pages;search=passages;graph=relations. |
 | `intent` | `understand` &#124; `implement` &#124; `modify` &#124; `debug` &#124; `review` &#124; `document` | no | `"understand"` | — | — |
 | `objective` | string | no | — | length ≥ 1; length ≤ 4096 | — |
 | `query` | string | no | — | length ≥ 1; length ≤ 4096 | — |
@@ -88,7 +88,9 @@ Actions/modes: `task`, `list`, `search`, `graph`.
 | `heuristic_token_budget` | integer | no | `2000` | ≥ 256; ≤ 12000 | — |
 | `response_detail` | `compact` &#124; `full` | no | `"compact"` | — | — |
 | `include_repository_map` | boolean | no | — | — | — |
-| `as_of` | string | no | — | — | Claim validity at a UTC ISO timestamp. |
+| `as_of` | string | no | — | — | UTC claim validity. |
+| `evidence_cursor` | string | no | — | — | start or cursor. |
+| `history_cursor` | string | no | — | — | start or cursor. |
 | `max_results` | integer | no | `10` | ≥ 1; ≤ 100 | — |
 | `max_nodes` | integer | no | `12` | ≥ 1; ≤ 100 | — |
 | `max_depth` | integer | no | `1` | ≥ 0; ≤ 8 | — |

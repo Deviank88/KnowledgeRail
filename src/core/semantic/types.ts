@@ -9,10 +9,12 @@ export interface EmbeddingProviderDescriptor {
 
 export interface EmbeddingProvider {
   readonly descriptor: EmbeddingProviderDescriptor;
-  embedDocuments(texts: readonly string[]): Promise<readonly (readonly number[])[]>;
-  embedQuery(text: string): Promise<readonly number[]>;
+  /** Background request ceiling; foreground requests also carry their shared deadline. */
+  readonly timeoutMs?: number;
+  embedDocuments(texts: readonly string[], signal?: AbortSignal): Promise<readonly (readonly number[])[]>;
+  embedQuery(text: string, signal?: AbortSignal): Promise<readonly number[]>;
   /** Optional batch form used to keep semantic coverage to one provider round trip. */
-  embedQueries?(texts: readonly string[]): Promise<readonly (readonly number[])[]>;
+  embedQueries?(texts: readonly string[], signal?: AbortSignal): Promise<readonly (readonly number[])[]>;
 }
 
 export interface AnnEngineDescriptor {
@@ -25,6 +27,9 @@ export interface AnnEngineDescriptor {
   probes?: number;
   minimumScore?: number;
   seed?: string;
+  m?: number;
+  efConstruction?: number;
+  efSearch?: number;
 }
 
 export type SemanticVector = Float32Array | Int8Array;
@@ -49,6 +54,17 @@ export interface AnnSearchDiagnostics {
   visitedBuckets: number;
   vectorCount: number;
   indexMode?: "ann" | "exact";
+  thresholdRejected?: number;
+  poolTruncated?: number;
+  distanceComputations?: number;
+  graphReady?: boolean;
+  graphRestored?: boolean;
+}
+
+export interface AnnSearchOptions {
+  /** Candidate admission only; never a coverage threshold. */
+  minimumScore?: number;
+  signal?: AbortSignal;
 }
 
 export interface AnnSearchResult {
@@ -61,10 +77,13 @@ export interface AnnEngine {
   rebuild(entries: readonly AnnVectorEntry[]): void;
   upsert(entry: AnnVectorEntry): void;
   remove(id: string): void;
-  search(vector: readonly number[], k: number): AnnSearchResult;
+  search(vector: readonly number[], k: number, options?: AnnSearchOptions): AnnSearchResult;
   signatures?(id: string): AnnSignatures | undefined;
   restore?(entries: readonly AnnVectorEntry[], normalized?: boolean): void;
   ready?(): Promise<void>;
+  /** Optional derived graph, bound to the exact owned vectors and engine descriptor. */
+  snapshot?(): Uint8Array | undefined;
+  restoreSnapshot?(entries: readonly AnnVectorEntry[], bytes: Uint8Array): boolean;
   dispose?(): void;
 }
 
@@ -88,13 +107,31 @@ export interface SemanticIndexDescriptor {
   pendingPages?: number;
   reason?: string;
   dtype?: "f32" | "i8";
+  candidatePolicy?: "threshold" | "top-k";
 }
 
-export interface SemanticSearchDiagnostics {
-  candidateCount: number;
-  visitedBuckets: number;
-  vectorCount: number;
-  indexMode?: "ann" | "exact";
+export interface SemanticSearchDiagnostics extends AnnSearchDiagnostics {
+  candidatePolicy?: "threshold" | "top-k";
+  requestedPool?: number;
+  searchedPool?: number;
+  searchPasses?: number;
+  candidateLimitReached?: boolean;
+  approximate?: boolean;
+  returnedPassages?: number;
+  distinctPages?: number;
+  filteredPassages?: number;
+  stalePassages?: number;
+  deduplicatedPassages?: number;
+}
+
+export interface SemanticSearchOptions {
+  candidatePolicy?: "threshold" | "top-k";
+  /** k is an initial batch, not a final evidence quota. */
+  expandCandidates?: boolean;
+  maximumCandidates?: number;
+  signal?: AbortSignal;
+  distinctPages?: boolean;
+  pagePaths?: ReadonlySet<string>;
 }
 
 export interface SemanticSearchResult {
@@ -126,7 +163,7 @@ export interface SemanticIndex {
   readonly descriptor: SemanticIndexDescriptor;
   upsertPassages(pagePath: string, passages: WikiPassage[]): Promise<void>;
   removePage(pagePath: string): Promise<void>;
-  search(query: string, k: number): Promise<SemanticHit[]>;
+  search(query: string, k: number, options?: SemanticSearchOptions): Promise<SemanticHit[]>;
   prioritize?(pagePaths: readonly string[], budgetMs?: number): Promise<void>;
   /**
    * Scores coverage concepts against indexed passages on the requested pages.
@@ -135,7 +172,8 @@ export interface SemanticIndex {
    */
   assessCoverage?(
     queries: readonly SemanticCoverageQuery[],
-    pagePaths: readonly string[]
+    pagePaths: readonly string[],
+    signal?: AbortSignal
   ): Promise<SemanticCoverageScore[]>;
 }
 
@@ -146,5 +184,5 @@ export interface SynchronizableSemanticIndex extends SemanticIndex {
     removedPages: number;
     embeddedPassages: number;
   }>;
-  searchWithDiagnostics(query: string, k: number): Promise<SemanticSearchResult>;
+  searchWithDiagnostics(query: string, k: number, options?: SemanticSearchOptions): Promise<SemanticSearchResult>;
 }

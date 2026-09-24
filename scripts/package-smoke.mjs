@@ -98,6 +98,7 @@ try {
     "README.md",
     "LICENSE",
     "package.json",
+    "scripts/prepare-ollama-reranker.py",
     "server.json",
     "assets/knowledge-rail-logo.png",
     "docs/guides/claude-code-hooks.md",

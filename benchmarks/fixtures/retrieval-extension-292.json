@@ -1,0 +1,569 @@
+{
+  "provenance": "Frozen before extension predictions. New authored formulations over the same judged pages; not independent human labels or new domains. The old evaluation split has already been inspected.",
+  "queries": [
+    {
+      "id": "durability-extension-0",
+      "split": "holdout",
+      "category": "lifecycle",
+      "language": "it",
+      "query": "Al prossimo avvio devo ricalcolare anche gli embedding dei documenti che non ho toccato?",
+      "relevant": [
+        {
+          "path": "memory/memory-00.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "durability-extension-1",
+      "split": "holdout",
+      "category": "lifecycle",
+      "language": "en",
+      "query": "What lets the application reuse unchanged document vectors across process restarts?",
+      "relevant": [
+        {
+          "path": "memory/memory-00.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "static-extension-0",
+      "split": "holdout",
+      "category": "paraphrase",
+      "language": "it",
+      "query": "Vorrei usare vettori locali senza tenere Ollama in esecuzione: quale percorso è previsto?",
+      "relevant": [
+        {
+          "path": "memory/memory-01.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "static-extension-1",
+      "split": "holdout",
+      "category": "paraphrase",
+      "language": "en",
+      "query": "Is there an embedding option that needs no continuously running inference server?",
+      "relevant": [
+        {
+          "path": "memory/memory-01.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "usage-extension-0",
+      "split": "holdout",
+      "category": "exact_identifier",
+      "language": "it",
+      "query": "Quale valore di KNOWLEDGE_RAIL_USAGE_RANKING elimina il contributo delle letture precedenti?",
+      "relevant": [
+        {
+          "path": "memory/memory-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "usage-extension-1",
+      "split": "holdout",
+      "category": "exact_identifier",
+      "language": "en",
+      "query": "How can KNOWLEDGE_RAIL_USAGE_RANKING be switched off for a reproducible ranking experiment?",
+      "relevant": [
+        {
+          "path": "memory/memory-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "audit-extension-0",
+      "split": "holdout",
+      "category": "similar_pages",
+      "language": "it",
+      "query": "L’ordine registrato fra recupero e ricerca testuale certifica che l’agente abbia compreso i documenti?",
+      "relevant": [
+        {
+          "path": "memory/memory-03.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "audit-extension-1",
+      "split": "holdout",
+      "category": "similar_pages",
+      "language": "en",
+      "query": "Does the observed order of retrieval and text searches prove that an agent followed every instruction?",
+      "relevant": [
+        {
+          "path": "memory/memory-03.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "claims-extension-0",
+      "split": "holdout",
+      "category": "exact_identifier",
+      "language": "it",
+      "query": "Devo interrogare una decisione alla data di ieri: come interagiscono as_of e valid_until?",
+      "relevant": [
+        {
+          "path": "memory/memory-04.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "claims-extension-1",
+      "split": "holdout",
+      "category": "exact_identifier",
+      "language": "en",
+      "query": "How do valid_from, valid_until and as_of define which claims apply to a past date?",
+      "relevant": [
+        {
+          "path": "memory/memory-04.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "measurements-extension-0",
+      "split": "holdout",
+      "category": "many_passages",
+      "language": "it",
+      "query": "Posso confrontare direttamente tempi con vettori finti e latenza di una richiesta a Ollama?",
+      "relevant": [
+        {
+          "path": "memory/memory-05.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "measurements-extension-1",
+      "split": "holdout",
+      "category": "many_passages",
+      "language": "en",
+      "query": "Which published timings include real model inference rather than synthetic vector loading?",
+      "relevant": [
+        {
+          "path": "memory/memory-05.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "references-extension-0",
+      "split": "holdout",
+      "category": "similar_pages",
+      "language": "it",
+      "query": "Perché references mostra dipendenze irrisolte anche al di fuori del simbolo cercato?",
+      "relevant": [
+        {
+          "path": "code/code-01.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "references-extension-1",
+      "split": "holdout",
+      "category": "similar_pages",
+      "language": "en",
+      "query": "Are unresolved imports shown by references specific to the requested symbol or a broader inventory?",
+      "relevant": [
+        {
+          "path": "code/code-01.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "fallback-extension-0",
+      "split": "holdout",
+      "category": "exact_identifier",
+      "language": "it",
+      "query": "Dopo una ricerca nel codice senza esito, quale requestId accompagna record_fallback?",
+      "relevant": [
+        {
+          "path": "code/code-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "fallback-extension-1",
+      "split": "holdout",
+      "category": "exact_identifier",
+      "language": "en",
+      "query": "How is a shell-search fallback associated with its preceding indexed code request?",
+      "relevant": [
+        {
+          "path": "code/code-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "impact-extension-0",
+      "split": "holdout",
+      "category": "filter",
+      "language": "it",
+      "query": "Come passo changed_paths al recupero del contesto per circoscrivere l’impatto della modifica?",
+      "relevant": [
+        {
+          "path": "code/code-03.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "implementation"
+      ]
+    },
+    {
+      "id": "impact-extension-1",
+      "split": "holdout",
+      "category": "filter",
+      "language": "en",
+      "query": "Where should changed_paths be supplied to retrieve context for the files being modified?",
+      "relevant": [
+        {
+          "path": "code/code-03.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "implementation"
+      ]
+    },
+    {
+      "id": "boundary-extension-0",
+      "split": "holdout",
+      "category": "paraphrase",
+      "language": "it",
+      "query": "Due conversazioni lavorano su repository diversi: cosa impedisce lo scambio del workspace attivo?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-01.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "boundary-extension-1",
+      "split": "holdout",
+      "category": "paraphrase",
+      "language": "en",
+      "query": "How are project selections isolated when two conversations use different repositories?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-01.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "state-extension-0",
+      "split": "holdout",
+      "category": "exact_identifier",
+      "language": "it",
+      "query": "Come scelgo un’altra cartella con KNOWLEDGE_RAIL_STATE_DIR sul Mac?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "state-extension-1",
+      "split": "holdout",
+      "category": "exact_identifier",
+      "language": "en",
+      "query": "What is the macOS location for local state, and how does KNOWLEDGE_RAIL_STATE_DIR override it?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "workspace-extension-0",
+      "split": "holdout",
+      "category": "exact_identifier",
+      "language": "it",
+      "query": "KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP limita anche quanti progetti possono esistere su disco?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-08.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "workspace-extension-1",
+      "split": "holdout",
+      "category": "exact_identifier",
+      "language": "en",
+      "query": "What happens to cached project state when KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP is exceeded?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-08.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "drift-extension-0",
+      "split": "holdout",
+      "category": "filter",
+      "language": "it",
+      "query": "Prima del commit voglio verificare soltanto le evidenze collegate ai file nell’area di staging.",
+      "relevant": [
+        {
+          "path": "hosting/hosting-03.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "overview"
+      ]
+    },
+    {
+      "id": "drift-extension-1",
+      "split": "holdout",
+      "category": "filter",
+      "language": "en",
+      "query": "How can a pre-commit drift check be limited to staged source files?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-03.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "overview"
+      ]
+    },
+    {
+      "id": "setup-extension-0",
+      "split": "holdout",
+      "category": "similar_pages",
+      "language": "it",
+      "query": "Se installo gli hook, come vengono protetti contenuto e modalità del file di configurazione preesistente?",
+      "relevant": [
+        {
+          "path": "hooks/hooks-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "setup-extension-1",
+      "split": "holdout",
+      "category": "similar_pages",
+      "language": "en",
+      "query": "Does hook installation preserve the original configuration bytes and file permissions?",
+      "relevant": [
+        {
+          "path": "hooks/hooks-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "trust-extension-0",
+      "split": "holdout",
+      "category": "filter",
+      "language": "it",
+      "query": "Quando cambiano le definizioni degli hook, posso riutilizzare senza controllo la fiducia accordata prima?",
+      "relevant": [
+        {
+          "path": "hooks/hooks-04.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "rule"
+      ]
+    },
+    {
+      "id": "trust-extension-1",
+      "split": "holdout",
+      "category": "filter",
+      "language": "en",
+      "query": "Which hook definitions must be reviewed before allowing their execution in Codex?",
+      "relevant": [
+        {
+          "path": "hooks/hooks-04.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "rule"
+      ]
+    },
+    {
+      "id": "ocr-extension-0",
+      "split": "holdout",
+      "category": "many_passages",
+      "language": "it",
+      "query": "Un’immagine scansionata viene trascritta automaticamente dal percorso di importazione dei documenti?",
+      "relevant": [
+        {
+          "path": "readme/readme-21.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "ocr-extension-1",
+      "split": "holdout",
+      "category": "many_passages",
+      "language": "en",
+      "query": "Which document import limitations apply when the source needs optical character recognition?",
+      "relevant": [
+        {
+          "path": "readme/readme-21.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "security-extension-0",
+      "split": "holdout",
+      "category": "filter",
+      "language": "it",
+      "query": "Una figura SVG con script incorporato può superare automaticamente la revisione degli asset?",
+      "relevant": [
+        {
+          "path": "security/security-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "rule"
+      ]
+    },
+    {
+      "id": "security-extension-1",
+      "split": "holdout",
+      "category": "filter",
+      "language": "en",
+      "query": "What active content in Mermaid or SVG assets must fail the review checks?",
+      "relevant": [
+        {
+          "path": "security/security-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "rule"
+      ]
+    },
+    {
+      "id": "remote-extension-0",
+      "split": "holdout",
+      "category": "similar_pages",
+      "language": "it",
+      "query": "L’adapter HTTP locale garantisce già l’isolamento necessario per ospitare clienti esterni?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-04.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "remote-extension-1",
+      "split": "holdout",
+      "category": "similar_pages",
+      "language": "en",
+      "query": "Is the bundled HTTP adapter by itself a production-ready public multi-tenant service?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-04.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "absent-medical-extension-0",
+      "split": "holdout",
+      "category": "absent",
+      "language": "it",
+      "query": "Quali sono le controindicazioni della vaccinazione contro la febbre gialla?",
+      "relevant": [],
+      "answerable": false
+    },
+    {
+      "id": "absent-medical-extension-1",
+      "split": "holdout",
+      "category": "absent",
+      "language": "en",
+      "query": "What dose of insulin should be prescribed to a newly diagnosed patient?",
+      "relevant": [],
+      "answerable": false
+    },
+    {
+      "id": "absent-astronomy-extension-0",
+      "split": "holdout",
+      "category": "absent",
+      "language": "it",
+      "query": "Quanto dura la fusione dell’elio nel nucleo di una gigante rossa?",
+      "relevant": [],
+      "answerable": false
+    },
+    {
+      "id": "absent-astronomy-extension-1",
+      "split": "holdout",
+      "category": "absent",
+      "language": "en",
+      "query": "How were the orbital elements of Neptune measured in the nineteenth century?",
+      "relevant": [],
+      "answerable": false
+    }
+  ]
+}

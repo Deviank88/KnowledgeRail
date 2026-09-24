@@ -23,12 +23,12 @@ async function checkedFile(directory: string, filename: FileName): Promise<strin
   if (!stat.isFile() || stat.isSymbolicLink() || path.dirname(await fs.realpath(file)) !== root) throw new Error("Static model assets must be regular local files.");
   return file;
 }
-async function hashFile(filename: string): Promise<string> {
+async function hashFile(filename: string, signal?: AbortSignal): Promise<string> {
   const handle = await fs.open(filename, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const hash = createHash("sha256"), block = Buffer.allocUnsafe(1024 * 1024);
     let read: number;
-    while ((read = (await handle.read(block)).bytesRead) > 0) hash.update(block.subarray(0, read));
+    while ((read = (await handle.read(block)).bytesRead) > 0) { signal?.throwIfAborted(); hash.update(block.subarray(0, read)); }
     return hash.digest("hex");
   } finally { await handle.close(); }
 }
@@ -42,13 +42,13 @@ export class StaticEmbeddingProvider implements EmbeddingProvider {
     this.descriptor = { id: "model2vec-local-v1", model, dimensions: spec.dimensions,
       version: createHash("sha256").update(JSON.stringify(spec)).digest("hex") };
   }
-  private load(): Promise<LoadedModel> {
-    return this.loaded ??= this.initialize().catch((error: unknown) => { this.loaded = undefined; throw error; });
+  private load(signal?: AbortSignal): Promise<LoadedModel> {
+    return this.loaded ??= this.initialize(signal).catch((error: unknown) => { this.loaded = undefined; throw error; });
   }
-  private async initialize(): Promise<LoadedModel> {
+  private async initialize(signal?: AbortSignal): Promise<LoadedModel> {
     for (const [name, hash] of Object.entries(this.spec.files)) {
       const file = await checkedFile(this.directory, name as FileName);
-      if (await hashFile(file) !== hash) throw new Error(`Static model integrity mismatch: ${name}. Run explicit semantic_setup or restore pinned assets.`);
+      if (await hashFile(file, signal) !== hash) throw new Error(`Static model integrity mismatch: ${name}. Run explicit semantic_setup or restore pinned assets.`);
     }
     const config = JSON.parse(await fs.readFile(path.join(this.directory, "config.json"), "utf8"));
     if (config.model_type !== "model2vec" || config.hidden_dim !== this.spec.dimensions) throw new Error("Unsupported static model config.");
@@ -77,24 +77,30 @@ export class StaticEmbeddingProvider implements EmbeddingProvider {
       // The budget covers the matrix; tokenizer metadata is reported separately.
       const table = size <= this.memoryBudgetBytes ? Buffer.allocUnsafe(size) : undefined;
       if (table && (await handle.read(table, 0, size, 8 + length)).bytesRead !== size) throw new Error("Truncated embedding matrix.");
+      signal?.throwIfAborted();
       return { tokenizer, unknown, rows, offset: 8 + length, ...(table ? { table } : {}) };
     } finally { await handle.close(); }
   }
-  async embedDocuments(texts: readonly string[]): Promise<readonly (readonly number[])[]> {
+  async embedDocuments(texts: readonly string[], signal?: AbortSignal): Promise<readonly (readonly number[])[]> {
+    signal?.throwIfAborted();
     if (!texts.length) return [];
     if (texts.length > 256) throw new Error("Static embedding batches are limited to 256 inputs.");
-    const model = await this.load(), dimensions = this.spec.dimensions;
+    const model = await this.load(signal), dimensions = this.spec.dimensions;
     const handle = model.table ? undefined : await fs.open(await checkedFile(this.directory, "model.safetensors"), constants.O_RDONLY | constants.O_NOFOLLOW);
     const row = Buffer.allocUnsafe(dimensions * 4);
     try {
       const output: number[][] = [];
       for (const text of texts) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        signal?.throwIfAborted();
         if (!text.trim() || text.length > 64_000 || text.includes("\0")) throw new Error("Embedding input must contain 1-64,000 characters.");
         const ids = model.tokenizer.encode(text, { add_special_tokens: false }).ids.filter((id) => id !== model.unknown);
         const weights = new Map<number, number>();
         for (const id of ids) weights.set(id, (weights.get(id) ?? 0) + 1);
         const vector = new Array<number>(dimensions).fill(0);
+        let processed = 0;
         for (const [id, count] of weights) {
+          if (++processed % 64 === 0) { await new Promise<void>((resolve) => setImmediate(resolve)); signal?.throwIfAborted(); }
           if (!Number.isInteger(id) || id < 0 || id >= model.rows) throw new Error("Tokenizer ID is outside the embedding matrix.");
           const buffer = model.table ?? row, offset = model.table ? id * dimensions * 4 : 0;
           if (handle && (await handle.read(row, 0, row.length, model.offset + id * row.length)).bytesRead !== row.length) throw new Error("Truncated embedding row.");
@@ -107,8 +113,8 @@ export class StaticEmbeddingProvider implements EmbeddingProvider {
       return output;
     } finally { await handle?.close(); }
   }
-  embedQueries(texts: readonly string[]) { return this.embedDocuments(texts); }
-  async embedQuery(text: string) { return (await this.embedDocuments([text]))[0]!; }
+  embedQueries(texts: readonly string[], signal?: AbortSignal) { return this.embedDocuments(texts, signal); }
+  async embedQuery(text: string, signal?: AbortSignal) { return (await this.embedDocuments([text], signal))[0]!; }
 }
 
 export async function setupStaticModel(wikiRoot: string, model: StaticModelName, download = false) {

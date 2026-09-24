@@ -157,6 +157,16 @@ export function recomputeEvidenceClaimStatuses(store: EvidenceIrStore, now: stri
       for (const id of resolution.targetClaimIds) elevate(id, "contradicted");
     }
   }
+  // Reinstatement creates a new sourced interval; never reopen or rewrite the old
+  // claim's interval. Closing the intervening decision requires explicit supersedes.
+  for (const claim of store.claims) for (const relation of claim.relations) {
+    if (relation.type !== "reinstates") continue;
+    const previous = store.claims.find((c) => c.id === relation.targetClaimId);
+    if (!previous || previous.id === claim.id || !previous.validUntil ||
+      Date.parse(previous.validUntil) > Date.parse(claim.validFrom ?? claim.createdAt)) {
+      throw new Error("Reinstatement requires an earlier closed claim interval and a new sourced claim.");
+    }
+  }
   for (const claim of store.claims) {
     const status = statuses.get(claim.id)!;
     if (claim.status !== status) {
@@ -190,6 +200,7 @@ export async function resolveEvidenceClaims(params: {
       const duplicates = store.claims
         .filter((item) =>
           item.id.localeCompare(claim.id) < 0 &&
+          !claim.relations.some((relation) => relation.type === "reinstates") &&
           normalizedClaimText(item.text) === normalizedClaimText(claim.text) &&
           proposedPage(item).path === proposed.path
         )

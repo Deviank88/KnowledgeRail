@@ -42,14 +42,28 @@ continuous query stream from starving the build. A request
 cannot preempt an already running provider batch. Inputs retain the existing 64,000
 character ceiling; no unvalidated truncation has been introduced.
 
-A context request waits up to 1,000 ms for prioritized pages. That is the page-priority
-wait budget, **not an end-to-end provider timeout**: loading, an in-flight provider
-batch, query embedding and coverage have their own costs. Provider requests retain the
-configured timeout. The index exposes `ready`, `building`, `degraded` or `absent`,
-with completed/total/pending pages. During `building`, coverage is `semantic-partial`:
+A context request gives the semantic contribution a shared 1,500 ms foreground
+budget by default (`KNOWLEDGE_RAIL_SEMANTIC_BUDGET_MS`, integer 1–30,000). It includes
+initialization, up to 1,000 ms of page-priority waiting, embedding queue time, query
+embedding, candidate reads and coverage across widening attempts. At expiry the
+request returns lexical/graph evidence with explicit diagnostics. Background batches
+remain separate; waiting behind a batch consumes foreground time. HTTP calls combine
+the shared cancellation signal with the configured per-call timeout. Local static
+providers check cancellation while loading and pooling. JavaScript and filesystem
+operations are cooperative; this is a bounded-wait policy, not a hard real-time SLA.
+
+The embedding queue admits at most 64 pending requests and keeps one provider call in
+flight, including a provider that ignores cancellation. Cancelled queued requests are
+removed. Three consecutive in-flight failures open a five-second circuit; the next
+admitted request probes recovery. Successful requests reset the failure count. An
+uncooperative provider that never settles retains its single slot until the workspace
+is disposed; additional calls cannot accumulate in-flight work.
+
+The index exposes `ready`, `building`, `degraded` or `absent`, with
+completed/total/pending pages. During `building`, coverage is `semantic-partial`:
 current vectors participate where available; remaining pages retain lexical coverage.
-Transient ranking can favor already embedded pages, and the response reports partial
-coverage. Missing configuration uses lexical retrieval; provider failures add a warning.
+Transient ranking can favor already embedded pages. Missing configuration uses lexical
+retrieval without network attempts; provider/configuration failures add a warning.
 
 Page writes, edits and ingestion invalidate touched pages immediately and prioritize
 regeneration. Canonical writes succeed even when the embedding provider fails; the
@@ -57,6 +71,118 @@ response reports pending/degraded work and later requests retry. Manual Markdown
 are reconciled by the lexical generation. `knowledge_admin action=status` reports
 semantic state; `action=checkpoint` compacts the journal. `force=true` clears the
 semantic generation and starts rebuilding it in background.
+
+## Candidate rescoring experiment retired (2.9.2)
+
+Int8 remains the default. The measured float32 rescoring experiment did not improve
+final ranking on the evaluated corpus and increased storage costs. The runtime no
+longer supports `KNOWLEDGE_RAIL_SEMANTIC_RESCORE`, dual storage, original-vector
+lookup/cache or rescoring diagnostics. Single-format float32 remains available for
+comparisons; it does not create a second vector matrix.
+
+Compatible experimental int8 snapshots and journals still reuse their document
+vectors. Retired original-vector references are ignored. A successful checkpoint
+rewrites metadata and removes `semantic-originals.bin` after committing the new
+snapshot and journal boundary; read-only retrieval does not remove files. Missing
+or corrupt retired originals do not require new embeddings. The active ANN graph
+and knowledge graph are preserved independently.
+
+`searchWithDiagnostics` still exposes ANN candidates, threshold/pool limits,
+returned passages, distinct pages and filtered/stale/deduplicated passages. Logical
+index I/O counters exclude filesystem metadata and physical-device/cache behavior.
+Shared deadlines, cancellation, fallback and canonical freshness checks remain.
+
+The [historical results](../../benchmarks/release-readiness-2.9.2.md) and
+[archived experiment sources](../../benchmarks/archive/semantic-rescoring-292/README.md)
+retain the completed research. Further arbitrary pool/parameter sweeps are outside
+this milestone; the frozen regression matrix and progressive expansion remain.
+
+## Candidate search, persisted HNSW and optional reranking (2.9.2)
+
+The experimental engine is selected with `KNOWLEDGE_RAIL_SEMANTIC_ENGINE=lsh|exact|hnsw`.
+LSH remains the default. `KNOWLEDGE_RAIL_SEMANTIC_CANDIDATES=threshold|top-k`
+separates candidate admission from coverage: `top-k` admits the nearest candidates
+without treating cosine as calibrated confidence. `KNOWLEDGE_RAIL_SEMANTIC_EXPAND=true`
+expands the initial batch using the same query embedding, up to the resource limit
+(1,000 candidates by default). Diagnostics expose the explored pool, search passes,
+approximation and exhausted limits. LSH expansion does not search additional buckets.
+An exhausted or approximate search does not establish that no other evidence exists.
+No parameter is based on the illustrative 90% mentioned during development.
+
+HNSW stores a checksummed binary topology in `semantic-graph.bin`. Numeric edge
+references reuse the ordered vector IDs; no page text or second vector matrix is
+stored in the graph. The snapshot binds the engine descriptor, exact vector bytes
+and IDs. A valid snapshot restores the topology directly into RAM, then applies
+journal and canonical-page differences incrementally. Missing, corrupt or
+incompatible topology is built from the valid document vectors without re-embedding.
+Vectors and adjacency are resident
+for an active workspace; this is not a disk-paged graph or a Redis dependency.
+The knowledge graph remains separate: changing ANN cannot change documented links,
+requirements or provenance.
+
+New vectors use ordinary HNSW insertion. Deletions and replacements are coalesced:
+the engine scans adjacency once per batch, reconnects affected neighbors through
+removed nodes and inserts replacement vectors. Unaffected nodes remain in place;
+updates arriving during construction or repair do not restart completed work.
+Unchanged vectors require no topology changes. During maintenance, queries use
+exact search over the current vectors, so deleted vectors disappear immediately.
+Only a complete topology can be checkpointed; restart reuses that checkpoint and
+replays subsequent changes. No reverse graph or second vector matrix is retained.
+
+The adjacency scan still costs O(E) per deletion/replacement batch, and initial
+construction remains expensive. Incremental repair is approximate, like HNSW
+search itself; measured recall under bounded churn does not guarantee indefinite
+quality on every corpus. See the [maintenance results and limits](../../benchmarks/hnsw-maintenance-results-2.9.2.md).
+
+`knowledge_context mode=task` accepts `evidence_cursor="start"` to expand and page
+through complementary retrieved candidates. Follow the returned `nextAction` with
+the same query and parameters; count/token limits bound each response, not the
+relevance of later candidates. A revision check rejects continuations after evidence
+or ranking changes. Widening advice also offers this mode when display limits omit
+evidence. Resource/ANN limits remain explicit; this is not exhaustive corpus recall.
+`as_of` also supports claim continuations.
+
+Use `history_cursor="start"` to inspect recorded validity intervals, replacement
+claims, sources and reasons. Follow its cursor for additional claims. `reinstates`
+links a new sourced claim to a previously closed interval; an explicit `supersedes`
+relation closes the intervening claim. Neither interval is reopened by a ranking
+score. Undated or conflicting states are exposed as unresolved. History provenance
+is `recorded_only`: opening a history entry does not verify current source bytes,
+and current conflict status is not a reconstructed historical conflict timeline.
+Existing drift checks still mark stale code evidence. History edits invalidate its
+cursor; compact and full output retain the same history.
+
+The optional reranker activates automatically when `KNOWLEDGE_RAIL_RERANK_BASE_URL`
+(Ollama's native root) and `KNOWLEDGE_RAIL_RERANK_MODEL` are configured in MCP `env`.
+The verified small model is BGE v2 M3 Q8, prepared once with the supplied script;
+see [setup and compatibility](../../README.md#optional-reranking-through-ollama-292-development-checkout).
+The compatibility adapter checks Ollama 0.34.3 and the exact prepared weights.
+There is no reranking deadline by default (`KNOWLEDGE_RAIL_RERANK_BUDGET_MS=0`).
+A positive value explicitly opts into a cumulative deadline; it is not required to
+activate reranking. Reranker time is excluded from the separate semantic deadline. `..._API_KEY` optionally supplies bearer authentication.
+
+The previous `RERANK_ENDPOINT` plus `RERANK_MODEL` HTTP configuration remains
+supported with TEI/Cohere-style results, also without a default deadline. Do not combine endpoint
+and Ollama base URL. Both providers score at most 64 candidates from the hybrid
+union, independently of the display count; this does not remove other candidates.
+Identical pools reuse scores within one request; changed pools share any explicitly requested cumulative
+deadline. Missing configuration, invalid scores, failures and timeouts preserve base
+ranking. Canonical edits during inference discard obsolete candidates. Scores never
+certify coverage; exact identifiers, filters and source links remain protected.
+The MCP process downloads no models and changes no embedding provider.
+
+See [the extension report](../../benchmarks/retrieval-extension-results-2.9.2.md)
+for real cross-encoder quality, CPU latency, ANN scale, regressions and limits.
+Quality measured with cached real outputs is distinct from live inference latency.
+The tested `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` improved some rankings,
+including with LSH, but PyTorch CPU inference (4 threads, batch 16, 512 tokens)
+completed none of 40 requests within the default 500 ms budget. Completed requests
+had a median around 1.03 s. Some measurements overlapped ANN benchmarks. This is a
+limit of the measured configuration, not proof that reranking cannot meet a faster
+budget. The historical 500 ms budget was an experimental operational limit, not a relevance
+threshold or intrinsic algorithm limit; it is no longer the default. Providing configuration enables the provider automatically; model weights are not
+bundled or downloaded automatically. Ollama manages model loading and residency.
+
 
 ## Optional static embeddings
 

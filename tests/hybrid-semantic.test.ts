@@ -44,6 +44,25 @@ function injectedIndex(hits: readonly SemanticHit[]): SemanticIndex {
 
 const provider = { id: "test", model: "semantic-golden", version: "1", dimensions: 8 };
 
+test("a configured slow reranker keeps successful semantic retrieval and coverage within their separate deadline", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "kr-separate-rerank-budget-"));
+  try {
+    await writePage(root, "page.md", "Adaptive admission", "Predictive load shedding avoids saturation.");
+    const index = injectedIndex([{ pagePath: "page.md", passageId: "p-0123456789abcdef", heading: "Adaptive admission",
+      text: "Predictive load shedding avoids saturation.", score: 0.97, provider }]);
+    let coverageCalls = 0;
+    index.assessCoverage = async (queries, paths) => { coverageCalls++; return queries.map((query) => ({ id: query.id, pages: paths.map((pagePath) => ({ pagePath, score: 0.99 })) })); };
+    const result = await retrieveWikiHybrid({ wikiRoot: root, query: "keep platform responsive during demand spikes",
+      progressiveWidening: false, persistDerivedIndexes: false, semanticIndex: index, semanticBudgetMs: 250,
+      reranker: { descriptor: { id: "slow", model: "fixture", version: "1" }, async rerank(_query, documents) {
+        await new Promise((resolve) => setTimeout(resolve, 650)); return documents.map(() => 8);
+      } } });
+    assert.equal(result.rerank?.applied, true); assert.equal(result.rerank.budgetMs, 0); assert.equal(result.semantic.available, true);
+    assert.equal(result.hits[0]?.path, "page.md"); assert.equal(result.coverage.coverageMode, "semantic");
+    assert.ok(coverageCalls > 0); assert.ok((result.semantic.elapsedMs ?? Infinity) < 250);
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
+
 test("semantic-only passages enter the RRF seed union without bypassing lexical retrieval", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-hybrid-semantic-"));
   const wikiRoot = path.join(root, "wiki");

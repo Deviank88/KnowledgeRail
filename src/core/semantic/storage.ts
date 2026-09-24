@@ -30,6 +30,12 @@ export interface StoredState {
   passages: Map<string, StoredPassage>;
   generatedAt?: string;
   engine?: AnnEngineDescriptor;
+  graphSnapshot?: Uint8Array;
+  /** Snapshot vector references before valid journal replay, only when a graph exists.
+   * Transient ownership; no second vector encoding or extra persisted matrix. */
+  graphBasePassages?: ReadonlyMap<string, StoredPassage>;
+  /** Compatible pre-release metadata should be rewritten without retired fields. */
+  needsCompaction?: boolean;
 }
 interface VectorMetadata extends Omit<StoredPassage, "vector" | "scale" | "signatures"> {}
 interface Snapshot {
@@ -39,6 +45,7 @@ interface Snapshot {
   dtype: VectorDtype;
   generatedAt: string;
   vectorsHash: string;
+  graphHash?: string;
   pages: StoredPage[];
   passages: VectorMetadata[];
   journalId?: string;
@@ -49,7 +56,7 @@ const MAGIC = Buffer.from("KRSEM002");
 const HEADER_SIZE = 64;
 const LITTLE_ENDIAN = new Uint8Array(new Uint32Array([1]).buffer)[0] === 1;
 const MAX_FRAME = 32 * 1024 * 1024;
-const FILES = ["semantic-index.json", "semantic-vectors.bin", "semantic-journal.bin"] as const;
+const FILES = ["semantic-index.json", "semantic-vectors.bin", "semantic-journal.bin", "semantic-graph.bin"] as const;
 const crcTable = Uint32Array.from({ length: 256 }, (_, n) => {
   for (let bit = 0; bit < 8; bit++) n = n & 1 ? 0xedb88320 ^ (n >>> 1) : n >>> 1;
   return n >>> 0;
@@ -61,7 +68,7 @@ function crc32(bytes: Uint8Array): number {
 }
 function equal(a: unknown, b: unknown): boolean { return JSON.stringify(a) === JSON.stringify(b); }
 function metadata(passage: StoredPassage): VectorMetadata {
-  // Explicit fields also discard text from compatible pre-release snapshots.
+  // Discard text and retired float32-original references from compatible snapshots.
   return { id: passage.id, pagePath: passage.pagePath, passageId: passage.passageId, heading: passage.heading };
 }
 function validPath(value: unknown): value is string {
@@ -101,6 +108,8 @@ export function applySemanticBatch(state: StoredState, batch: SemanticBatch): vo
 
 /** Binary derived data only. All writers hold the shared derived-checkpoint lock. */
 export class SemanticStorage {
+  /** Logical payload I/O; filesystem metadata, locks and OS cache misses are excluded. */
+  readonly io = { reads: 0, bytesRead: 0, writes: 0, bytesWritten: 0 };
   readonly loadTimings = { snapshotMs: 0, journalMs: 0 };
   private journalValidBytes = 0;
   private journalHeaderValid = false;
@@ -168,11 +177,15 @@ export class SemanticStorage {
     const state: StoredState = { pages: new Map(), passages: new Map() };
     let snapshotJournalId = "";
     let snapshotJournalThrough = 0;
+    let graphHash: string | undefined;
     try {
-      const meta = JSON.parse(await fs.readFile(this.file("semantic-index.json"), "utf8")) as Snapshot;
+      const metadataBytes = await fs.readFile(this.file("semantic-index.json"));
+      this.io.reads++; this.io.bytesRead += metadataBytes.length;
+      const meta = JSON.parse(metadataBytes.toString("utf8")) as Snapshot;
       if (meta.version !== 2 || !equal(meta.provider, this.provider) || meta.dtype !== this.dtype ||
           !Array.isArray(meta.pages) || !Array.isArray(meta.passages) || !meta.pages.every(validPage) ||
           !meta.passages.every(validPassage)) throw new Error("Incompatible semantic snapshot.");
+      state.needsCompaction = meta.passages.some((p) => "original" in p);
       const handle = await fs.open(this.file("semantic-vectors.bin"), constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
       try {
         const header = Buffer.alloc(HEADER_SIZE);
@@ -181,6 +194,7 @@ export class SemanticStorage {
             header.readUInt32LE(12) !== (this.dtype === "f32" ? 4 : 1) || header.readUInt32LE(16) !== meta.passages.length) {
           throw new Error("Invalid semantic vector header.");
         }
+        this.io.reads++; this.io.bytesRead += HEADER_SIZE;
         const signatures = header.readUInt32LE(20);
         if (signatures > 32) throw new Error("Invalid signature count.");
         const stride = this.stride(signatures);
@@ -191,6 +205,7 @@ export class SemanticStorage {
           const count = Math.min(loadBatchSize, meta.passages.length - start);
           const buffer = Buffer.alloc(count * stride);
           if ((await handle.read(buffer, 0, buffer.length, HEADER_SIZE + start * stride)).bytesRead !== buffer.length) throw new Error("Truncated vectors.");
+          this.io.reads++; this.io.bytesRead += buffer.length;
           hash.update(buffer);
           for (let i = 0; i < count; i++) {
             const passage = { ...metadata(meta.passages[start + i]! as StoredPassage), ...this.decodeVector(buffer, i * stride, signatures) };
@@ -212,12 +227,27 @@ export class SemanticStorage {
         if (assigned.size !== state.passages.size) throw new Error("Unassigned semantic passages.");
         state.generatedAt = meta.generatedAt;
         state.engine = meta.engine;
+        graphHash = typeof meta.graphHash === "string" && /^[a-f0-9]{64}$/u.test(meta.graphHash) ? meta.graphHash : undefined;
         snapshotJournalId = meta.journalId ?? "";
         snapshotJournalThrough = meta.journalThrough ?? 0;
       } finally { await handle.close(); }
     } catch {
       // Canonical Markdown is authoritative. Invalid derived state is rebuilt.
       state.pages.clear(); state.passages.clear();
+    }
+    if (graphHash) {
+      // An optional graph can be discarded without discarding authentic vectors.
+      // Engine restore verifies the exact checkpoint vectors before delta replay.
+      try {
+        const graph = await fs.open(this.file("semantic-graph.bin"), constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+        try {
+          const size = (await graph.stat()).size;
+          if (size >= 128 && size <= 256 * 1024 * 1024) {
+            const bytes = await graph.readFile(); this.io.reads++; this.io.bytesRead += bytes.length;
+            if (createHash("sha256").update(bytes).digest("hex") === graphHash) state.graphSnapshot = bytes;
+          }
+        } finally { await graph.close(); }
+      } catch { /* Missing/corrupt derived graph: restore from vectors. */ }
     }
     this.journalValidBytes = 0;
     this.journalHeaderValid = false;
@@ -231,10 +261,12 @@ export class SemanticStorage {
       while (this.journalValidBytes + 8 <= size) {
         const header = Buffer.alloc(8);
         if ((await handle.read(header, 0, 8, this.journalValidBytes)).bytesRead !== 8) break;
+        this.io.reads++; this.io.bytesRead += 8;
         const length = header.readUInt32LE(0);
         if (length > MAX_FRAME || length < 4 || this.journalValidBytes + 8 + length > size) break;
         const body = Buffer.alloc(length);
         if ((await handle.read(body, 0, length, this.journalValidBytes + 8)).bytesRead !== length || crc32(body) !== header.readUInt32LE(4)) break;
+        this.io.reads++; this.io.bytesRead += body.length;
         try {
           const jsonLength = body.readUInt32LE(0);
           if (jsonLength > length - 4) break;
@@ -255,12 +287,14 @@ export class SemanticStorage {
             const { pages, passages, removed } = record as { pages: StoredPage[]; passages: VectorMetadata[]; removed: string[] };
             if (!Array.isArray(pages) || !pages.every(validPage) || !Array.isArray(passages) || !passages.every(validPassage) ||
                 !Array.isArray(removed) || !removed.every(validPath) || length !== 4 + jsonLength + passages.length * this.stride()) break;
+            state.needsCompaction ||= passages.some((p) => "original" in p);
             const decoded = passages.map((p, i) => ({ ...metadata(p as StoredPassage), ...this.decodeVector(body, 4 + jsonLength + i * this.stride()) }));
             const current = new Map(decoded.map((p) => [p.id, p]));
             if (current.size !== decoded.length || new Set(pages.map((p) => p.path)).size !== pages.length ||
                 decoded.some((p) => !pages.some((page) => page.path === p.pagePath && page.passageEntryIds.includes(p.id))) ||
                 pages.some((page) => page.passageEntryIds.some((id) => (current.get(id) ??
                   (state.pages.get(page.path)?.fingerprint === page.fingerprint ? state.passages.get(id) : undefined))?.pagePath !== page.path))) break;
+            if (state.graphSnapshot && !state.graphBasePassages) state.graphBasePassages = new Map(state.passages);
             applySemanticBatch(state, { pages, passages: decoded, removed });
           }
         } catch { break; }
@@ -287,6 +321,7 @@ export class SemanticStorage {
       this.journalId = randomUUID();
       const header = this.frame({ version: 2, provider: this.provider, dtype: this.dtype, journalId: this.journalId });
       await atomicWriteBuffer(this.file("semantic-journal.bin"), header);
+      this.io.writes++; this.io.bytesWritten += header.length;
       this.journalValidBytes = header.length;
       this.journalHeaderValid = true;
     }
@@ -298,6 +333,7 @@ export class SemanticStorage {
       while (written < bytes.length) written += (await handle.write(bytes, written, bytes.length - written, this.journalValidBytes + written)).bytesWritten;
       await handle.sync();
       this.journalValidBytes += bytes.length;
+      this.io.writes++; this.io.bytesWritten += bytes.length;
     } finally { await handle.close(); }
   }
 
@@ -307,7 +343,7 @@ export class SemanticStorage {
     return this.journalValidBytes >= Math.max(16 * 1024 * 1024, snapshotBytes / 4);
   }
 
-  async compact(state: StoredState, engine: AnnEngineDescriptor, corpusRevision?: string): Promise<string> {
+  async compact(state: StoredState, engine: AnnEngineDescriptor, corpusRevision?: string, graphSnapshot?: Uint8Array): Promise<string> {
     await this.assertSafe(true);
     const generatedAt = new Date().toISOString();
     const passages = [...state.passages.values()].sort((a, b) => a.id.localeCompare(b.id));
@@ -318,10 +354,12 @@ export class SemanticStorage {
     let digest: string;
     try {
       await handle.writeFile(Buffer.alloc(HEADER_SIZE));
+      this.io.writes++; this.io.bytesWritten += HEADER_SIZE;
       for (let start = 0; start < passages.length; start += 64) {
         const batch = Buffer.concat(passages.slice(start, start + 64).map((p) => this.encodeVector(p, signatures)));
         hash.update(batch);
         await handle.writeFile(batch);
+        this.io.writes++; this.io.bytesWritten += batch.length;
       }
       digest = hash.digest("hex");
       const header = Buffer.alloc(HEADER_SIZE);
@@ -329,15 +367,24 @@ export class SemanticStorage {
       header.writeUInt32LE(this.dtype === "f32" ? 4 : 1, 12); header.writeUInt32LE(passages.length, 16);
       header.writeUInt32LE(signatures, 20); Buffer.from(digest, "hex").copy(header, 32);
       await handle.write(header, 0, header.length, 0);
+      this.io.writes++; this.io.bytesWritten += header.length;
       await handle.sync();
     } catch (error) { await fs.unlink(temp).catch(() => undefined); throw error; }
     finally { await handle.close(); }
     await fs.rename(temp, this.file("semantic-vectors.bin"));
+    let graphHash: string | undefined;
+    if (graphSnapshot) {
+      if (graphSnapshot.byteLength > 256 * 1024 * 1024) throw new Error("Semantic graph snapshot exceeds its resource limit.");
+      graphHash = createHash("sha256").update(graphSnapshot).digest("hex");
+      await atomicWriteBuffer(this.file("semantic-graph.bin"), Buffer.from(graphSnapshot.buffer, graphSnapshot.byteOffset, graphSnapshot.byteLength));
+      this.io.writes++; this.io.bytesWritten += graphSnapshot.byteLength;
+    } else await fs.rm(this.file("semantic-graph.bin"), { force: true });
     const metadataTemp = path.join(this.directory, `.semantic-index-${randomUUID()}.tmp`);
     const metaHandle = await fs.open(metadataTemp, "wx", 0o600);
     try {
       const prefix = JSON.stringify({ version: 2, provider: this.provider, engine, dtype: this.dtype,
         generatedAt, vectorsHash: digest!, journalId: this.journalId, journalThrough: this.journalValidBytes,
+        ...(graphHash ? { graphHash } : {}),
         ...(corpusRevision ? { corpusRevision } : {}) });
       await metaHandle.writeFile(prefix.slice(0, -1) + ',"pages":[');
       const pages = [...state.pages.values()].sort((a, b) => a.path.localeCompare(b.path));
@@ -352,12 +399,20 @@ export class SemanticStorage {
       await metaHandle.sync();
     } catch (error) { await fs.unlink(metadataTemp).catch(() => undefined); throw error; }
     finally { await metaHandle.close(); }
+    const metadataSize = (await fs.stat(metadataTemp)).size;
     await fs.rename(metadataTemp, this.file("semantic-index.json"));
+    this.io.writes++; this.io.bytesWritten += metadataSize;
     // Snapshot is committed before dropping the replay log. Replay is idempotent.
     this.journalId = randomUUID();
     const header = this.frame({ version: 2, provider: this.provider, dtype: this.dtype, journalId: this.journalId });
     await atomicWriteBuffer(this.file("semantic-journal.bin"), header);
+    this.io.writes++; this.io.bytesWritten += header.length;
     this.journalValidBytes = header.length; this.journalHeaderValid = true;
+    // The new snapshot and replay boundary are durable before retiring the sidecar.
+    // unlink never follows a symlink and never recursively removes a directory.
+    await fs.unlink(path.join(this.directory, "semantic-originals.bin")).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+    });
     return generatedAt;
   }
 }

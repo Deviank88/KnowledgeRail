@@ -4,6 +4,7 @@ import type {
   AnnEngineDescriptor,
   AnnSearchResult,
   AnnVectorEntry,
+  AnnSearchOptions,
 } from "./types.js";
 import type { SemanticVector, AnnSignatures } from "./types.js";
 import { cosine, normalizeVector, storeVector } from "./vector.js";
@@ -215,7 +216,10 @@ export class LshAnnEngine implements AnnEngine {
     return this.savedSignatures.get(id);
   }
 
-  search(value: readonly number[], k: number): AnnSearchResult {
+  search(value: readonly number[], k: number, options: AnnSearchOptions = {}): AnnSearchResult {
+    options.signal?.throwIfAborted();
+    const minimumScore = options.minimumScore ?? this.descriptor.minimumScore;
+    if (!Number.isFinite(minimumScore) || minimumScore < -1 || minimumScore > 1) throw new Error("Invalid candidate threshold.");
     if (!Number.isInteger(k) || k < 1 || k > 1_000) {
       throw new Error("ANN result limit must be an integer between 1 and 1,000.");
     }
@@ -237,17 +241,19 @@ export class LshAnnEngine implements AnnEngine {
         for (const id of this.buckets[table]!.get(probe) ?? []) candidates.add(id);
       }
     }
-    const hits = [...candidates]
+    const eligible = [...candidates]
       .map((id) => ({ id, score: quantized ? cosine(vector, this.vectors.get(id)!) : dot(vector, this.vectors.get(id)!) }))
-      .filter((hit) => hit.score >= this.descriptor.minimumScore)
-      .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
-      .slice(0, limit);
+      .filter((hit) => hit.score >= minimumScore)
+      .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id));
+    const hits = eligible.slice(0, limit);
     return {
       hits,
       diagnostics: {
         candidateCount: candidates.size,
         visitedBuckets,
         vectorCount: this.vectors.size,
+        thresholdRejected: candidates.size - eligible.length,
+        poolTruncated: Math.max(0, eligible.length - limit),
         ...(this.restoring ? { indexMode: "exact" as const } : {}),
       },
     };

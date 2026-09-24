@@ -1,0 +1,205 @@
+import assert from "node:assert/strict";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { loadHybridFixture, expandedHybridPages } from "./hybrid-retrieval-quality-eval.js";
+import { mean, ndcgAtK, precisionAtK, recallAtK, reciprocalRank } from "./retrieval-metrics.js";
+import { getWikiPageRecords } from "../src/core/retrieval-index.js";
+import { retrieveWikiHybrid } from "../src/core/hybrid-retrieval.js";
+import { semanticCoverageQueries } from "../src/core/retrieval-coverage.js";
+import { StaticEmbeddingProvider } from "../src/core/semantic/static-provider.js";
+import { STATIC_MODELS, type StaticModelName } from "../src/core/semantic/static-models.js";
+import { configuredEmbeddingProvider } from "../src/core/semantic/provider.js";
+import { PersistentSemanticIndex } from "../src/core/semantic/index.js";
+import type { EmbeddingProvider } from "../src/core/semantic/types.js";
+import { normalizeVector, cosine } from "../src/core/semantic/vector.js";
+import { wikiPassageId } from "../src/context/passage-id.js";
+
+const argument = (name: string, fallback: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
+const output = path.resolve(argument("output", "benchmarks/results/semantic-rescoring-292"));
+const sourceDiffSha256 = createHash("sha256").update(execFileSync("git", ["diff"])).digest("hex");
+const sourceFiles = [...new Set([...execFileSync("git", ["ls-files", "src"], { encoding: "utf8" }).trim().split("\n"), "src/core/semantic/budget.ts", "src/core/semantic/originals.ts"])].sort();
+const runtimeSourceDigest = createHash("sha256");
+for (const file of sourceFiles) runtimeSourceDigest.update(file).update(await fs.readFile(file));
+const runtimeSourcesSha256 = runtimeSourceDigest.digest("hex");
+const providerName = argument("provider", "potion-multilingual-128M");
+const repetitions = Number(argument("repetitions", "5"));
+assert.equal(repetitions, 5, "Frozen comparison protocol requires five repetitions.");
+process.env.KNOWLEDGE_RAIL_USAGE_RANKING = "0";
+const sha = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const normalize = (text: string) => text.normalize("NFKC").replace(/\s+/g, " ").trim();
+const percentile = (values: number[], p: number) => [...values].sort((a, b) => a - b)[Math.max(0, Math.ceil(values.length * p) - 1)] ?? 0;
+interface Page { path: string; title: string; type: string; body: string }
+interface Query { id: string; query: string; split: string; category: string; language?: string; relevant: Array<{ path: string; grade: number }>; answerable: boolean; pageTypes?: string[] }
+const fixture = JSON.parse(await fs.readFile("benchmarks/fixtures/semantic-rescoring-292.json", "utf8")) as { pages: Page[]; queries: Query[] };
+const historical = JSON.parse(await fs.readFile("benchmarks/fixtures/semantic-retrieval-golden.json", "utf8"));
+const historicalBase = await loadHybridFixture(path.resolve("benchmarks/fixtures", historical.baseFixture));
+const corpora = [{ name: "annotated", ...fixture }, { name: "historical", pages: [...expandedHybridPages(historicalBase), ...historical.semanticPages] as Page[],
+  queries: [...historicalBase.queries.map((q) => ({ id: q.id, query: q.query, split: "historical", category: q.case,
+    relevant: [...new Map(q.relevant.map((r) => [r.path, { path: r.path, grade: r.grade ?? 1 }])).values()], answerable: q.relevant.length > 0 })),
+  ...historical.semanticOnlyQueries.map((q: { id: string; query: string; expectedPaths: string[] }) => ({ ...q, split: "historical", category: "paraphrase", relevant: q.expectedPaths.map((p) => ({ path: p, grade: 2 })), answerable: true }))] as Query[] }];
+assert.equal(corpora[1]!.queries.length, 16);
+let actual: EmbeddingProvider;
+if (providerName === "ollama") {
+  const config = JSON.parse(await fs.readFile(argument("config", path.join(os.homedir(), ".claude.json")), "utf8"));
+  const env = config.mcpServers["knowledge-rail"].env as Record<string, string>;
+  for (const [key, value] of Object.entries(env)) if (key.startsWith("KNOWLEDGE_RAIL_EMBEDDING_")) process.env[key] = value;
+  const endpoint = new URL(process.env.KNOWLEDGE_RAIL_EMBEDDING_BASE_URL!);
+  assert.ok(["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname), "Only an already configured local provider is measured.");
+  actual = configuredEmbeddingProvider()!;
+} else {
+  const name = providerName as StaticModelName;
+  assert.ok(STATIC_MODELS[name]);
+  actual = new StaticEmbeddingProvider(path.join(argument("assets", "/private/tmp/knowledgerail-static-evaluation"), ".knowledge-rail/models", name), name, STATIC_MODELS[name]);
+}
+await fs.mkdir(output, { recursive: true });
+const root = await fs.mkdtemp(path.join(os.tmpdir(), "kr292-eval-"));
+const variants = ["lexical", "i8-32", "i8-64", "rescore-32", "rescore-64", "f32-32", "f32-64"];
+const metrics = ["ndcg", "recall", "precision", "mrr", "coverageAccuracy"] as const;
+type Metrics = Record<typeof metrics[number], number>;
+type Outcome = Metrics & { id: string; split: string; category: string; paths: string[]; coverage: unknown; latencyMs: number[]; diagnostic: unknown; candidateRecall: number; neighborRecall: number; candidatePages: number };
+const reports = [];
+function bootstrap(values: number[]): [number, number] {
+  let seed = 292;
+  const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; };
+  const samples = Array.from({ length: 10_000 }, () => mean(values.map(() => values[Math.floor(random() * values.length)]!)));
+  return [percentile(samples, 0.025), percentile(samples, 0.975)];
+}
+try {
+  for (const corpus of corpora) {
+    process.stderr.write(`Preparing ${providerName}/${corpus.name}\n`);
+    const wiki = path.join(root, corpus.name);
+    for (const page of corpus.pages) {
+      const file = path.join(wiki, page.path); await fs.mkdir(path.dirname(file), { recursive: true });
+      await fs.writeFile(file, `---\ntitle: ${JSON.stringify(page.title)}\ntype: ${page.type}\n---\n\n${page.body}`);
+    }
+    const records = await getWikiPageRecords(wiki, true, { persist: false });
+    const passages = records.flatMap((r) => r.passages.map((p) => ({ path: r.path, id: wikiPassageId(p), text: `${p.heading}\n${p.text}`.normalize("NFC").trim() })));
+    const documents = [...new Set(passages.map((p) => p.text))];
+    const queryTexts = [...new Set(corpus.queries.flatMap((q) => [normalize(q.query), ...semanticCoverageQueries(q.query).map((c) => normalize(c.text))]))];
+    const cacheFile = path.join(output, `${providerName}-${corpus.name}-vectors.json`);
+    const corpusDigest = sha({ records: records.map((r) => [r.path, r.raw]), queries: corpus.queries });
+    let frozenData: { descriptor: typeof actual.descriptor; corpusDigest: string; documents: number[][]; queries: number[][]; buildMs: number; queryMs: number };
+    try {
+      frozenData = JSON.parse(await fs.readFile(cacheFile, "utf8"));
+      assert.equal(frozenData.corpusDigest, corpusDigest); assert.deepEqual(frozenData.descriptor, actual.descriptor);
+    } catch {
+      const vectors: number[][] = [], queries: number[][] = [];
+      let start = performance.now();
+      for (let i = 0; i < documents.length; i += 64) vectors.push(...(await actual.embedDocuments(documents.slice(i, i + 64))).map((v) => [...v]));
+      const buildMs = performance.now() - start; start = performance.now();
+      for (let i = 0; i < queryTexts.length; i += 64) {
+        const batch = queryTexts.slice(i, i + 64);
+        queries.push(...(actual.embedQueries ? await actual.embedQueries(batch) : await Promise.all(batch.map((q) => actual.embedQuery(q)))).map((v) => [...v]));
+      }
+      frozenData = { descriptor: actual.descriptor, corpusDigest, documents: vectors, queries, buildMs, queryMs: performance.now() - start };
+      await fs.writeFile(cacheFile, JSON.stringify(frozenData));
+    }
+    const documentVectors = new Map(documents.map((d, i) => [d, frozenData.documents[i]!]));
+    const queryVectors = new Map(queryTexts.map((q, i) => [q, frozenData.queries[i]!]));
+    const get = (map: Map<string, number[]>, key: string) => { const v = map.get(key); assert.ok(v, `Missing frozen vector: ${key}`); return v; };
+    const frozen: EmbeddingProvider = { descriptor: actual.descriptor,
+      async embedDocuments(texts) { return texts.map((t) => get(documentVectors, t)); },
+      async embedQuery(text) { return get(queryVectors, text); },
+      async embedQueries(texts) { return texts.map((t) => get(queryVectors, t)); },
+    };
+    const neighbors = corpus.queries.map((q) => {
+      const query = normalizeVector(get(queryVectors, normalize(q.query)), actual.descriptor.dimensions);
+      return passages.map((p) => ({ ...p, score: cosine(query, normalizeVector(get(documentVectors, p.text), actual.descriptor.dimensions)) }))
+        .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path) || a.id.localeCompare(b.id));
+    });
+    const outcomes: Record<string, Outcome[]> = {}, indexes = new Map<string, PersistentSemanticIndex>(), build = [];
+    for (const variant of variants) {
+      outcomes[variant] = [];
+      if (variant === "lexical") continue;
+      const variantRoot = path.join(root, `${corpus.name}-${variant}`);
+      for (const record of records) { const file = path.join(variantRoot, record.path); await fs.mkdir(path.dirname(file), { recursive: true }); await fs.writeFile(file, record.raw); }
+      const index = new PersistentSemanticIndex(variantRoot, frozen, undefined, { dtype: variant.startsWith("f32") ? "f32" : "i8", rescore: variant.startsWith("rescore") });
+      const start = performance.now(); await index.synchronize(records); indexes.set(variant, index);
+      build.push({ variant, elapsedMs: performance.now() - start, descriptor: index.descriptor,
+        diskBytes: (await Promise.all((await fs.readdir(path.join(variantRoot, ".knowledge-rail"))).filter((f) => f.startsWith("semantic-")).map(async (f) => (await fs.stat(path.join(variantRoot, ".knowledge-rail", f))).size))).reduce((a, b) => a + b, 0) });
+    }
+    // Rotate order between queries and repetitions; evaluation data never select parameters.
+    for (let qi = 0; qi < corpus.queries.length; qi++) {
+      const q = corpus.queries[qi]!;
+      for (let repetition = 0; repetition < repetitions; repetition++) {
+        const offset = (qi + repetition) % variants.length;
+        for (const variant of [...variants.slice(offset), ...variants.slice(0, offset)]) {
+          const index = indexes.get(variant), pool = Number(variant.split("-")[1] ?? 32);
+          const start = performance.now();
+          const result = await retrieveWikiHybrid({ wikiRoot: wiki, query: q.query, pageTypes: q.pageTypes,
+            maxResults: 8, semanticIndex: index, semanticPoolSize: pool, semanticBudgetMs: 1500,
+            initialBudget: { maxEvidence: 8, tokenBudget: 4000 }, maximumBudget: { maxEvidence: 8, tokenBudget: 4000 },
+            persistDerivedIndexes: false });
+          const elapsedMs = performance.now() - start;
+          assert.ok(!result.semantic.budgetExceeded, "Frozen local comparison exceeded the fixed semantic budget.");
+          if (repetition) { outcomes[variant]![qi]!.latencyMs.push(elapsedMs); continue; }
+          const candidates = index ? await index.searchWithDiagnostics(q.query, pool) : undefined;
+          const paths = result.hits.map((h) => h.path);
+          const expected = neighbors[qi]!.slice(0, pool);
+          outcomes[variant]!.push({ id: q.id, split: q.split, category: q.category, paths,
+            ndcg: ndcgAtK(result.hits, q.relevant, 8), recall: recallAtK(result.hits, q.relevant, 8), precision: precisionAtK(result.hits, q.relevant, 8), mrr: reciprocalRank(result.hits, q.relevant),
+            coverageAccuracy: Number(result.coverage.sufficient === q.answerable), coverage: result.coverage,
+            latencyMs: [elapsedMs], diagnostic: result.semantic,
+            candidateRecall: recallAtK((candidates?.hits ?? []).map((h) => ({ path: h.pagePath })), q.relevant, pool),
+            candidatePages: new Set(candidates?.hits.map((h) => h.pagePath)).size,
+            neighborRecall: expected.length ? expected.filter((n) => candidates?.hits.some((h) => h.pagePath === n.path && h.passageId === n.id)).length / expected.length : 1 });
+        }
+      }
+      if (qi % 10 === 0) process.stderr.write(`Compared ${providerName}/${corpus.name} ${qi + 1}/${corpus.queries.length}\n`);
+    }
+    const comparisons = [];
+    for (const pool of [32, 64]) for (const split of [...new Set(corpus.queries.map((q) => q.split))]) {
+      for (const category of ["all", ...new Set(corpus.queries.filter((q) => q.split === split).map((q) => q.category))]) {
+        const base = outcomes[`i8-${pool}`]!.filter((q) => q.split === split && (category === "all" || q.category === category));
+        const changed = outcomes[`rescore-${pool}`]!.filter((q) => q.split === split && (category === "all" || q.category === category));
+        comparisons.push({ pool, split, category, count: base.length, metrics: Object.fromEntries(metrics.map((metric) => {
+          const deltas = base.map((q, i) => changed[i]![metric] - q[metric]), reference = mean(base.map((q) => q[metric]));
+          return [metric, { baseline: reference, rescored: mean(changed.map((q) => q[metric])), delta: mean(deltas), relative: reference ? mean(deltas) / reference : null, ci95: bootstrap(deltas) }];
+        })), improved: base.filter((q, i) => changed[i]!.ndcg > q.ndcg).map((q) => q.id),
+        regressed: base.filter((q, i) => changed[i]!.ndcg < q.ndcg).map((q) => q.id),
+        unchanged: base.filter((q, i) => changed[i]!.ndcg === q.ndcg).length,
+        p95AdditionalMs: percentile(changed.flatMap((q) => q.latencyMs), 0.95) - percentile(base.flatMap((q) => q.latencyMs), 0.95) });
+      }
+    }
+    const live = [];
+    if (process.argv.includes("--live") && corpus.name === "annotated") {
+      for (const variant of ["i8-64", "rescore-64"]) {
+        let queryCalls = 0, coverageCalls = 0, documentCalls = 0;
+        let queryProviderMs = 0, coverageProviderMs = 0;
+        const counted: EmbeddingProvider = { descriptor: actual.descriptor,
+          async embedDocuments(texts, signal) { documentCalls += texts.length; return actual.embedDocuments(texts, signal); },
+          async embedQuery(text, signal) { queryCalls++; const start = performance.now(); try { return await actual.embedQuery(text, signal); } finally { queryProviderMs += performance.now() - start; } },
+          async embedQueries(texts, signal) { coverageCalls += texts.length; const start = performance.now(); try { return await actual.embedQueries!(texts, signal); } finally { coverageProviderMs += performance.now() - start; } },
+        };
+        const index = new PersistentSemanticIndex(path.join(root, `${corpus.name}-${variant}`), counted, undefined, { rescore: variant.startsWith("rescore") });
+        const samples = [];
+        await index.synchronize(records);
+        for (let run = 0; run < 5; run++) for (const q of corpus.queries) {
+          const start = performance.now();
+          const result = await retrieveWikiHybrid({ wikiRoot: wiki, query: q.query, maxResults: 8, pageTypes: q.pageTypes,
+            semanticIndex: index, semanticPoolSize: 64, semanticBudgetMs: 1500,
+            initialBudget: { maxEvidence: 8, tokenBudget: 4000 }, maximumBudget: { maxEvidence: 8, tokenBudget: 4000 }, persistDerivedIndexes: false });
+          samples.push({ id: q.id, run, elapsedMs: performance.now() - start, semantic: result.semantic });
+        }
+        live.push({ variant, queryCalls, coverageCalls, documentCalls, queryProviderMs, coverageProviderMs, samples, p50: percentile(samples.map((s) => s.elapsedMs), 0.5), p95: percentile(samples.map((s) => s.elapsedMs), 0.95) });
+        index.dispose();
+      }
+    }
+    const summary = Object.fromEntries(variants.map((v) => [v, { ...Object.fromEntries(metrics.map((m) => [m, mean(outcomes[v]!.filter((q) => q.split !== "development").map((q) => q[m]))])),
+      p50: percentile(outcomes[v]!.flatMap((q) => q.latencyMs), 0.5), p95: percentile(outcomes[v]!.flatMap((q) => q.latencyMs), 0.95),
+      meanCandidateRecall: mean(outcomes[v]!.map((q) => q.candidateRecall)), meanNeighborRecall: mean(outcomes[v]!.map((q) => q.neighborRecall)) }]));
+    reports.push({ corpus: corpus.name, corpusDigest, vectorsDigest: sha(frozenData), pages: records.length, passages: passages.length, queries: corpus.queries.length,
+      providerDocuments: documents.length, providerQueryAndCoverageInputs: queryTexts.length, initialProviderEmbedding: { documentsMs: frozenData.buildMs, queriesMs: frozenData.queryMs },
+      build, summary, comparisons, outcomes, live });
+    for (const index of indexes.values()) index.dispose();
+  }
+  const report = { version: 1, generatedAt: new Date().toISOString(), commit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+    sourceDiffSha256, runtimeSourcesSha256, provider: actual.descriptor,
+    node: process.version, platform: `${os.platform()} ${os.arch()}`, cpu: os.cpus()[0]?.model, totalMemory: os.totalmem(), repetitions, reports,
+    limitations: ["Authored judgments on real repository sections; no independent human annotation or observed user traffic.", "Quality latency uses frozen real vectors. Live samples explicitly separate; provider/OS cold cache and HDD not measured.", "Search diagnostics hydrate all candidates in a separate untimed pass; timings cover the production hybrid path.", "Exhaustive neighbors are vector references, not relevance judgments."] };
+  await fs.writeFile(path.join(output, `${providerName}-report.json`), JSON.stringify(report, null, 2));
+  console.log(JSON.stringify({ provider: providerName, reports: reports.map((r) => ({ corpus: r.corpus, summary: r.summary, comparisons: r.comparisons.filter((c) => c.category === "all"), live: r.live.map(({ samples, ...rest }) => ({ ...rest, samples: samples.length })) })) }, null, 2));
+} finally { await fs.rm(root, { recursive: true, force: true }); }

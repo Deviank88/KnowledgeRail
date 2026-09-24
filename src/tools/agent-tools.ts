@@ -57,7 +57,7 @@ const RECOVERY_RESOLUTIONS = KNOWLEDGE_RECOVERY_RESOLUTIONS.filter(
 
 const ContextSchema = z.object({
   mode: z.enum(["task", "list", "search", "graph"]).default("task")
-    .describe("task=evidence/gaps;list=pages;search=passages;graph=relations/dependencies."),
+    .describe("task=context;list=pages;search=passages;graph=relations."),
   intent: z.enum(["understand", "implement", "modify", "debug", "review", "document"]).default("understand"),
   objective: z.string().min(1).max(4_096).optional(),
   query: z.string().min(1).max(4_096).optional(),
@@ -68,7 +68,9 @@ const ContextSchema = z.object({
   heuristic_token_budget: z.number().int().min(256).max(12_000).default(2_000),
   response_detail: z.enum(["compact", "full"]).default("compact"),
   include_repository_map: z.boolean().optional(),
-  as_of: z.string().optional().describe("Claim validity at a UTC ISO timestamp."),
+  as_of: z.string().optional().describe("UTC claim validity."),
+  evidence_cursor: z.string().refine((v) => v.length <= 72 && /^(start|[0-9]{1,7}:[a-f0-9]{64})$/u.test(v)).optional().describe("start or cursor."),
+  history_cursor: z.string().refine((v) => v.length <= 72 && /^(start|[0-9]{1,7}:[a-f0-9]{64})$/u.test(v)).optional().describe("start or cursor."),
   max_results: z.number().int().min(1).max(100).default(10),
   max_nodes: z.number().int().min(1).max(100).default(12),
   max_depth: z.number().int().min(0).max(8).default(1),
@@ -735,9 +737,19 @@ export function registerAgentTools(
         gap && typeof gap === "object" && (gap as { kind?: unknown }).kind === "budget_limited" &&
         (gap as { widenable?: unknown }).widenable !== false
       );
+      const history = structured.history as { nextOffset?: number; revision?: string } | undefined;
+      const nextHistory = history?.nextOffset;
+      const nextEvidence = retrieval.nextEvidenceOffset as number | undefined;
+      if (nextHistory !== undefined || nextEvidence !== undefined) return withGuidance(result, "context_incomplete", {
+        tool: "knowledge_context", requiredArguments: ["mode", "objective"],
+        suggestedArguments: { ...omit(args, ["mode", "max_results", "max_nodes", "max_depth", "view"]), mode: "task",
+          ...(nextHistory !== undefined ? { history_cursor: `${nextHistory}:${history?.revision}` }
+            : { evidence_cursor: `${nextEvidence}:${retrieval.evidenceRevision}`,
+              history_cursor: args.history_cursor ? "start" : undefined }) },
+      }, "Additional evidence remains available. Follow the cursor for complementary evidence; the display budget is not a relevance cutoff.");
       const retrievalSufficient = retrieval.coverageSufficient === true;
       const sufficient = retrievalSufficient && !hasGaps;
-      const canWiden = hasBudgetGap && args.heuristic_token_budget < 12_000;
+      const canWiden = hasBudgetGap && (args.heuristic_token_budget < 12_000 || !args.evidence_cursor);
       return withGuidance(
         result,
         sufficient ? "context_ready" : "context_incomplete",
@@ -752,6 +764,7 @@ export function registerAgentTools(
             ...(args.page_types ? { page_types: args.page_types } : {}),
             intent: args.intent,
             retrieval_profile: "coverage",
+            evidence_cursor: "start",
             max_evidence: Math.min(args.max_evidence * 2, 20),
             heuristic_token_budget: Math.min(args.heuristic_token_budget * 2, 12_000),
           },
@@ -759,7 +772,7 @@ export function registerAgentTools(
         sufficient
           ? "Materialize only the returned resource links needed for the task; use resources/read when available, otherwise knowledge_page action=read with the exact knowledge-rail:// URI."
           : canWiden
-            ? "Repeat with the suggested wider budget; never infer missing evidence."
+            ? "Continue with the suggested candidate expansion and bounded batches; never infer missing evidence."
             : "No bounded widening can close the remaining gaps: materialize relevant evidence and report those gaps as unknowns."
       );
     } catch (error: unknown) {

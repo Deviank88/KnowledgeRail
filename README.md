@@ -533,6 +533,94 @@ the entire corpus. Restarting with unchanged pages reuses the persisted vectors.
 See [memory evolution](docs/guides/memory-evolution.md) for lifecycle, optional static
 models, usage-based ranking, task repository maps, historical claims and measured limits.
 
+In the 2.9.2 development checkout, `KNOWLEDGE_RAIL_SEMANTIC_ENGINE=hnsw` selects
+the experimental persisted HNSW index; LSH remains the default. HNSW creates its
+graph when absent, maintains it incrementally as passages change, and reloads a
+valid checkpoint plus journal changes after restart. Queries use current vectors
+through exact search while maintenance runs. The ANN topology and knowledge graph
+remain separate. See [lifecycle and limits](docs/guides/memory-evolution.md#candidate-search-persisted-hnsw-and-optional-reranking-292).
+
+### Optional reranking through Ollama (2.9.2 development checkout)
+
+**Configured means active:** setting the reranker base URL and model in the MCP
+server's `env` automatically enables reranking, like embeddings. Without them,
+KnowledgeRail works normally. Errors, unsupported models, invalid scores and
+timeouts preserve retrieval without the reranker. It reorders candidates; it does
+not certify evidence validity or remove additional evidence and continuations.
+This feature is in the development checkout, not the published 2.9.1 package.
+
+Use the compact multilingual **BGE Reranker v2 M3 Q8**: 568M parameters, about
+636 MB of weights. Its Ollama conversion needs a one-time metadata correction.
+From this checkout, with local Ollama **0.34.3** and Python 3 installed:
+
+```sh
+ollama pull qllama/bge-reranker-v2-m3:q8_0
+python3 scripts/prepare-ollama-reranker.py
+npm run build
+```
+
+On Windows, `py -3` can replace `python3`. The preparation script verifies the
+source checksum, adds the missing RANK pooling metadata without changing tensor
+bytes, verifies the result and imports `knowledgerail-bge-reranker-v2-m3:q8_0` into
+Ollama. It refuses different source weights or an occupied target name with different
+weights. The source and prepared models each occupy about 636 MB on disk; a temporary
+copy during preparation is deleted afterwards. Run preparation on the Ollama host.
+No separate inference server or mandatory Metal dependency is required.
+
+After building, configure your MCP client and restart its KnowledgeRail process:
+
+```json
+{
+  "mcpServers": {
+    "knowledge-rail": {
+      "command": "node",
+      "args": ["/absolute/path/to/KnowledgeRail/dist/index.js", "--root", "/absolute/project/path"],
+      "env": {
+        "KNOWLEDGE_RAIL_EMBEDDING_BASE_URL": "http://localhost:11434/v1",
+        "KNOWLEDGE_RAIL_EMBEDDING_MODEL": "qwen3-embedding:0.6b",
+        "KNOWLEDGE_RAIL_EMBEDDING_DIMENSIONS": "1024",
+        "KNOWLEDGE_RAIL_RERANK_BASE_URL": "http://localhost:11434",
+        "KNOWLEDGE_RAIL_RERANK_MODEL": "knowledgerail-bge-reranker-v2-m3:q8_0"
+      }
+    }
+  }
+}
+```
+
+The reranker base URL is Ollama's native root, **without `/v1` or `/api`**.
+`KNOWLEDGE_RAIL_RERANK_PROVIDER=ollama` is optional: the base URL selects Ollama
+already. `KNOWLEDGE_RAIL_RERANK_API_KEY` optionally supplies a bearer token.
+Do not combine `RERANK_BASE_URL` with the older `RERANK_ENDPOINT` setting.
+Models must be installed in advance; the MCP process never downloads models.
+Ollama loads the configured model on demand and manages its residency (5-minute
+keep-alive requested). Embeddings and reranker can coexist when memory permits.
+
+**Reranking has no KnowledgeRail time limit by default.** Once configured, it waits
+for scoring to finish. The separate 1,500 ms semantic deadline excludes reranker
+time, so inference latency does not invalidate successful embeddings. Errors and
+invalid responses still preserve base retrieval. Client or Ollama connection limits
+remain outside KnowledgeRail's control.
+
+`KNOWLEDGE_RAIL_RERANK_BUDGET_MS=0` explicitly selects this unlimited behavior;
+omitting the variable has the same effect. A positive value (1–30,000 ms) is an
+optional administrative override for deployments that deliberately want a deadline,
+not part of the configuration above. The earlier 500 ms experiment is retained only
+as historical latency evidence, not as the activation policy. No relevance threshold
+is derived from elapsed time.
+
+**Compatibility is deliberately narrow:** the adapter verifies Ollama 0.34.3 and
+the prepared BGE weights before scoring. Ollama currently has no native `/api/rerank`
+contract; this integration uses the verified, unnormalised classifier output from
+its legacy `/api/embeddings` route. Arbitrary embedding or generative models and
+unverified Ollama versions fall back safely. Do not substitute `/api/embed`, which
+normalises the score. Runtime compatibility needs revalidation when Ollama changes.
+The client and preparation script are portable; measured hardware results are macOS
+only, not a Windows/Linux performance guarantee.
+
+The existing HTTP `RERANK_ENDPOINT` + `RERANK_MODEL` configuration remains compatible
+with indexed `/rerank` responses; it also has no default reranking deadline. The Ollama configuration
+above needs no separate service. See the [measured results and limits](benchmarks/ollama-reranker-results-2.9.2.md).
+
 ## Compatibility
 
 | Capability | Status |

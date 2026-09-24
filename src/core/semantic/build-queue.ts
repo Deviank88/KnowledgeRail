@@ -55,13 +55,38 @@ export class SemanticBuildQueue {
 export class EmbeddingRequestQueue {
   private running = false;
   private priorityBurst = 0;
+  private failures = 0;
+  private retryAt = 0;
   private pending: Array<{ priority: boolean; execute: () => void }> = [];
-  run<T>(operation: () => Promise<T>, priority = false): Promise<T> {
+  constructor(private readonly cooldownMs = 5_000, private readonly maxPending = 64) {}
+  run<T>(operation: () => Promise<T>, priority = false, signal?: AbortSignal): Promise<T> {
+    if (signal?.aborted) return Promise.reject(signal.reason);
+    if (Date.now() < this.retryAt) return Promise.reject(new Error("semantic_circuit_open"));
+    if (this.pending.length >= this.maxPending) return Promise.reject(new Error("semantic_queue_full"));
     return new Promise<T>((resolve, reject) => {
+      let active = false, cancelled = false;
+      const failure = () => { if (++this.failures >= 3) this.retryAt = Date.now() + this.cooldownMs; };
+      const abort = () => {
+        cancelled = true;
+        const index = this.pending.indexOf(request);
+        if (index >= 0) this.pending.splice(index, 1);
+        if (active) failure();
+        reject(signal?.reason ?? new Error("semantic_cancelled"));
+      };
       const request = { priority, execute: () => {
-        this.running = true;
-        Promise.resolve().then(operation).then(resolve, reject).finally(() => { this.running = false; this.next(); });
+        if (Date.now() < this.retryAt || signal?.aborted) {
+          signal?.removeEventListener("abort", abort);
+          reject(signal?.reason ?? new Error("semantic_circuit_open")); this.next(); return;
+        }
+        active = true; this.running = true;
+        // Retain the slot until the actual provider settles, even if it ignores cancellation.
+        Promise.resolve().then(operation).then((value) => {
+          if (!cancelled) { this.failures = 0; this.retryAt = 0; resolve(value); }
+        }, (error: unknown) => { if (!cancelled) { failure(); reject(error); } }).finally(() => {
+          signal?.removeEventListener("abort", abort); this.running = false; this.next();
+        });
       } };
+      signal?.addEventListener("abort", abort, { once: true });
       this.pending.push(request); this.next();
     });
   }

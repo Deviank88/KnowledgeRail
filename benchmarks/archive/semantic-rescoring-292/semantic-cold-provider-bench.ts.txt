@@ -1,0 +1,86 @@
+import assert from "node:assert/strict";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
+import { execFileSync } from "node:child_process";
+import { getWikiPageRecords } from "../src/core/retrieval-index.js";
+import { configuredEmbeddingProvider } from "../src/core/semantic/provider.js";
+import { PersistentSemanticIndex } from "../src/core/semantic/index.js";
+import { retrieveWikiHybrid } from "../src/core/hybrid-retrieval.js";
+import type { EmbeddingProvider } from "../src/core/semantic/types.js";
+
+assert.ok(process.argv.includes("--live"), "Explicit --live permits unloading/reloading the configured local model.");
+const configPath = process.argv.find((a) => a.startsWith("--config="))?.slice(9) ?? path.join(os.homedir(), ".claude.json");
+const config = JSON.parse(await fs.readFile(configPath, "utf8"));
+for (const [key, value] of Object.entries(config.mcpServers["knowledge-rail"].env)) if (key.startsWith("KNOWLEDGE_RAIL_EMBEDDING_")) process.env[key] = String(value);
+const provider = configuredEmbeddingProvider()!;
+const endpoint = new URL(process.env.KNOWLEDGE_RAIL_EMBEDDING_BASE_URL!);
+assert.ok(["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname));
+const output = "benchmarks/results/semantic-rescoring-292";
+const frozen = JSON.parse(await fs.readFile(path.join(output, "ollama-annotated-vectors.json"), "utf8"));
+assert.deepEqual(frozen.descriptor, provider.descriptor);
+const fixture = JSON.parse(await fs.readFile("benchmarks/fixtures/semantic-rescoring-292.json", "utf8")) as {
+  pages: Array<{ path: string; title: string; type: string; body: string }>;
+  queries: Array<{ query: string; split: string }>;
+};
+const root = await fs.mkdtemp(path.join(os.tmpdir(), "kr292-cold-"));
+const query = fixture.queries.find((q) => q.split === "evaluation")!.query;
+const samples = [];
+let documents = 0, queries = 0, coverage = 0, warmupQueries = 0;
+const live: EmbeddingProvider = { descriptor: provider.descriptor,
+  async embedDocuments(texts, signal) { documents += texts.length; return provider.embedDocuments(texts, signal); },
+  async embedQuery(text, signal) { queries++; return provider.embedQuery(text, signal); },
+  async embedQueries(texts, signal) { coverage += texts.length; return provider.embedQueries!(texts, signal); },
+};
+const runningModels = async () => {
+  const result = await fetch(new URL("/api/ps", endpoint), { signal: AbortSignal.timeout(5000) });
+  assert.ok(result.ok); return (await result.json()) as { models: Array<{ name: string; size: number; size_vram: number }> };
+};
+const modelMemory = () => {
+  const rows = execFileSync("ps", ["-axo", "pid=,ppid=,rss=,comm="], { encoding: "utf8" }).trim().split("\n")
+    .map((line) => { const match = line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(.+)$/)!;
+      return { pid: Number(match[1]), parent: Number(match[2]), rssBytes: Number(match[3]) * 1024, name: match[4]! }; });
+  const ids = new Set(rows.filter((r) => r.name.toLowerCase().includes("ollama")).map((r) => r.pid));
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const row of rows) if (ids.has(row.parent) && !ids.has(row.pid)) { ids.add(row.pid); changed = true; }
+  }
+  return rows.filter((r) => ids.has(r.pid)).map((r) => ({ rssBytes: r.rssBytes, process: r.name.split("/").at(-1) }));
+};
+try {
+  for (const page of fixture.pages) {
+    const file = path.join(root, page.path); await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, `---\ntitle: ${JSON.stringify(page.title)}\ntype: ${page.type}\n---\n\n${page.body}`);
+  }
+  const records = await getWikiPageRecords(root, true, { persist: false });
+  const texts = [...new Set(records.flatMap((r) => r.passages.map((p) => `${p.heading}\n${p.text}`.normalize("NFC").trim())))];
+  const vectors = new Map(texts.map((text, i) => [text, frozen.documents[i] as number[]]));
+  const build = new PersistentSemanticIndex(root, { descriptor: provider.descriptor,
+    async embedDocuments(inputs) { return inputs.map((text) => { const vector = vectors.get(text); assert.ok(vector); return vector; }); },
+    embedQuery: live.embedQuery,
+  }, undefined, { rescore: true });
+  await build.synchronize(records); build.dispose();
+  for (let run = 0; run < 5; run++) {
+    execFileSync("ollama", ["stop", provider.descriptor.model], { env: { ...process.env, OLLAMA_HOST: endpoint.origin }, stdio: "pipe" });
+    assert.ok(!(await runningModels()).models.some((m) => m.name === provider.descriptor.model), "The measured model must be absent from the loaded-model list.");
+    for (const state of ["unloaded", "loaded"] as const) {
+      // Fresh index instances also clear query/coverage and original-vector caches.
+      const index = new PersistentSemanticIndex(root, live, undefined, { rescore: true });
+      try {
+        await index.synchronize(records);
+        const start = performance.now();
+        const result = await retrieveWikiHybrid({ wikiRoot: root, query, maxResults: 8, semanticIndex: index,
+          semanticPoolSize: 64, semanticBudgetMs: 1500, initialBudget: { maxEvidence: 8, tokenBudget: 4000 }, maximumBudget: { maxEvidence: 8, tokenBudget: 4000 }, persistDerivedIndexes: false });
+        samples.push({ run, state, elapsedMs: performance.now() - start, semantic: result.semantic, evidence: result.hits.map((h) => h.path) });
+        if (state === "unloaded") { warmupQueries++; await provider.embedQuery(query); } // Finish loading before the paired warm sample.
+      } finally { index.dispose(); }
+    }
+  }
+  assert.equal(documents, 0);
+  console.log(JSON.stringify({ provider: provider.descriptor, documents, queries, coverage, warmupQueries, samples,
+    loadedModels: (await runningModels()).models.map(({ name, size, size_vram }) => ({ name, size, size_vram })), providerProcesses: modelMemory(),
+    limitation: "Five paired samples of one fixed query. Provider unload verified via /api/ps; OS filesystem/page cache remains warm. Provider RSS is a point-in-time process sample, not isolated weights or peak allocation." }, null, 2));
+} finally {
+  if (!(await runningModels()).models.some((m) => m.name === provider.descriptor.model)) await provider.embedQuery(query).catch(() => undefined);
+  await fs.rm(root, { recursive: true, force: true });
+}

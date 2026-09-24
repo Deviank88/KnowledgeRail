@@ -1,0 +1,1386 @@
+{
+  "version": 1,
+  "sourceCommit": "a5d5e185c41625fbc955340a7d390d5e95fbcb93",
+  "annotation": "Authored bilingual questions and page judgments against actual repository documentation, before measuring variants. Not observed user traffic; no independent human adjudication. Related pages not listed are unjudged negatives.",
+  "pages": [
+    {
+      "path": "memory/memory-00.md",
+      "title": "Durable semantic retrieval",
+      "type": "concept",
+      "body": "## Durable semantic retrieval\n\nThe wiki Markdown remains authoritative. KnowledgeRail returns knowledge and evidence;\nit does not generate an LLM answer. Ollama, when configured, computes embeddings for\ndocument passages and search/coverage queries. Semantic retrieval now always saves work in\n`wiki/.knowledge-rail/semantic-index.json` (v2 metadata), `semantic-vectors.bin`\n(vectors and LSH signatures), and `semantic-journal.bin` (CRC-protected batch records).\nAn unchanged page needs no document embedding after restart. Changing a page\nregenerates **every passage of that page**. Changing the provider identity, model,\nmodel version, dimensions or query prefix regenerates **the entire corpus**. Set a\nmodel version when replacing weights behind an unchanged model name.\n\nThe snapshot records its provider, engine, dtype and binary checksum. Compatible v1\nJSON indexes migrate without embedding again. Invalid snapshots rebuild from canonical\npages; a truncated journal replays only complete records. Batch durability includes\npartly completed large pages. Separate processes coordinate through the existing\nworkspace checkpoint lock. The journal compacts after a successful build/checkpoint,\nor when it exceeds 25% of vector-snapshot size with a 16 MiB floor. Clients configured with different providers will invalidate\neach other's semantic index; use one provider configuration per workspace.\n\nVectors are held as shared typed arrays. The semantic index retains IDs and headings,\nnot passage bodies; selected results are hydrated from canonical Markdown after checking\nthe indexed page fingerprint. Snapshot metadata likewise omits duplicate passage bodies. `KNOWLEDGE_RAIL_SEMANTIC_DTYPE=i8` is the\ndefault: symmetric per-vector quantization without a dequantized matrix. Set `f32`\nto retain Float32. On the current 16-query fixture, Qwen int8 moved one raw cosine\nscore across 0.72 (0.719865 → 0.720169), but the complete ANN/fusion/coverage pipeline\nreturned identical selected pages and coverage judgments for all 16 queries with\nQwen and both static models. This supports the measured tradeoff, not universal\nnumerical equivalence. Changing dtype invalidates an incompatible v2 snapshot and\nrebuilds it; compatible legacy v1 vectors can migrate directly. LSH parameters are unchanged. A\nseed/engine change rebuilds signatures without regenerating document embeddings;\nqueries use exact search while signatures are unavailable.\n\nAt workspace activation or the first query, missing/changed pages build in background,\nin batches of at most 64 passages. Requested pages take precedence over the remaining\nqueue, followed by decision/rule pages, incoming graph degree and deterministic path order. Each provider has\none in-flight request; queued queries precede subsequent background batches, with a\nmaximum burst of eight queries when a background batch is waiting. This prevents a\ncontinuous query stream from starving the build. A request\ncannot preempt an already running provider batch. Inputs retain the existing 64,000\ncharacter ceiling; no unvalidated truncation has been introduced.\n\nA context request waits up to 1,000 ms for prioritized pages. That is the page-priority\nwait budget, **not an end-to-end provider timeout**: loading, an in-flight provider\nbatch, query embedding and coverage have their own costs. Provider requests retain the\nconfigured timeout. The index exposes `ready`, `building`, `degraded` or `absent`,\nwith completed/total/pending pages. During `building`, coverage is `semantic-partial`:\ncurrent vectors participate where available; remaining pages retain lexical coverage.\nTransient ranking can favor already embedded pages, and the response reports partial\ncoverage. Missing configuration uses lexical retrieval; provider failures add a warning.\n\nPage writes, edits and ingestion invalidate touched pages immediately and prioritize\nregeneration. Canonical writes succeed even when the embedding provider fails; the\nresponse reports pending/degraded work and later requests retry. Manual Markdown edits\nare reconciled by the lexical generation. `knowledge_admin action=status` reports\nsemantic state; `action=checkpoint` compacts the journal. `force=true` clears the\nsemantic generation and starts rebuilding it in background.",
+      "source": "docs/guides/memory-evolution.md",
+      "sourceHeading": "Durable semantic retrieval",
+      "sourceSha256": "ea9f003668fbeef6e277400966e38f627f01d37082f8475403d5b293f87388c8"
+    },
+    {
+      "path": "memory/memory-01.md",
+      "title": "Optional static embeddings",
+      "type": "concept",
+      "body": "## Optional static embeddings\n\n`model2vec` averages a pinned local token-vector table using the official JavaScript\nHugging Face tokenizer. It runs without a model server or neural inference. Setup is\nexplicit; normal retrieval never downloads model assets or changes configuration.\n\n```json\n{\"action\":\"semantic_setup\",\"options\":{\"model\":\"potion-multilingual-128M\"},\"setup_mode\":\"preview\"}\n```\n\nUse `setup_mode=apply` to download and verify the immutable assets inside the selected\nwiki's `.knowledge-rail/models/`. Supported models are `potion-retrieval-32M` (512\ndimensions) and `potion-multilingual-128M` (256). The setup response supplies the\nabsolute directory for the following environment configuration:\n\n```text\nKNOWLEDGE_RAIL_EMBEDDING_PROVIDER=static\nKNOWLEDGE_RAIL_EMBEDDING_MODEL=potion-multilingual-128M\nKNOWLEDGE_RAIL_STATIC_MODEL_DIR=<directory returned by semantic_setup>\nKNOWLEDGE_RAIL_STATIC_MEMORY_MB=256\n```\n\nAll four asset hashes and the model revision participate in provider identity. A\nprovider switch follows the same full-regeneration lifecycle as an HTTP model change.\nThe matrix cache budget defaults to 256 MiB per provider/workspace. The English matrix\nis about 123 MiB and the multilingual matrix about 489 MiB. Above the budget, the\nprovider reads needed rows from disk without retaining the matrix; tokenizer memory\nis additional. The evaluation used a 600 MiB matrix budget: its warm throughput does\nnot describe the default uncached multilingual path. Unknown-only input produces an\nexplicit provider failure and lexical fallback, never a fabricated vector.\n\nThe static provider remains optional. Its cosine distribution is model-specific;\nunchanged coverage thresholds are not a claim that all models are calibrated equally.",
+      "source": "docs/guides/memory-evolution.md",
+      "sourceHeading": "Optional static embeddings",
+      "sourceSha256": "ea9f003668fbeef6e277400966e38f627f01d37082f8475403d5b293f87388c8"
+    },
+    {
+      "path": "memory/memory-02.md",
+      "title": "Usage, repository maps and stable context",
+      "type": "concept",
+      "body": "## Usage, repository maps and stable context\n\n`usage-ledger.jsonl` retains bounded normalized terms and disclosed/materialized\nresource identifiers, gap/fallback flags and explicitly reported outcomes. It never\nstores the raw task string. The file is bounded to 2 MiB/10,000 events and 180 days;\nread-only workspace bindings do not record usage. Materialization must follow disclosure\nin the same session/binding within 15 minutes. Repeated reads do not count twice.\nFallbacks and failed outcomes remove utility. The latest disclosure is the correlation\nscope; this is a bounded local observation, not a full task trace.\n\nUtility decays with a 90-day half-life and can boost a candidate by at most 15%.\nReranking operates inside the existing retrieval pool, preserving the leading lexical\ncandidate and exact title/path matches. `KNOWLEDGE_RAIL_USAGE_RANKING=0` disables the\nboost for comparison while leaving observations available.\n\n```json\n{\"action\":\"usage\",\"options\":{\"action\":\"status\"}}\n{\"action\":\"usage\",\"options\":{\"action\":\"reset\"}}\n{\"action\":\"usage\",\"options\":{\"action\":\"outcome\",\"outcome\":\"failed\"}}\n```\n\n### Native usage audit\n\n`knowledge_admin` also exposes a read-only audit of opt-in, project-local native\nhook observations:\n\n```json\n{\"action\":\"usage\",\"options\":{\"action\":\"audit\",\"days\":7,\"max_turns\":20}}\n```\n\n`client` optionally filters `codex` or `claude`. `days` is bounded to 1..30 and\n`max_turns` to 1..100. The observer stores metadata in the project root's\n`.knowledge-rail/usage-audit/`, separately from the wiki usage ledger. The existing\n`usage reset` affects the ranking ledger only. No new top-level tool is added.\n\nNative SessionStart/UserPromptSubmit (and subagent start) establish observation\nboundaries; PreToolUse records starts and PostToolUse records completions. The local\nhook bridge calls `observeUsage` from `dist/runtime/usage-observer.js`, passing a\nclassified tool invocation. This observer is opt-in; the standard client setup\ncurrently installs awareness/drift hooks and does not install this custom collector.\n\nThe audit correlates client, session, actor, turn and call IDs. Codex native turn IDs\nare preferred; without them an observed prompt boundary is used. These are not\nsemantic task IDs. A successful knowledge retrieval must complete **before** a text\nsearch starts. Admin/status/audit calls are excluded. Coverage and successful reads\nare reported separately, so an insufficient retrieval is not presented as complete\nevidence. Reads cover observed `knowledge_page/code read` calls; direct MCP\n`resources/read` outside those hooks is not attributed.\n\nVerdicts are `knowledge_before_search`, `search_without_prior_knowledge`,\n`not_verifiable`, or `no_text_search`. The second means no prior successful retrieval\nwas observed within that turn; it does not establish a policy violation (context may\nbe reused, and shell searches include valid checks and output filters). Missing\nboundaries, unmatched search events, opaque results, tied timestamps, malformed data\nand conflicting duplicates cannot produce a positive attestation. No observation\nstore returns `not_observed`, not proof of zero use. The audit does not assess\ncomprehension or provide tamper-proof certification.\n\nThe collector hashes IDs and resource URIs, retains no prompt, command, content or\noutput, caps daily files at 5 MiB and prunes files older than 30 days at session start.\nReads are bounded to 20 MiB/30,000 events with explicit incomplete results. Local\nrules, hook definitions and observation files remain ignored by Git. Adding a\nPreToolUse definition requires the client's normal review/trust flow; the observer\nnever grants permission or blocks execution.\n\nCode-related task context may include `repositoryMap`: declarations, paths, known\nmanifest components, and bounded call/import relations expanded to depth two. It\ncontains no function bodies, performs no build, and shares the existing token budget.\n`include_repository_map=false` disables it. Lexical graph edges are navigation\ncandidates, not proof of execution. The map is fixed-bound (`widenable=false`), and\nreports truncation. Response serialization puts stable evidence before task details;\nthis increases reusable byte prefixes without claiming measured model cache hits.",
+      "source": "docs/guides/memory-evolution.md",
+      "sourceHeading": "Usage, repository maps and stable context",
+      "sourceSha256": "ea9f003668fbeef6e277400966e38f627f01d37082f8475403d5b293f87388c8"
+    },
+    {
+      "path": "memory/memory-03.md",
+      "title": "Native usage audit",
+      "type": "concept",
+      "body": "### Native usage audit\n\n`knowledge_admin` also exposes a read-only audit of opt-in, project-local native\nhook observations:\n\n```json\n{\"action\":\"usage\",\"options\":{\"action\":\"audit\",\"days\":7,\"max_turns\":20}}\n```\n\n`client` optionally filters `codex` or `claude`. `days` is bounded to 1..30 and\n`max_turns` to 1..100. The observer stores metadata in the project root's\n`.knowledge-rail/usage-audit/`, separately from the wiki usage ledger. The existing\n`usage reset` affects the ranking ledger only. No new top-level tool is added.\n\nNative SessionStart/UserPromptSubmit (and subagent start) establish observation\nboundaries; PreToolUse records starts and PostToolUse records completions. The local\nhook bridge calls `observeUsage` from `dist/runtime/usage-observer.js`, passing a\nclassified tool invocation. This observer is opt-in; the standard client setup\ncurrently installs awareness/drift hooks and does not install this custom collector.\n\nThe audit correlates client, session, actor, turn and call IDs. Codex native turn IDs\nare preferred; without them an observed prompt boundary is used. These are not\nsemantic task IDs. A successful knowledge retrieval must complete **before** a text\nsearch starts. Admin/status/audit calls are excluded. Coverage and successful reads\nare reported separately, so an insufficient retrieval is not presented as complete\nevidence. Reads cover observed `knowledge_page/code read` calls; direct MCP\n`resources/read` outside those hooks is not attributed.\n\nVerdicts are `knowledge_before_search`, `search_without_prior_knowledge`,\n`not_verifiable`, or `no_text_search`. The second means no prior successful retrieval\nwas observed within that turn; it does not establish a policy violation (context may\nbe reused, and shell searches include valid checks and output filters). Missing\nboundaries, unmatched search events, opaque results, tied timestamps, malformed data\nand conflicting duplicates cannot produce a positive attestation. No observation\nstore returns `not_observed`, not proof of zero use. The audit does not assess\ncomprehension or provide tamper-proof certification.\n\nThe collector hashes IDs and resource URIs, retains no prompt, command, content or\noutput, caps daily files at 5 MiB and prunes files older than 30 days at session start.\nReads are bounded to 20 MiB/30,000 events with explicit incomplete results. Local\nrules, hook definitions and observation files remain ignored by Git. Adding a\nPreToolUse definition requires the client's normal review/trust flow; the observer\nnever grants permission or blocks execution.\n\nCode-related task context may include `repositoryMap`: declarations, paths, known\nmanifest components, and bounded call/import relations expanded to depth two. It\ncontains no function bodies, performs no build, and shares the existing token budget.\n`include_repository_map=false` disables it. Lexical graph edges are navigation\ncandidates, not proof of execution. The map is fixed-bound (`widenable=false`), and\nreports truncation. Response serialization puts stable evidence before task details;\nthis increases reusable byte prefixes without claiming measured model cache hits.",
+      "source": "docs/guides/memory-evolution.md",
+      "sourceHeading": "Native usage audit",
+      "sourceSha256": "ea9f003668fbeef6e277400966e38f627f01d37082f8475403d5b293f87388c8"
+    },
+    {
+      "path": "memory/memory-04.md",
+      "title": "Durable claims and maintenance",
+      "type": "concept",
+      "body": "## Durable claims and maintenance\n\nClaims accept optional UTC ISO `valid_from`/`valid_until` (exclusive end), `provenance`\nreferences (`commit` with a full hash or `pull_request` with an HTTPS URL), and\n`verified_by` test resource URIs. Source document and segment provenance remain\nmandatory. A supersession closes the previous claim at the replacement's `valid_from`\nor recording time. Existing claims default to validity from `createdAt`.\n\n`knowledge_context` accepts `as_of`. Historical lookup returns only matching claims\nvalid at that instant in `temporal.claims`, with source and interval. It does not\npretend unversioned page prose or today's code establishes past facts. Page links\nopen the current page; the historical text is in the response. Contradiction status\nis current ledger status, not reconstructed transaction history. No evidence at the\nrequested time is an explicit gap.\n\nTest references must identify indexed test fragments. Synthesis labels them\n“Verified by” with an explicit qualification: an anchor is evidence of test content,\nnot an execution result. Drift checks both implementation and test anchors.\n\nGit anchors capture a revision only when the file matches that commit. Drift maps\nan untouched range through diff hunks and verifies its hash at the new location.\n`relocated` preserves the old anchor in history and updates the current anchor; it\nis not stale. Changed, missing or unresolvable code retains the existing conservative\nverdicts. Renames and arbitrary moved/deleted hunks are not guessed. Without Git the\noriginal hash/range behavior applies. `knowledge_admin action=drift dry_run=true`\nand CLI `--no-ledger` avoid persistence; a normal drift call may update claim anchors\nand therefore requires write scope.\n\n```json\n{\"action\":\"consolidate\",\"setup_mode\":\"preview\",\"options\":{\"days\":90}}\n{\"action\":\"consolidate\",\"setup_mode\":\"apply\",\"options\":{\"days\":90,\"proposals\":[\"Review the repeated credit policy as a concept.\"]}}\n```\n\nConsolidation links identical active claims to one canonical identity while retaining\nall original claim IDs and source provenance. Different targets, validity, origins\nor anchors are not merged. It reports before/after logical counts, pages with no\nobserved disclosure in the retained usage window, and repeated concept candidates.\nAbsence from the ledger does not prove a page was never used. Apply saves a bounded\nreview page; it does not delete pages, synthesize concepts, or apply supplied\nproposals. Proposals can be authored by a caller/model, but KnowledgeRail makes no\ngenerative call during consolidation.",
+      "source": "docs/guides/memory-evolution.md",
+      "sourceHeading": "Durable claims and maintenance",
+      "sourceSha256": "ea9f003668fbeef6e277400966e38f627f01d37082f8475403d5b293f87388c8"
+    },
+    {
+      "path": "memory/memory-05.md",
+      "title": "Measured limits and reproduction",
+      "type": "concept",
+      "body": "## Measured limits and reproduction\n\nMeasurements are local development results, not production traffic:\n\n- **Real Ollama lifecycle:** identical temporary copies of this project's actual\n  wiki (8 pages, 376 passages), `qwen3-embedding:0.6b` version `ac6da0dfba84`, 1024\n  dimensions, model loaded after an explicitly measured 50 ms warmup. Three fresh\n  MCP processes per version, alternating order, all document/query/coverage requests\n  forwarded to Ollama without caching or substituting vectors: startup through the\n  first context response was 24.85 s on 2.8.7, 0.58 s with f32 and 0.60 s with i8.\n  The old context path disabled semantic persistence and embedded all 376 passages\n  on each restart; both new variants reused them. All versions computed seven query/\n  coverage embeddings per restart and returned identical evidence and coverage.\n  These are measurements on 376 real passages, not on 10k or 50k.\n- On a fresh wiki copy with no index, the old version returned full semantic context\n  in 21.89 s. New f32/i8 returned **partial** context in 4.35/4.37 s and finished the\n  full index in 22.79/22.98 s. At that first response no page was fully embedded;\n  selected pages still used lexical coverage under the explicit partial status. The background path does not make initial embedding\n  computation disappear. The observed complete-build cost was slightly higher.\n  Same-process repeated queries were 57/110/93 ms in single samples; no speedup is\n  claimed for that case. The restart gain comes mainly from durable reuse.\n- At 10k/50k synthetic 1024-dimensional passages, i8 snapshots plus metadata occupied\n  12.55/62.81 MB versus f32 43.27/216.41 MB. Incremental heap + buffers were\n  2.18/2.10 KB per passage versus 5.24/5.15 KB; this excludes a separate static-model\n  matrix cache. These are storage/memory scaling measurements, not live Ollama timings.\n- Float32/1024-dimensional synthetic index, five reloads with warm filesystem cache:\n  10k passages median 68 ms; 50k median 357 ms. These are index reloads, not server\n  startup. Zero repeated document embeddings; search results preserved across reload.\n- At 10k, persisted storage decreased from about 202 MB JSON to 43 MB binary plus\n  metadata. Stable incremental heap + buffers were about 5.24 KB/passage at 10k and\n  5.15 KB at 50k, including a fixed GC/event-loop settling step in both runtimes.\n  At 1k the fixed engine/runtime overhead raises f32 to 6.9 KB/passage, above the\n  roadmap's 6 KB target. The default i8 uses 3.78 KB at 1k and meets that target at\n  all three measured scales. The previous\n  50k JSON snapshot failed with `RangeError: Invalid string length`.\n- LSH-only restoration at 1k/10k/50k, median of three runs: saved signatures\n  restored in 1.3/13.5/86.3 ms. Missing signatures completed in 81/791/4,000 ms\n  in background; changed-seed results were comparable. First exact queries while\n  rebuilding took 1.3/10.9/54.1 ms, with zero document embeddings.\n- A checkpoint sampled every 5 ms, before creating additional reload instances,\n  increased RSS by at most 0.20% over the post-build steady sample in these runs.\n  Heap plus ArrayBuffer allocation rose by about 30–50%, reusing already resident\n  process memory. This is an RSS observation, not a 20% allocation bound.\n- Seven fresh stdio process starts, empty workspace, through `tools/list`: medians\n  293 ms before and 299 ms after. There is no demonstrated protocol startup speedup.\n- 404 document/domain passages and 20 authored bilingual probes: cached static\n  English/multilingual throughput about 1,705/1,169 passages/s; local Qwen HTTP about\n  18 passages/s. Expected-document top-1 was 14/20, 20/20 and 18/20, respectively.\n  Int8 changed no top-1 result or coverage-threshold decision on those probes.\n  These probes include recorded aliases; they are not a broad independent quality claim.\n  Static models remain optional; cached multilingual measurements explicitly use a\n  600 MiB matrix budget instead of the default 256 MiB uncached row-reading path.\n- A separate production comparison on the checked-in semantic fixture uses 16 queries\n  and 53 passages (the roadmap's older count of 29 does not match this fixture).\n  Its raw Qwen cosine crossing is reported above. Restricting the fixture to each\n  page's first passage reduced raw top-five page recall for both static models,\n  so all passages remain indexed. A 128-character cap changed two Qwen result lists\n  and one coverage result while leaving mean recall unchanged; 512/2,048-character\n  caps do not shorten any passage in this small fixture. Longer-input stability\n  is assessed separately in the 1,000-passage throughput ablation.\n- Throughput on 1,000 distinct real documentation/source excerpts (1.20 million\n  characters), including all Ollama calls: batches of 64 at concurrency 1/2/4 took\n  54.86/58.34/78.24 seconds; batches of 128 took 96.37/82.70/80.83 seconds. Every\n  256-input variant encountered HTTP 400. The default remains 64 with concurrency 1.\n  Capping at 512 characters cut the build to 38.64 seconds but retained only 68% of\n  the reference top-five results across ten authored probes. A 2,048-character cap\n  retained that ranking on these probes but took 79.09 seconds. No smaller cap is\n  adopted: this workload does not demonstrate a reliable throughput/quality benefit.\n- The deterministic lifecycle gate compares both full and compact context responses\n  for every golden query across two reloads, including evidence, gaps and coverage.\n  It also completes 1,000 distinct synthetic passages during continuous query traffic.\n  These are scheduler/parity checks, not real-provider timing claims.\n\n```sh\nnode --expose-gc --import tsx benchmarks/semantic-durability-bench.ts --scale=10000 --reloads=5\nnode --expose-gc --import tsx benchmarks/semantic-durability-bench.ts --dtype=i8 --scale=50000 --reloads=5 --signature-ablation\nnode --import tsx benchmarks/ollama-lifecycle-bench.ts --live --config=/path/to/.claude.json --baseline=/path/to/2.8.7 --iterations=3\nnode --import tsx benchmarks/semantic-throughput-bench.ts --live\nnode --import tsx benchmarks/static-embedding-bench.ts --assets=/tmp/kr-model-eval --download --live\nnode --import tsx benchmarks/semantic-quantization-eval.ts --assets=/tmp/kr-model-eval --live --truncation\nnode --expose-gc --import tsx benchmarks/code-context-bench.ts --scales=1000,10000 --iterations=30 --map-ablation\nnpm run verify\nnpm run eval:gates\n```\n\nLive benchmarks require explicit local provider configuration. Assets are not included\nin the package. Raw local reports live under `benchmarks/results/` (ignored by Git).\n\nA separate **diagnostic** MCP restart benchmark includes initialization, tool discovery\nand context compilation against a deterministic HTTP fixture. It must not be used\nas an estimate of real Ollama end-to-end latency. At 10k persisted f32\npassages, the 2.8.7 JSON baseline took 2.47 s median through the first response; the\nnew format took 0.56 s. At 50k the new format took 1.26 s. All three runs per case\nreturned the same evidence URI digest, full semantic coverage and zero document\nembedding calls. These timings include the server but exclude real embedding\ncomputation by Ollama for search and coverage queries:\n\n```sh\nnpm run build\nnode --import tsx benchmarks/semantic-startup-bench.ts --scale=10000 --iterations=3\nnode --import tsx benchmarks/semantic-startup-bench.ts --scale=50000 --iterations=3\nnode --import tsx benchmarks/memory-usage-eval.ts\n```\n\nThe controlled usage ablation uses four fixed candidate pools with separate authored\ntraining/evaluation phrases. Empty-ledger output is identical; eight simulated useful\nmaterializations increase precision/recall at two from 0.5 to 1.0, while five subsequent\nfallback observations remove the boost. It measures the production reranker only;\nit is not an end-to-end retrieval or live-agent success rate. The map ablation uses\nthe actual compiler: at 10k fragments its measured incremental p50 was 2.0–4.6 ms\nfor 2k/4k token budgets. The 4k-budget p95 had an outlier to 16.4 ms; the p50 target\nmust not be interpreted as a p95 guarantee. Stable serialization increased the common\nprefix from 52 bytes to approximately 4.9–10.9 KB for the same project/query with a\nchanged objective. This is byte-prefix reuse, not measured provider token caching.",
+      "source": "docs/guides/memory-evolution.md",
+      "sourceHeading": "Measured limits and reproduction",
+      "sourceSha256": "ea9f003668fbeef6e277400966e38f627f01d37082f8475403d5b293f87388c8"
+    },
+    {
+      "path": "code/code-00.md",
+      "title": "Record an implementation claim",
+      "type": "implementation",
+      "body": "## Record an implementation claim\n\n1. Use `knowledge_code action=\"symbol\"` with the qualified declaration name, or\n   a bounded code search, to locate the relevant fragment. Read its returned\n   resource and verify that it supports the claim.\n2. In the `knowledge_ingest` workflow, provide that URI as\n   `claims[].target.code_resource_uri` when calling `action=\"apply_claims\"`.\n   Keep the normalized document and segment provenance as usual.\n3. The pipeline refreshes only the targeted code files and captures the indexed\n   line range, range hash and parser version. If capture fails, the warning is\n   explicit and the page does not receive a purportedly verified code link.\n4. Synthesis places the code URI and captured line range beside the claim on the\n   canonical wiki page. Run drift checks before relying on older implementation\n   claims; the displayed range records the capture, not a perpetual freshness claim.\n\nAll eligible claims in one record operation share a single snapshot and manifest\nrefresh, with separate outcomes per target and the same overall candidate limit.\nThe response can also include `relatedEvidence`: at most eight direct incoming or\noutgoing call/import candidates across at most eight eligible claims. Each carries\nthe originating claim, target URI, relation, direction and candidate `code://` URI.\n`lexical_call` is a lexical hint; `resolved_import` identifies an indexed file.\nOpen useful candidates and explicitly record further evidence only after inspection.\nProposals never add claim relations or extra claims. Truncation and unavailable\nproposals are explicit; candidate discovery does not rebuild an index or undo a\nsuccessful claim write.\n\nExample claim payload; replace the URI with the actual indexed resource:\n\n```json\n{\n  \"text\": \"OrderService validates the order before persistence.\",\n  \"kind\": \"behavior\",\n  \"origin\": \"explicit\",\n  \"confidence\": 1,\n  \"target\": {\n    \"page_path\": \"implementations/OrderValidation.md\",\n    \"page_title\": \"Order validation\",\n    \"page_type\": \"implementation\",\n    \"code_resource_uri\": \"<URI returned by knowledge_code>\"\n  }\n}\n```\n\nCode references belong in this field, not in the page's `sources` frontmatter:\n`sources` lists documents under `docs/`. The TypeScript core API uses camelCase\n`target.codeResourceUri`; MCP tool arguments use `target.code_resource_uri`.",
+      "source": "docs/guides/code-evidence-retrieval.md",
+      "sourceHeading": "Record an implementation claim",
+      "sourceSha256": "42f20638b7fcfdbfa00b6f3541c966d48a1089502bb71f991de59aba1726679f"
+    },
+    {
+      "path": "code/code-01.md",
+      "title": "Follow the evidence during retrieval",
+      "type": "implementation",
+      "body": "## Follow the evidence during retrieval\n\nStart with `knowledge_context` for the task, open the returned wiki resource,\nthen open its cited `code://repo/...#symbol-...` resource. This retrieves a bounded\nfragment directly instead of repeating a repository-wide search for its location.\nFor dependency questions, use `knowledge_code action=\"references\"` on the indexed\nfile module. An import edge identifies the resolved file or members of an explicit\nnamespace/package group; it does not prove which declarations execute.\n\nThe [import contract](../../benchmarks/README.md#local-import-references) describes\ndeclaration lookup, header paths, Go/Rust conventions, LWC virtual imports and\nremaining ambiguities. Inspect the extracted specifier and relevant source when\na rule cannot resolve the edge.\n\nReference responses expose `unresolvedImports` when the indexed snapshot contains\nrecognized ambiguity or unresolved imports. Each example includes the source path,\nspecifier, matched name, status, reason and candidate paths. At most twelve examples\nare retained, with ambiguity first, then actionable `not_indexed`/`unsupported_syntax` cases, and four candidates per example. Strings longer\nthan 256 UTF-16 code units are abbreviated and marked `textTruncated`; use the\nindexed source for complete text. `unresolvedImportsTruncated` also reports omitted\nexamples or candidates.\n\n`unresolvedImportsScope: \"indexed_snapshot\"` means these are sampled from the\ngeneration's import inventory, **not attributed to the queried target or filtered\nby its path prefixes**. They do not establish an indexing failure: unresolved can\nmean external, unsupported or absent from the index. Rebuilding alone may not help.\nAn ambiguous singular name contributes no import edge. An explicit namespace or\npackage can legitimately contain multiple files; valid members of partially\nresolved PHP/Rust groups remain available while failed members get diagnostics.\nCustom resolver arrays remain trusted declarations, with an optional issue-reporting\ncallback. `importResolutionCounts` and `importReasonsByLanguage` expose generation inventory\nby adapter family; they are not request or fallback rates. `platform` and\n`external_dependency` do not fill the unresolved sample or unresolved counter.\nDependency classification uses only declared names, with no distribution-to-module\nor Composer-package-to-namespace guessing. `not_indexed` requires an existing,\nrepository-confined relative literal with an explicit extension, absent from the\nsource inventory. At most 4,096 distinct paths are probed once per source generation;\nother missing imports retain `not_indexed_or_unsupported`. JS dynamic import/require\nexpressions are inventoried as `unsupported_syntax` without evaluating them. Task context carries a compact warning for incomplete\nresolution, without turning ambiguity into a missing-index GAP.\n\nLexical display selection is still under observation. A higher-ranked page of the\nsame type can remove another candidate when it covers a strict superset of that\ncandidate's query signals **and the candidate covers less than half of all query\nsignals**. Facets and entities share the coverage matcher; query signals absent\nfrom every retrieved page still count. Pages meeting the half-coverage threshold\nare protected from dominance, including a specific page beneath a broad overview,\nbut remain subject to the ordinary result/token budgets. Below that threshold,\nan overview can still suppress a page containing useful detail. Semantic/graph evidence,\ntraceability, explicit artifact chains and diversity/contradiction requests retain\ntheir existing selection. The full candidate pool remains available for GAP assessment.\nDeterministic regressions cover overview/detail ranking in all three profiles,\nincluding five-of-six and half-coverage cases. The local workspace check retains\nall expected pages. An additional read-only check on one authentic overview/detail\nwiki retained all expected pages across 120 runs (20 analyst-authored questions,\nthree profiles, two budgets); 86 runs had the target below first rank. This does\nnot close the requirement for real questions across three authentic workspaces. See the\n[workspace probe](../../benchmarks/README.md#workspace-specific-page-retention).\n\nFor Go projects, module identities come from discovered `go.mod` files. References\nrecheck existing manifests automatically. After creating a nested `go.mod`, call\n`knowledge_code action=\"update\"` with its path, or rebuild the index, to discover\nthe new module boundary. This reuses source fragments and existing anchors.\nManifest problems appear as bounded `manifestWarnings` in the reference response.\nWithout discovered manifests, Go retains its legacy suffix heuristic. Its edges now\ncarry a `legacy_suffix_heuristic` diagnostic with unverified candidates; suffix\ncoincidences can still create false positives.\n\nJS/TS uses declared `paths` and `baseUrl` from the nearest `tsconfig.json` or\n`jsconfig.json`. Configs accept comments, trailing commas and one local `extends`\nlevel. Known configs and their current base files refresh on reference queries;\nnew nested configs need `update` on their path or a rebuild. Missing, invalid or\nunsupported bases produce manifest diagnostics. `rootDir` is not an import alias.\nLocal `references`, literal `include`/`exclude`/`files`, and one-level inherited\nmembership choose the owning config; overlapping explicit projects stay ambiguous.\n`package.json` supports local `exports` and `imports` (`#alias`), single-star\npatterns, and ordered `import`/`require`/`default` conditions. npm/yarn `workspaces`\nand literal pnpm `packages` lists supply local package identities. Duplicate package\nnames stay ambiguous; unexported subpaths remain private. Arrays, external alias\ntargets, custom conditions and bundler aliases are not resolved. Config ownership\nis selected among discovered ancestor-directory configs; configs outside that chain\ncannot claim arbitrary external source trees.\n\nPython reads setuptools `package-dir`, explicit `packages`/`py-modules` and literal\npackage discovery roots/patterns from `pyproject.toml` or `setup.cfg`. Named directory\nmappings preserve logical package names, including relative imports in renamed\ndirectories. Regular package chains require indexed `__init__.py`/`.pyi`; `.py`\ntakes precedence over its stub. Without a manifest, a script supplies its directory\nand a regular package supplies its verified root. Repository-wide `PYTHONPATH`,\nimplicit namespace packages, dynamic imports and build-backend execution are not\ninferred. Tests outside a package need declared roots to import that package.\n\nPoetry supports literal `packages = [{include=\"pkg\", from=\"src\"}]`, or the\nproject-named regular package beside the manifest. Hatch supports wheel `packages`\nand literal `sources` lists/mappings; its implicit package selection is not guessed.\nFlit supports its module/project name, flat and `src/` regular packages and single\nmodules. PDM supports `package-dir` and literal `includes`. Backend identity comes\nfrom `build-backend` or a unique relevant tool table. Conflicting tables produce a\nwarning and no declared roots, while intra-package relative imports keep their\nverified package boundary. Tests/scripts outside packages can now reach these\nexplicit layouts; implicit namespaces and runtime `sys.path` remain unsupported.\nThe pinned Hatch project deliberately verifies the undeclared-layout limit, while\nthe deterministic fixtures cover explicit Hatch layouts.\n\nComposer reads PSR-4, PSR-0, classmap, files and literal exclusions from `autoload`\nand `autoload-dev`, including string or array PSR directories. It\nchecks class namespace/path correspondence and keeps nested Composer projects\nseparate. Metadata-only manifests preserve declaration-based resolution within\nthat project boundary. Class/function/constant imports remain distinct, including\nmixed groups, multiple namespaces and HTML between PHP blocks. Classmaps and\nPython discovery filters share a compiled literal glob matcher with no exponential\nbacktracking. Composer scripts and installed packages are not executed or loaded.\n\nJava and Kotlin share declared classes and functions across source roots and both\nlanguages; Java static imports identify the owning class. Duplicate names or overloads\nin competing Gradle modules remain ambiguous. Gradle dependency declarations are not\nused to guess which duplicate is active. Literal Gradle settings and Maven modules\nidentify build boundaries; Maven reactor members share declarations, independent\nnested builds remain separate. Conditional includes, profiles and custom Gradle\nproject directories are not evaluated. C# composes nested and file-scoped namespaces\nand joins compatible partial types within the same discovered `.csproj` boundary.\nMultiple project files in one directory are ambiguous. Without project declarations,\nthe repository remains one unspecified boundary. `Directory.Build.props` supplies\na shared boundary, and literal `Compile Remove` patterns exclude members. If the\nfile contains `Condition`, its remove rules are skipped with a notice; no MSBuild\ncondition or imported build script is executed.\n\nCargo reads package identities, custom `[lib].path`/`[[bin]].path`, literal workspace\nmembers and bounded simple globs such as `crates/*`. Rust file-level `mod` declarations\nproduce edges, literal `#[path]` replaces conventional targets, and `cfg` alternatives\nremain candidates with `cfg_conditional` diagnostics. Unsupported `cfg_attr`/path\nexpressions do not fall through to a guessed file. Unique one-level `pub use` can\nreach the defining module; chains and macro expansion remain unsupported. Declared\nCargo dependencies are classified separately and are never resolved from installed\ncrates. Invalid independent workspace/dependency declarations retain valid root targets.\n\nThe shared minimal TOML parser supports tables, quoted/dotted keys, strings, arrays,\ninline tables and scalar values used by these manifests. Python and Cargo select\nonly relevant declaration fields; unrelated tool options and date literals are\nskipped without retaining their values. Selected malformed roots still yield\n`invalid_manifest`. Unterminated strings/containers or malformed table boundaries\ncan prevent trustworthy section discovery and still invalidate the read. The reader\nis not a validator for unrelated configuration. Manifest readers retain 256 KiB/file\nand 32 direct references. Selected workspace/build graphs opt into at most eight\nlevels and 256 followed references. Wildcard enumeration has limits of 32 patterns,\n32 results, 16 path segments and 16,384 directory entries; recursive `**` manifest\ndiscovery is unsupported. Confinement, freshness and the 64 MiB project query-cache\nadmission budget remain enforced. These are bounded\ndeclaration readers, not validators for every build tool's grammar.\n\nRuby `require_relative` resolves the literal path from the importing file, including\nexplicit `.rb`; ordinary `require` remains unresolved without a modeled load path.\nThe nearest unambiguous gemspec supplies literal, ordered `require_paths`. A declared\n`Gem::Specification` without require_paths access supplies RubyGems' default `lib`;\ndynamic/conditional assignments and mutations produce notices instead of guessed roots.\n`require_relative` remains usable independently of gemspec errors. External gems are\nnot resolved. Literal `Gemfile` path gems add only their declared gemspec load paths.\nGo also supports literal `go.work use` and local `replace`, respecting nested module\nidentity; competing replacements stay ambiguous. Vendor/build tags remain outside\nthe contract. The reader discovers `*.gemspec` and `*.csproj` in indexed ancestors\nwith bounded directory enumeration; new nested boundaries require index update.\n\nC/C++ quoted includes first check the including directory, then literal include\noptions from `compile_commands.json`, or bounded directory/target declarations in\n`CMakeLists.txt`. Compilation arguments retain include-search order; configurations\nthat resolve to different headers stay ambiguous. Literal CMake candidates are\nconservative, without transitive target/build evaluation or arbitrary header choice.\nOnly repository-confined paths are considered. Compiler databases in arbitrary build\ndirectories must be made discoverable at indexed ancestors/root. Angle includes,\nmacros, response files, dynamic CMake expressions and external paths remain unsupported.\nNo implementation twin is invented.\n\nCMake supports single-level literal `set`, `${PROJECT_SOURCE_DIR}` and\n`${CMAKE_SOURCE_DIR}` relative to the outer linked manifest, and literal\n`add_subdirectory`. Unsupported declarations discard the affected target, while\nindependent literal targets survive. An unknown global include root blocks the\nscope because it could shadow known headers; this is explicitly diagnosed.\nSource-relative quoted includes remain available. No percentage of all real CMake\nprojects is claimed by the controlled corpus.\n\nSalesforce reads `sfdx-project.json` package directories and nested project boundaries.\n`@salesforce/label/c.Name`, `resourceUrl/Name` and `messageChannel/Name__c` resolve only\nto indexed entity metadata. Duplicate bundles remain ambiguous across package\ndirectories. Namespaced labels without a modeled declaration remain unresolved.\nThe platform module families (`lwc`, `lightning/*`, `@lwc/*`, `@wire`, bare\n`@salesforce/apex`, and supported Salesforce user/client/i18n/community/site/permission\nand content-asset families) never create invented local files.\n\nTrigger headers create declared object references. Literal `controller`/`extensions`\nattributes in Visualforce and `controller` in Aura reach Apex classes. Dynamic\nexpressions and LWC HTML templates remain unsupported. Apex `.cls-meta.xml` and\n`.trigger-meta.xml` supply `Active`/`Inactive`/`Deleted` status on explicit index\nupdates; they remain outside the source roster and telemetry reports them as\nunsupported source extensions. Up to 1 MiB of compact sidecar data and manifest-reader state can survive an\noversized uncached snapshot. Ordinal reference postings can also be retained under\na separate 16 MiB cap, without retaining fragment objects. Both count against the\n64 MiB project ceiling. Source generations invalidate both; manifest edits\ninvalidate postings. This avoids repeated sidecar discovery and resolver construction\nwhen the full snapshot cannot be admitted. Status never removes evidence.\n\nExplicit rebuild/update/remove operations now persist a versioned companion\nprojection in snapshot v2. Queries can restore Apex status after a process restart\nwithout reading sidecars. A sidecar-only update preserves source fragment IDs,\nfingerprints and anchor hashes; removal, invalid XML or absent status clears the\nstatus on the owning Apex sources. Companion enrichment preserves metadata\nbelonging to other language adapters, including deployment status. Source updates\nwith unchanged code also refresh companion metadata. The\nprojection follows explicit index freshness, including the first query after a\nrebuild. Older snapshots and incompatible projections use the bounded in-memory\nreader without migrating or writing the snapshot from a query. Metadata preparation\nis included in index-update cost and currently checks the generation's companions.\n\nConcurrent queries share in-flight snapshot loading even when the full snapshot\ncannot stay cached. Verified unindexed-import paths, including an empty result,\nare retained per generation under a 1 MiB sub-budget of the same 64 MiB ceiling.\nExplicit index updates and workspace eviction invalidate this state. Manifest\nreaders share in-flight discovery; Salesforce resolvers share prepared names and\nownership while keeping diagnostic callbacks separate. Ancestor discovery reuses\nvisited directories for each manifest specification; filesystem confinement and\nknown-manifest freshness checks remain unchanged.\n\nThe public `imports` array retains raw specifiers; optional `importStatements` on\nfile modules preserve these syntax distinctions. Mixed resolved/unresolved forms\nremain visible through partial-import diagnostics.",
+      "source": "docs/guides/code-evidence-retrieval.md",
+      "sourceHeading": "Follow the evidence during retrieval",
+      "sourceSha256": "42f20638b7fcfdbfa00b6f3541c966d48a1089502bb71f991de59aba1726679f"
+    },
+    {
+      "path": "code/code-02.md",
+      "title": "Measure fallback use",
+      "type": "implementation",
+      "body": "## Measure fallback use\n\nSuccessful public `knowledge_code` search, symbol and references responses include\n`requestId`, including empty results. When using a diagnostic fallback, pass that\nID as `request_id` to `record_fallback`, with `fallback_reason` set to `no_match`,\n`ambiguous`, `unresolved_import` or `unsupported_extension` when applicable. Other\nreasons are counted as `other`; the existing free-text fallback interface remains\ncompatible. The input schema lists the normalized reasons while continuing to accept legacy\nfree text. A repeated fallback for the same retained ID does not inflate the rate.\nThe compact action description supplies routing hints rather than enumerating the\nwhole API: `status`, `update` and `remove` remain in the action enum and the full\n[tool reference](../reference/tool-actions.md).\n\n`knowledge_admin action=\"status\"` exposes `status.requestTelemetry`. The local\nread-only report is `npm run report:code-requests -- /path/to/wiki`. Rates are distinct\nlinked fallback requests divided by served responses, per workspace and language.\nSearch/symbol requests use a file-extension scope when supplied, otherwise returned\nhit languages; references use their target's language. Unscoped empty requests are\n`unknown`, mixed languages are `mixed`, and `.h` follows the default C++ adapter.\nInternal context/index calls, failed tool calls and resource reads are excluded.\n\nCounters survive ordinary process restarts and use an atomic file with cross-process\nlocking, bounded to 256 KiB and the last 512 request IDs. They use OS buffering;\npower-loss durability is not promised. Unknown, expired or foreign IDs count as\nunlinked events and never fabricate a denominator. Unreported fallback use remains\nunknown, so these rates are not complete user-behavior or language-coverage estimates.\nThe new aggregate stores no query text, source paths, symbols or result bodies.\nEmpty, truncated or inconsistent counter files recover on the next counter write,\nunder the same workspace lock. The original bytes are preserved in\n`.knowledge-rail/code-request-counts.corrupt-<timestamp>-<id>.json`; status exposes\nthat archive under `recovery` and a new `startedAt` counting period. Old request IDs\nbecome unlinked, so rates never mix periods. Status alone does not mutate a corrupt\nfile. Archives are retained for inspection. Unsupported newer formats, IO failures,\nnon-regular files and foreign symlinks are not reset; tool warnings name the workspace\ncounter path when counting remains unavailable.\n\nThe separate preexisting fallback journal retains its legacy format and contents.",
+      "source": "docs/guides/code-evidence-retrieval.md",
+      "sourceHeading": "Measure fallback use",
+      "sourceSha256": "42f20638b7fcfdbfa00b6f3541c966d48a1089502bb71f991de59aba1726679f"
+    },
+    {
+      "path": "code/code-03.md",
+      "title": "Include code impact in task context",
+      "type": "implementation",
+      "body": "## Include code impact in task context\n\nFor an impact question, one request can now include source files:\n\n```json\n{\n  \"mode\": \"task\",\n  \"intent\": \"modify\",\n  \"objective\": \"Assess the effects of changing the credit rule\",\n  \"changed_paths\": [\"unusual/domain/credit.ts\"],\n  \"heuristic_token_budget\": 4000\n}\n```\n\n`changeImpact.codeRoots` identifies indexed files or active anchored claims;\n`codeRelations` contains incoming call/reference/import candidates, and\n`codeWikiPages` links up to six canonical pages associated with active claims for\nthose targets. Explicit source paths in the objective/query are also recognized.\nFor impact intents (implement, modify, debug, review), selected pages can supply\nclaim roots without the request naming a symbol. Superseded, contradicted, ambiguous\nand known-drifted claims are excluded from this automatic expansion.\n\nThe maximum is three roots and twelve incoming candidates per root, reduced further\nby the total context token budget. Full and compact responses expose the same code\nlinks. Related wiki metadata is a candidate list and does not claim to satisfy\ndocumentary coverage. Read only relevant links. `codeSnapshot` identifies the indexed\ngeneration; source bodies are not re-read by context and may have changed since\nindexing. Materialization verifies them through the existing resource reader.\n\nContext never creates or repairs a code index. An absent, incompatible, corrupt or\nunsafe index produces a GAP while wiki evidence remains usable; refresh it explicitly\nwith `knowledge_code` when needed. Fixed expansion limits report `widenable: false`;\ntoken-budget omissions can suggest a larger budget while preserving the query,\nchanged paths and page-type filters. Existing adapter limitations still apply:\nlexical call/reference matches and heuristic imports are candidates, and an empty\nresult does not establish that a module is unused.\n\nA database name used inside a source file is not an alias for that file. Incoming\nfile references follow the file/module identity and resolved imports; database\nusage remains searchable evidence, and named entity fragments keep their aliases.",
+      "source": "docs/guides/code-evidence-retrieval.md",
+      "sourceHeading": "Include code impact in task context",
+      "sourceSha256": "42f20638b7fcfdbfa00b6f3541c966d48a1089502bb71f991de59aba1726679f"
+    },
+    {
+      "path": "code/code-04.md",
+      "title": "Verified project example",
+      "type": "implementation",
+      "body": "## Verified project example\n\nRun `npm run dogfood:import-knowledge` from the KnowledgeRail checkout. It records\nimplementation claims on local wiki pages, with code anchors for runtime\nclasses, language resolvers, metadata, wiki resources and knowledge synthesis. It uses\nthe same record/link/synthesis and mutation-finalization services as the tools.\nExisting unrelated pages are preserved.\n\nThe script verifies every anchor with drift detection, checks that function links\nexpose implementation statements rather than just signatures, retrieves all generated pages\nthrough task context with a 2,000-token budget and opens all current cited code\nresources. The local result is written to\n`benchmarks/results/281-import-knowledge.json`. This is a functional path check,\nnot a claim about retrieval accuracy or speed on all projects.\n\nOn source revisions, the script explicitly supersedes its own previous claims.\nIt verifies all current anchors and code links, and reports older anchors requiring\nreview separately. Historical claims are preserved; a fresh current claim does not\nmake an old captured range fresh. Page staleness now consults current claim status:\nsuperseded anchors remain in the audit ledger but do not alone mark a page obsolete.\nActive, ambiguous and contradicted claims still propagate drift. This also handles\nsupersession after the last drift check, without rewriting history. Empty or wholly\nfresh ledgers do not trigger an evidence-store read; with linked drift entries, the\nvalidated store is read once per task-context request and is not retained in a new cache.\nCode impact shares that same per-request store read when it needs anchored claims.\nThe script also checks actual code impact for `src/context/code-impact.ts`, including\nthe compiler that uses it, then materializes every disclosed code candidate within\na separate 6,000-token context budget.\n\nVersion 2.7.4 also corrects TypeScript function ranges containing destructured or\nobject-typed parameters. Its adapter version advances to v3; refresh the code index\nand check older anchors for drift before relying on those ranges.\n\nVersion 2.8.0's TypeScript adapter v5 includes the v4 handling of expression-position regex\nliterals containing quotes/backticks/braces and keeps UTF-16 offsets intact. Refresh\nexisting indexes with `knowledge_code action=\"rebuild\"`; the upgrade reparses that\nadapter's files selectively. This remains a deterministic extractor, not a complete\nJavaScript parser: ambiguous statement-position regexes and nested Unicode-set\nsyntax still need dedicated coverage.\n\nV5 also excludes import-like text in comments, strings and templates. Ruby advances\nto v2 and C/C++ to v3 for import syntax provenance; Java, Kotlin, C# and PHP advance\nto v2 for declaration scopes, import provenance and PHP constants. Rebuild refreshes affected adapters\nselectively; the optional metadata keeps snapshot schema v2 compatible. Existing\nanchors retain their captured parser versions and require drift verification.\n\nAutomated coverage includes `tests/code-import-resolution.test.ts`,\n`tests/import-adapter-contract.test.ts` and the page → code-resource test in\n`tests/drift-detection.test.ts`. Non-code and unresolved claims are checked to\nremain free of fabricated code references; repeated synthesis preserves the link.",
+      "source": "docs/guides/code-evidence-retrieval.md",
+      "sourceHeading": "Verified project example",
+      "sourceSha256": "42f20638b7fcfdbfa00b6f3541c966d48a1089502bb71f991de59aba1726679f"
+    },
+    {
+      "path": "code/code-05.md",
+      "title": "Optional live semantic evaluation",
+      "type": "implementation",
+      "body": "## Optional live semantic evaluation\n\n`KNOWLEDGE_RAIL_EMBEDDING_QUERY_PREFIX` supplies an optional instruction applied to\nqueries only. It changes provider identity so embeddings with a different query\ncontract do not silently reuse the same index; document text remains unchanged.\nChanging the prefix invalidates the semantic index and triggers a full document\nre-embedding at its next synchronization, even though the document embedding inputs\nare identical. Account for provider latency and, where applicable, cost when changing it.\nFor the user's Ollama `qwen3-embedding:0.6b` (1024 dimensions), the tested prefix was\n`Instruct: Given a web search query, retrieve relevant passages that answer the query\\nQuery: `,\nusing the newline required by the [model's instruction format](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B).\nSet it only for a model whose contract requires it.\n\nLive runs use the same questions and production ANN thresholds. In this corpus,\nthe model passed all 29 recorded-alias functional scenarios but recovered neither\nof the two paraphrase-only probes. The instruction reduced no-benefit token growth from six queries to one (+2\nestimated tokens) in the final run; it did not improve recall. See the\n[measured report](../../benchmarks/knowledge-routing-2.8.0.md) before interpreting\nsuccessful integration as general semantic coverage.",
+      "source": "docs/guides/code-evidence-retrieval.md",
+      "sourceHeading": "Optional live semantic evaluation",
+      "sourceSha256": "42f20638b7fcfdbfa00b6f3541c966d48a1089502bb71f991de59aba1726679f"
+    },
+    {
+      "path": "code/code-06.md",
+      "title": "2.9.0 memory integration (unreleased)",
+      "type": "implementation",
+      "body": "## 2.9.0 memory integration (unreleased)\n\nCode-related task context can disclose a bounded `repositoryMap` of declarations and\nknown call/import neighbors, expanded to depth two within the existing token budget.\nSet `include_repository_map=false` to omit it. No source bodies are included, and\nlexical edges do not establish execution. Known manifest components are declarations,\nnot inferred architecture.\n\nClaims can explicitly cite indexed tests through `verified_by`, and drift checks\nthose anchors alongside implementation anchors. A Git revision is captured only for\ncommitted file bytes; diff relocation requires the same range hash and preserves the\nprevious anchor in history. Test anchors do not assert that a test has run or passed.\nHistorical `as_of` context uses claim validity and does not treat current source as\nhistorical proof.\n\nSemantic indexes now persist metadata, binary vectors/signatures and a CRC journal\ninside `.knowledge-rail/`. Page changes regenerate all passages for that page;\nprovider/model identity changes rebuild all embeddings. See\n[memory evolution](memory-evolution.md) for the complete lifecycle, static model setup,\nusage-based ranking and performance/quality limits.",
+      "source": "docs/guides/code-evidence-retrieval.md",
+      "sourceHeading": "2.9.0 memory integration (unreleased)",
+      "sourceSha256": "42f20638b7fcfdbfa00b6f3541c966d48a1089502bb71f991de59aba1726679f"
+    },
+    {
+      "path": "hosting/hosting-00.md",
+      "title": "What is available now",
+      "type": "overview",
+      "body": "## What is available now\n\n`knowledge-rail --transport http` starts an MCP 2.x Streamable HTTP endpoint on `127.0.0.1:3333/mcp` by default. It uses the official per-request MCP handler and has no process-global project root. One gateway can serve concurrent clients working on different local projects because every filesystem-capable request is resolved to an immutable `WorkspaceContext` first.\n\nThe local architecture is:\n\n```text\nCursor project process --stdio + explicit workspace root--> one bound workspace\ncwd-aware IDE/terminal --stdio + automatic cwd/root-----> one bound workspace\n\ndesktop chat --stdio adapter--\\\nlocal HTTP client ----------+--> loopback gateway --> binding A --> project A\n                             \\                    \\-> binding B --> project B\n```\n\nThe desktop adapter discovers or starts the gateway, reads its protected local credential, and forwards MCP calls. It never selects a project from the desktop application's cwd. The chat lists user-approved workspaces and carries an opaque binding returned by `knowledge_workspace`.\n\n### Local trust and security boundary\n\n- The gateway binds to loopback and rejects non-loopback hosts in this release.\n- MCP requests require a random bearer credential stored outside repositories with per-user filesystem permissions.\n- Host and Origin headers are allowlisted; CORS and wildcard origins are not enabled.\n- Request bodies and timeouts are bounded, and logs exclude roots, request bodies, bindings, credentials, and wiki content.\n- Workspace registrations contain canonical local roots, but MCP catalog responses expose only random IDs, display names, a short disambiguator, availability, and allowed scopes.\n- Bindings are random capabilities scoped to a workspace, local adapter principal, access level, expiry, and maximum lifetime. Releasing or restarting the gateway invalidates them.\n- A resource link contains the same opaque capability so `resources/read` can revalidate the workspace instead of consulting mutable server state.\n\nThis protects concurrent projects inside one local user's trust boundary. When a host does not provide a trustworthy conversation identity, the model-visible opaque binding provides logical per-chat isolation; it is not isolation between hostile operating-system users. A new chat is recommended when switching customers because KnowledgeRail cannot erase earlier conversation history.\n\n### Local lifecycle and state\n\nThe owner-protected rendezvous record contains the endpoint, process identity nonce, product/protocol version, binding format, and registry schema version. The credential is stored separately. Desktop adapters validate health and exact compatibility before reuse and never replace a healthy gateway started by another process.\n\nThe state directory follows native conventions:\n\n- Windows: `%LOCALAPPDATA%\\KnowledgeRail`\n- macOS: `~/Library/Application Support/KnowledgeRail`\n- Linux: `${XDG_STATE_HOME:-~/.local/state}/knowledge-rail`\n\n`KNOWLEDGE_RAIL_STATE_DIR` is available for tests and intentional custom local deployments. State must not be committed with a project.",
+      "source": "SELF_HOSTING.md",
+      "sourceHeading": "What is available now",
+      "sourceSha256": "36e8a2e2e0355aeefc2f944ab701689b1cb5c82d795bb1214f4816d5b127bd29"
+    },
+    {
+      "path": "hosting/hosting-01.md",
+      "title": "Local trust and security boundary",
+      "type": "overview",
+      "body": "### Local trust and security boundary\n\n- The gateway binds to loopback and rejects non-loopback hosts in this release.\n- MCP requests require a random bearer credential stored outside repositories with per-user filesystem permissions.\n- Host and Origin headers are allowlisted; CORS and wildcard origins are not enabled.\n- Request bodies and timeouts are bounded, and logs exclude roots, request bodies, bindings, credentials, and wiki content.\n- Workspace registrations contain canonical local roots, but MCP catalog responses expose only random IDs, display names, a short disambiguator, availability, and allowed scopes.\n- Bindings are random capabilities scoped to a workspace, local adapter principal, access level, expiry, and maximum lifetime. Releasing or restarting the gateway invalidates them.\n- A resource link contains the same opaque capability so `resources/read` can revalidate the workspace instead of consulting mutable server state.\n\nThis protects concurrent projects inside one local user's trust boundary. When a host does not provide a trustworthy conversation identity, the model-visible opaque binding provides logical per-chat isolation; it is not isolation between hostile operating-system users. A new chat is recommended when switching customers because KnowledgeRail cannot erase earlier conversation history.",
+      "source": "SELF_HOSTING.md",
+      "sourceHeading": "Local trust and security boundary",
+      "sourceSha256": "36e8a2e2e0355aeefc2f944ab701689b1cb5c82d795bb1214f4816d5b127bd29"
+    },
+    {
+      "path": "hosting/hosting-02.md",
+      "title": "Local lifecycle and state",
+      "type": "overview",
+      "body": "### Local lifecycle and state\n\nThe owner-protected rendezvous record contains the endpoint, process identity nonce, product/protocol version, binding format, and registry schema version. The credential is stored separately. Desktop adapters validate health and exact compatibility before reuse and never replace a healthy gateway started by another process.\n\nThe state directory follows native conventions:\n\n- Windows: `%LOCALAPPDATA%\\KnowledgeRail`\n- macOS: `~/Library/Application Support/KnowledgeRail`\n- Linux: `${XDG_STATE_HOME:-~/.local/state}/knowledge-rail`\n\n`KNOWLEDGE_RAIL_STATE_DIR` is available for tests and intentional custom local deployments. State must not be committed with a project.",
+      "source": "SELF_HOSTING.md",
+      "sourceHeading": "Local lifecycle and state",
+      "sourceSha256": "36e8a2e2e0355aeefc2f944ab701689b1cb5c82d795bb1214f4816d5b127bd29"
+    },
+    {
+      "path": "hosting/hosting-03.md",
+      "title": "Pre-commit and CI drift checks",
+      "type": "overview",
+      "body": "## Pre-commit and CI drift checks\n\n`knowledge_admin action=\"drift\"` is an MCP operation, not a shell subcommand. A hook or CI job should use the same authenticated/local MCP client runner already used by the team, call the operation, and fail or comment when `structuredContent.summary.driftSuspected` is greater than zero. KnowledgeRail deliberately does not bundle a second command-line transport for this check.\n\nA pre-commit integration should:\n\n1. Collect staged repository-relative paths with `git diff --cached --name-only --diff-filter=ACMR`.\n2. Call `knowledge_admin` with `{\"action\":\"drift\",\"scope\":\"paths\",\"paths\":[...]}` through the local MCP runner.\n3. Block the commit when the summary reports drift, showing `topDrifted` claim IDs, pages, ranges, and reasons.\n4. Re-verify those claims through the normal Evidence IR workflow; never rewrite a wiki page automatically from the hook.\n\nA CI integration uses the same payload with paths changed relative to the target branch. It can publish `topDrifted` as a review annotation and should fail the job on `driftSuspected > 0` or `anchorUnresolvable > 0`. For a periodic repository-wide audit, use `{\"action\":\"drift\"}`. Drift persists its disposable ledger and, for hash-verified Git relocations, updates claim anchors with history. It requires write scope. Use `dry_run=true` for a read-only report; canonical pages and repository source files are not edited.\n\nDo not share or hard-code the loopback gateway credential in CI. Prefer a job-local `stdio` server bound to the checked-out workspace, or provision the protected local gateway state using the same trust boundary described above.",
+      "source": "SELF_HOSTING.md",
+      "sourceHeading": "Pre-commit and CI drift checks",
+      "sourceSha256": "36e8a2e2e0355aeefc2f944ab701689b1cb5c82d795bb1214f4816d5b127bd29"
+    },
+    {
+      "path": "hosting/hosting-04.md",
+      "title": "What is deliberately not available",
+      "type": "overview",
+      "body": "## What is deliberately not available\n\nThe shipped HTTP gateway is not a public endpoint, OAuth resource server, managed relay, AWS service, or multi-tenant SaaS. Claude remote custom connectors and `claude.ai` cannot reach a user's localhost endpoint because their requests originate in the provider cloud. Use the local Claude Desktop MCP adapter.\n\nDo not expose the loopback service through a public tunnel or ad-hoc reverse proxy. A static local bearer token is not sufficient for internet-facing authorization, tenant isolation, audit, abuse protection, or distributed consistency.",
+      "source": "SELF_HOSTING.md",
+      "sourceHeading": "What is deliberately not available",
+      "sourceSha256": "36e8a2e2e0355aeefc2f944ab701689b1cb5c82d795bb1214f4816d5b127bd29"
+    },
+    {
+      "path": "hosting/hosting-05.md",
+      "title": "Possible future remote architecture",
+      "type": "overview",
+      "body": "## Possible future remote architecture\n\nA future remote mode can preserve the same request-scoped workspace contract while replacing local filesystem access. It would require, at minimum:\n\n1. OAuth 2.1 resource-server behavior with audience validation and explicit read/write/admin scopes.\n2. A tenant-aware storage interface backed by durable object storage and transactional metadata rather than arbitrary server-local paths.\n3. Distributed concurrency control, optimistic versions, idempotency keys, and deterministic conflict handling.\n4. Durable queues for OCR, indexing, ingestion, and other long-running evidence workloads.\n5. Tenant-scoped caches and index snapshots that can be rebuilt safely by any instance.\n6. Rate limits, quotas, structured audit records, redacted telemetry, backups, restore tests, and incident procedures.\n7. End-to-end tests proving cross-tenant isolation, cancellation, retry safety, and behavior across rolling versions.\n\nA serverless container is a more realistic first remote target than an edge function because current workflows use Node filesystem APIs, local indexing, PDF ingestion, and potentially long-running operations. None of this future work is implied by the local gateway.",
+      "source": "SELF_HOSTING.md",
+      "sourceHeading": "Possible future remote architecture",
+      "sourceSha256": "36e8a2e2e0355aeefc2f944ab701689b1cb5c82d795bb1214f4816d5b127bd29"
+    },
+    {
+      "path": "hosting/hosting-06.md",
+      "title": "Remote-ready definition",
+      "type": "overview",
+      "body": "## Remote-ready definition\n\nKnowledgeRail should be described as remote-ready only after a public deployment passes MCP conformance and proves per-request authentication/authorization, multi-instance mutation safety, durable jobs, tenant isolation, operational controls, and backup/restore. Until then, public URLs and hosted-service claims are out of scope.\n\nOfficial background:\n\n- [MCP 2026-07-28 Streamable HTTP](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http)\n- [MCP 2026-07-28 authorization](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization)\n- [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)",
+      "source": "SELF_HOSTING.md",
+      "sourceHeading": "Remote-ready definition",
+      "sourceSha256": "36e8a2e2e0355aeefc2f944ab701689b1cb5c82d795bb1214f4816d5b127bd29"
+    },
+    {
+      "path": "hosting/hosting-07.md",
+      "title": "First start after upgrading to 2.7.4",
+      "type": "overview",
+      "body": "## First start after upgrading to 2.7.4\n\nThe first wiki query after upgrading rebuilds the lexical retrieval index from\ncanonical Markdown because the passage builder changed. In the local synthetic\n100,000-page benchmark this took about 14 seconds; allow for that one-time delay\nbefore treating the first request as stalled. Subsequent starts reuse the new\ncheckpoint when persistence is enabled. Read-only operation without persisting\nthe replacement checkpoint repeats the rebuild in later processes. Canonical\nMarkdown and code-evidence snapshots do not require migration.\n\nThe TypeScript/JavaScript adapter also advances to v3 to correct function ranges\nwith destructured or object-typed parameters. The next code-index refresh reparses\nfiles owned by that adapter, including its LWC metadata companions; other language\nfiles remain reusable. Existing code anchors retain their recorded parser version\nand may need recapture after a drift check. The import resolver refactor itself\ndoes not invalidate persisted files.",
+      "source": "SELF_HOSTING.md",
+      "sourceHeading": "First start after upgrading to 2.7.4",
+      "sourceSha256": "36e8a2e2e0355aeefc2f944ab701689b1cb5c82d795bb1214f4816d5b127bd29"
+    },
+    {
+      "path": "hosting/hosting-08.md",
+      "title": "Memory and workspace lifetime",
+      "type": "overview",
+      "body": "## Memory and workspace lifetime\n\nCode-query caches have an independent estimated admission budget of 64 MiB per\nproject. The process retains up to five workspace states by default; set\n`KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP` to a positive integer to change that LRU cap.\nThe current operating target is one to five projects on the available local\nmachine. A sixth project can still be opened: its query state replaces the least\nrecently used workspace cache, while persisted indexes and knowledge remain on disk.\nAt the default cap, estimated code admissions can sum to 320 MiB. This is not reserved\nmemory or a limit on measured heap/RSS: uncached large snapshots, in-flight work,\nresult copies and other indexes consume additional memory. Multiple server\nprocesses each have their own state.\n\nThere is no idle TTL. Internal writes invalidate the affected generation;\nexternal changes are checked on the next query. Workspace release and automatic\nLRU eviction discard its disposable state. An idle workspace does not notice an\nexternal edit until another query. See the [cache measurements and lifecycle](benchmarks/README.md#code-evidence-queries)\nfor the distinction between admission estimates, heap and RSS.",
+      "source": "SELF_HOSTING.md",
+      "sourceHeading": "Memory and workspace lifetime",
+      "sourceSha256": "36e8a2e2e0355aeefc2f944ab701689b1cb5c82d795bb1214f4816d5b127bd29"
+    },
+    {
+      "path": "hosting/hosting-09.md",
+      "title": "Semantic persistence and local memory",
+      "type": "overview",
+      "body": "## Semantic persistence and local memory\n\nSemantic snapshots (`semantic-index.json`, `semantic-vectors.bin`) and the durable\n`semantic-journal.bin` live in each wiki's `.knowledge-rail/`. Unchanged pages reuse\nvectors after restart. A page change rebuilds that whole page; a provider/model\nidentity change rebuilds the corpus. Use `knowledge_admin action=status` for progress\nand `action=checkpoint` for compaction (`force=true` rebuilds asynchronously).\n\nKeep the canonical wiki and `docs/evidence-ir` in backups. Semantic artifacts are\nrebuildable; deleting the usage ledger intentionally loses ranking observations.\nProvider failures preserve canonical writes and report pending/degraded semantic work.\nDifferent client provider configurations on one wiki invalidate the shared semantic\nsnapshot. No provider configuration means fully offline lexical/graph retrieval.\n\nOptional static models download only through explicit `semantic_setup` apply. They\nconsume per-workspace tokenizer memory plus the configured matrix budget; the default\n256 MiB budget uses uncached rows for the larger multilingual model. See\n[memory evolution](docs/guides/memory-evolution.md) for setup, read-only behavior,\nhistorical queries, usage retention/reset, and measured startup limits.",
+      "source": "SELF_HOSTING.md",
+      "sourceHeading": "Semantic persistence and local memory",
+      "sourceSha256": "36e8a2e2e0355aeefc2f944ab701689b1cb5c82d795bb1214f4816d5b127bd29"
+    },
+    {
+      "path": "hooks/hooks-00.md",
+      "title": "Ask the knowledge",
+      "type": "rule",
+      "body": "## Ask the knowledge\n\nIn a client connected to the project, ask:\n\n> Preview the KnowledgeRail hooks and project rules for Claude Code, Codex and Cursor. Do not change global configuration.\n\nThe model calls:\n\n```text\nknowledge_admin action=\"client_setup\" clients=[\"claude\",\"codex\",\"cursor\"] setup_mode=\"preview\"\n```\n\nAfter reviewing the proposed project-relative files, explicitly ask it to apply the setup. The model then calls the same action with `setup_mode=\"apply\"`.\n\nOrdinary `knowledge_admin action=\"init\"` does not install executable hooks. Setup is always a separate, explicit operation.",
+      "source": "docs/guides/claude-code-hooks.md",
+      "sourceHeading": "Ask the knowledge",
+      "sourceSha256": "67f6f100ce03fab1b6712b5f7b3486853cfe6b74a8531929210c365d7d4974b5"
+    },
+    {
+      "path": "hooks/hooks-01.md",
+      "title": "Terminal equivalent",
+      "type": "rule",
+      "body": "## Terminal equivalent\n\nPreview all clients:\n\n```bash\nnpx -y knowledge-rail@2.8.0 setup clients\n```\n\nApply all clients:\n\n```bash\nnpx -y knowledge-rail@2.8.0 setup clients --apply\n```\n\nSelect one or more clients with repeated `--client` flags:\n\n```bash\nnpx -y knowledge-rail@2.8.0 setup clients --client claude --client codex --apply\n```\n\nAn optional project path may follow `clients`. Without it, KnowledgeRail discovers the current project safely.",
+      "source": "docs/guides/claude-code-hooks.md",
+      "sourceHeading": "Terminal equivalent",
+      "sourceSha256": "67f6f100ce03fab1b6712b5f7b3486853cfe6b74a8531929210c365d7d4974b5"
+    },
+    {
+      "path": "hooks/hooks-02.md",
+      "title": "Project files",
+      "type": "rule",
+      "body": "## Project files\n\n| Client | Static rules | Hooks |\n|---|---|---|\n| Claude Code | `CLAUDE.md` | `.claude/settings.json` |\n| Codex | `AGENTS.md` | `.codex/hooks.json` |\n| Cursor | `.cursor/rules/knowledge-rail.mdc` | `.cursor/hooks.json` |\n\nThe installer first checks every target. Existing `CLAUDE.md`, `AGENTS.md` and `.cursor/rules/knowledge-rail.mdc` content is preserved byte-for-byte and the marked KnowledgeRail block is appended. On reapply or upgrade, only that marked block is replaced. Existing JSON settings are merged structurally so unrelated fields, permissions and hooks survive; raw text is never appended to JSON because that would make it invalid. The installer refuses malformed JSON or managed markers, symlinks, non-regular files, oversized configuration and paths outside the project. Reapplying the same version is idempotent.\n\nImmediately before an apply that would change files, KnowledgeRail creates a project-local transaction under `.knowledge-rail/backups/client-setup/<run-id>/`. Its `manifest.json` records every target, whether it existed, its original SHA-256, byte count, mode and backup path. Exact bytes are copied only for pre-existing files. The manifest state distinguishes a prepared, successfully applied, rolled-back or incompletely rolled-back transaction. On POSIX systems the transaction directory is mode `0700` and backup files are mode `0600`. Preview, status and no-op reapply create no backup. After a successful apply, only the oldest validated `applied` transactions beyond the newest 20 are pruned; prepared, rolled-back, rollback-failed, malformed and otherwise unrecognized entries are left untouched for recovery or diagnosis. If setup is interrupted, use the manifest to restore the listed backup files and remove only entries marked `existed: false`; inspect current files first and never overwrite later user edits blindly.\n\nNo file under `~/.claude`, `~/.codex` or `~/.cursor` is touched. No configuration is committed automatically.\n\nIn the desktop/catalog profile, `setup_mode=\"apply\"` requires a write-scoped workspace binding. `preview` and `status` remain available with read scope. `knowledge_admin action=\"checkpoint\"` also requires write scope because it persists project-local derived indexes even though canonical Markdown remains unchanged.",
+      "source": "docs/guides/claude-code-hooks.md",
+      "sourceHeading": "Project files",
+      "sourceSha256": "67f6f100ce03fab1b6712b5f7b3486853cfe6b74a8531929210c365d7d4974b5"
+    },
+    {
+      "path": "hooks/hooks-03.md",
+      "title": "Runtime behavior",
+      "type": "rule",
+      "body": "## Runtime behavior\n\n- Session start injects a short KnowledgeRail awareness message and reports non-fresh evidence anchors.\n- Post-edit hooks run a bounded, path-scoped drift check when the client provides the edited file path.\n- Hooks never write the wiki, never approve operations and fail open.\n- Retrieval and decision relevance remain model judgments through `knowledge_context`.\n- Wiki updates remain explicit write-capable tool calls subject to the client permission flow.\n\nThe generated commands pin the installed KnowledgeRail release, prefer the local npm cache, and use the internal cross-client hook bridge, which translates each client's stdin and output schema. The first hook invocation may still need npm to resolve the package if it is not cached; hook failures and timeouts remain fail-open.",
+      "source": "docs/guides/claude-code-hooks.md",
+      "sourceHeading": "Runtime behavior",
+      "sourceSha256": "67f6f100ce03fab1b6712b5f7b3486853cfe6b74a8531929210c365d7d4974b5"
+    },
+    {
+      "path": "hooks/hooks-04.md",
+      "title": "Trust and verification",
+      "type": "rule",
+      "body": "## Trust and verification\n\nProject hooks execute commands and therefore remain subject to each client's security controls:\n\n- Claude Code: inspect project hooks with `/hooks`.\n- Codex: open `/hooks`, review the exact definitions and explicitly trust their current hashes. KnowledgeRail cannot do this for you.\n- Cursor: open the repository as a trusted workspace and inspect `.cursor/hooks.json`.\n\nRun the preview again after application. Every file should report `unchanged`. Then start a new session and make a harmless edit to a source file with an evidence anchor; the post-edit hook should report drift without blocking the edit or modifying the wiki.\n\nCursor cloud agents load project hooks only after they receive a writable environment, and do not currently run `sessionStart`; post-tool hooks remain available there.",
+      "source": "docs/guides/claude-code-hooks.md",
+      "sourceHeading": "Trust and verification",
+      "sourceSha256": "67f6f100ce03fab1b6712b5f7b3486853cfe6b74a8531929210c365d7d4974b5"
+    },
+    {
+      "path": "hooks/hooks-05.md",
+      "title": "Reapply or remove",
+      "type": "rule",
+      "body": "## Reapply or remove\n\nReapply with `setup clients --apply` after upgrading KnowledgeRail. The installer removes only older KnowledgeRail hook commands for the same client/event before adding the version-pinned replacement; unrelated handlers and settings survive.\n\nThere is deliberately no automatic uninstall in 2.7.0. To remove the integration, first preview the current generated state, then delete only the marked KnowledgeRail block from `CLAUDE.md` and `AGENTS.md`, the dedicated `.cursor/rules/knowledge-rail.mdc` file, and the hook entries whose command contains `knowledge-rail@... hook --client ...`. Remove the two Claude read-only permission entries only if they were added solely for this integration. Do not delete whole configuration files when they contain unrelated settings.",
+      "source": "docs/guides/claude-code-hooks.md",
+      "sourceHeading": "Reapply or remove",
+      "sourceSha256": "67f6f100ce03fab1b6712b5f7b3486853cfe6b74a8531929210c365d7d4974b5"
+    },
+    {
+      "path": "hooks/hooks-06.md",
+      "title": "What the installed rules say",
+      "type": "rule",
+      "body": "## What the installed rules say\n\nThe concise managed block instructs the client to start concrete tasks with `knowledge_context mode=task`, distrust stale evidence until reverified, update affected anchored knowledge after source changes only through approved writes, materialize only relevant decision evidence, surface conflicts and record only clearly accepted durable decisions. It explicitly excludes proposals, unresolved options, hidden reasoning, secrets and raw conversation.",
+      "source": "docs/guides/claude-code-hooks.md",
+      "sourceHeading": "What the installed rules say",
+      "sourceSha256": "67f6f100ce03fab1b6712b5f7b3486853cfe6b74a8531929210c365d7d4974b5"
+    },
+    {
+      "path": "readme/readme-00.md",
+      "title": "What it provides",
+      "type": "overview",
+      "body": "## What it provides\n\n- Eight domain-oriented tools with validated actions and machine-readable next steps.\n- Task-aware hybrid retrieval with lexical, graph, passage, and optional semantic evidence.\n- Progressive widening with explicit coverage signals and `GAP`/unknown reporting.\n- Complete source ingestion through bounded segments, a coverage ledger, and durable Evidence IR.\n- A deterministic multi-language code index with symbol, reference, route, test, configuration, and database lookup.\n- Incremental graph, retrieval, and semantic indexes stored beside the project wiki.\n- Contract-driven Markdown deliverables with terminal review, content hashes, and optional caller-authored diagrams.\n- Conservative migration of existing v1/v2/v3 wikis and pre-rebrand `.llm-wiki` metadata.\n- Deterministic project binding through explicit Cursor workspace configuration, cwd-aware IDE processes, and terminal agents.\n- A local HTTP gateway that keeps concurrent clients and projects isolated per request.\n- A desktop-chat workspace catalog with opaque, expiring per-chat bindings.\n\nKnowledgeRail does not call an LLM itself. The connected MCP client chooses and calls the tools. OCR and HTTP embeddings are optional external providers configured by the user; static embeddings can also run locally from explicitly installed model assets.\n\n### Deterministic code-evidence languages\n\nCode evidence is extracted locally without tree-sitter, native binaries, downloaded grammars, or runtime parser dependencies. Each file is owned by exactly one versioned adapter, so upgrading one language reparses only that language's files. Unsupported or deliberately skipped constructs remain visible through recorded raw-fallback demand rather than being assigned an unreliable anchor.\n\nIn the table below, **imports means extracted specifiers**. Incoming `import`\nrelations additionally resolve project-local declarations or paths: JS/TS,\nPython, Java/Kotlin, C#, PHP, Go and Rust, C/C++ headers, and supported LWC virtual\nimports. Ruby retains stem matching. Ambiguities and unsupported conventions\nremain visible limitations; see [module reference coverage](benchmarks/README.md#local-import-references).\n\n| Adapter | Files | Indexed constructs |\n| --- | --- | --- |\n| TypeScript / JavaScript / LWC | `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.js-meta.xml` | Classes, functions, methods, tests, routes, imports, calls, LWC decorators and component targets. |\n| Java | `.java` | Classes, interfaces, enums, records, methods, Javadoc, JUnit markers, Spring routes, imports. |\n| Kotlin | `.kt`, `.kts` | Classes, objects and companions, top-level/member/extension functions, properties, KDoc, JUnit/Kotest markers, Spring and literal Ktor routes. |\n| Apex | `.cls`, `.trigger` | Classes, methods, tests, REST resources, trigger events, and static SOQL/SOSL object references. |\n| Salesforce metadata | `.object-meta.xml`, `.field-meta.xml`, `.validationRule-meta.xml`, `.flow-meta.xml`, `.permissionset-meta.xml`, `.labels-meta.xml`, `.resource-meta.xml`, `.messageChannel-meta.xml`; `.page`, `.component`, `.cmp`, `.app` | SFDX entities, formulas and database references; literal Aura/Visualforce controllers and extensions. |\n| C# | `.cs` | Namespaces, types, methods, properties, XML docs, test attributes, ASP.NET controller and minimal-API routes; nested quoted strings inside interpolations are masked without losing following code. |\n| Go | `.go` | Functions, receiver methods, structs/interfaces, Go doc comments, tests, imports, and common router calls. |\n| Rust | `.rs` | Functions, types, traits, modules, `impl` methods, tests, imports, and `macro_rules!` names. |\n| PHP | `.php` | Namespaces, types, functions/methods, PHPUnit markers, Laravel/Symfony routes, configuration and database references; HTML outside PHP tags is inert. |\n| C | `.c` | Function definitions including pointer-return forms, doc comments, and includes. |\n| C++ | `.cpp`, `.cc`, `.cxx`, `.h`, `.hpp`, `.hh` | Functions, constructors, classes/structs, namespaces, qualified methods, doc comments, and includes. |\n| Python | `.py`, `.pyi` | Indentation-aware modules, classes, nested functions/methods, docstrings, decorators, tests, FastAPI/Flask/Django routes, imports, calls, configuration and database references. |\n| Ruby | `.rb`, `.rake` | Keyword-delimited classes/modules/methods, RDoc comments, RSpec/Minitest markers, Rails/Sinatra routes, imports, configuration and explicit database references. |\n\nThe extractors are intentionally conservative. LWC HTML templates, Java anonymous classes, dynamic Apex query object names, Rust macro expansion, PHP `eval()`/string callables and Blade/Twig templates, K&R C definitions, macro-generated C/C++ declarations, complex C++ operator/template metaprogramming, Python lambdas/dynamic definitions/metaclass-generated members, indirect or qualified decorator-generated routes, calls inside f-string interpolations, and notebooks are not guessed. Kotlin computed Ktor paths and string-named Kotest cases are not emitted independently. Salesforce metadata is limited to the explicit SFDX suffix roster; malformed XML falls back to a file module. Ruby metaprogramming, inferred ActiveRecord tables, individual RSpec `it` blocks, operator methods, and ambiguous plain command-form heredocs or regex literals remain best-effort or out of scope. Headers use the C++ superset adapter. Python uses a separate indentation engine with CPython-compatible tab stops; Ruby uses its own keyword-block engine. Qualified `knowledge_code action=\"symbol\"` lookups treat `.`, `#`, `::`, PHP namespace backslashes, and `->` as equivalent separators, while returned names retain the language-native form. The pinned golden corpus contains 52 source files, 1,429 source lines, and 199 hand-labeled symbols across twelve language adapters; the mixed-repository benchmark adds two LWC files for 54 files and 1,446 lines overall. Its perfect in-corpus score is a deterministic regression guarantee, not a claim of universal parser accuracy. Code anchors are line-based: trailing-whitespace edits remain fresh, while formatting that inserts or removes lines is deliberately reported as drift because it shifts the cited range. `knowledge_admin action=\"status\"` reports the extension histogram supplied with recorded grep fallbacks, allowing later language priorities to follow real repository demand.\n\n### Interpreting module references\n\nUse `knowledge_code action=\"references\"` with the indexed module's `symbol_id`\nto retrieve import edges. The adapter's `imports` list records source specifiers;\na returned `import` relation is the resolver's connection to a module in this\nproject. The current release includes declared Python backend layouts, JS/TS project\nownership and local package exports, Rust module attributes and workspace globs,\nand literal build-tool boundaries. Common manifest readers and bounded lookup\nstructures are reused across adapters; build tools and installed dependencies are\nnever executed or loaded.\n\nLWC links Apex, schema, labels, static resources, message channels and local bundles\nwithin declared Salesforce project boundaries. Platform modules are counted\nseparately. Literal trigger and Visualforce/Aura references reach indexed objects\nand Apex classes; inactive/deleted Apex remains searchable with its deployment status.\n`unresolvedImports` distinguishes verified unindexed paths and unsupported syntax,\nwhile declared external dependencies have a separate inventory count. These counts\nare separate from the observed request/fallback rate. See the\n[supported declarations and limits](docs/guides/code-evidence-retrieval.md).\n\nKnown manifests refresh on reference queries. New nested manifests, workspace members\nand Apex status companions require an explicit code update or rebuild. Projects\nwithout discovered Go manifests retain the diagnosed suffix fallback. Custom adapters\nwithout a resolver retain legacy stem matching.\nAn empty reference list does not prove that a module is unused. Inspect the\nextracted specifier and use a qualified `symbol` lookup or read the source when\nan import edge is missing; treat heuristic edges as candidates to verify.\nSee [the import resolution contract](benchmarks/README.md#local-import-references)\nfor supported cases and limitations.\n\nWhen a knowledge claim explains code, record its indexed `code://repo/...#symbol-...`\nresource as the Evidence IR `target.codeResourceUri`. Synthesis then places a\ndirect code link and line range on the wiki page if anchor capture succeeds;\nclaims without code evidence do not receive a fabricated link. The stored hash\nand parser version support drift checks. See [the workflow and verified examples](docs/guides/code-evidence-retrieval.md).",
+      "source": "README.md",
+      "sourceHeading": "What it provides",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-01.md",
+      "title": "Deterministic code-evidence languages",
+      "type": "overview",
+      "body": "### Deterministic code-evidence languages\n\nCode evidence is extracted locally without tree-sitter, native binaries, downloaded grammars, or runtime parser dependencies. Each file is owned by exactly one versioned adapter, so upgrading one language reparses only that language's files. Unsupported or deliberately skipped constructs remain visible through recorded raw-fallback demand rather than being assigned an unreliable anchor.\n\nIn the table below, **imports means extracted specifiers**. Incoming `import`\nrelations additionally resolve project-local declarations or paths: JS/TS,\nPython, Java/Kotlin, C#, PHP, Go and Rust, C/C++ headers, and supported LWC virtual\nimports. Ruby retains stem matching. Ambiguities and unsupported conventions\nremain visible limitations; see [module reference coverage](benchmarks/README.md#local-import-references).\n\n| Adapter | Files | Indexed constructs |\n| --- | --- | --- |\n| TypeScript / JavaScript / LWC | `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.js-meta.xml` | Classes, functions, methods, tests, routes, imports, calls, LWC decorators and component targets. |\n| Java | `.java` | Classes, interfaces, enums, records, methods, Javadoc, JUnit markers, Spring routes, imports. |\n| Kotlin | `.kt`, `.kts` | Classes, objects and companions, top-level/member/extension functions, properties, KDoc, JUnit/Kotest markers, Spring and literal Ktor routes. |\n| Apex | `.cls`, `.trigger` | Classes, methods, tests, REST resources, trigger events, and static SOQL/SOSL object references. |\n| Salesforce metadata | `.object-meta.xml`, `.field-meta.xml`, `.validationRule-meta.xml`, `.flow-meta.xml`, `.permissionset-meta.xml`, `.labels-meta.xml`, `.resource-meta.xml`, `.messageChannel-meta.xml`; `.page`, `.component`, `.cmp`, `.app` | SFDX entities, formulas and database references; literal Aura/Visualforce controllers and extensions. |\n| C# | `.cs` | Namespaces, types, methods, properties, XML docs, test attributes, ASP.NET controller and minimal-API routes; nested quoted strings inside interpolations are masked without losing following code. |\n| Go | `.go` | Functions, receiver methods, structs/interfaces, Go doc comments, tests, imports, and common router calls. |\n| Rust | `.rs` | Functions, types, traits, modules, `impl` methods, tests, imports, and `macro_rules!` names. |\n| PHP | `.php` | Namespaces, types, functions/methods, PHPUnit markers, Laravel/Symfony routes, configuration and database references; HTML outside PHP tags is inert. |\n| C | `.c` | Function definitions including pointer-return forms, doc comments, and includes. |\n| C++ | `.cpp`, `.cc`, `.cxx`, `.h`, `.hpp`, `.hh` | Functions, constructors, classes/structs, namespaces, qualified methods, doc comments, and includes. |\n| Python | `.py`, `.pyi` | Indentation-aware modules, classes, nested functions/methods, docstrings, decorators, tests, FastAPI/Flask/Django routes, imports, calls, configuration and database references. |\n| Ruby | `.rb`, `.rake` | Keyword-delimited classes/modules/methods, RDoc comments, RSpec/Minitest markers, Rails/Sinatra routes, imports, configuration and explicit database references. |\n\nThe extractors are intentionally conservative. LWC HTML templates, Java anonymous classes, dynamic Apex query object names, Rust macro expansion, PHP `eval()`/string callables and Blade/Twig templates, K&R C definitions, macro-generated C/C++ declarations, complex C++ operator/template metaprogramming, Python lambdas/dynamic definitions/metaclass-generated members, indirect or qualified decorator-generated routes, calls inside f-string interpolations, and notebooks are not guessed. Kotlin computed Ktor paths and string-named Kotest cases are not emitted independently. Salesforce metadata is limited to the explicit SFDX suffix roster; malformed XML falls back to a file module. Ruby metaprogramming, inferred ActiveRecord tables, individual RSpec `it` blocks, operator methods, and ambiguous plain command-form heredocs or regex literals remain best-effort or out of scope. Headers use the C++ superset adapter. Python uses a separate indentation engine with CPython-compatible tab stops; Ruby uses its own keyword-block engine. Qualified `knowledge_code action=\"symbol\"` lookups treat `.`, `#`, `::`, PHP namespace backslashes, and `->` as equivalent separators, while returned names retain the language-native form. The pinned golden corpus contains 52 source files, 1,429 source lines, and 199 hand-labeled symbols across twelve language adapters; the mixed-repository benchmark adds two LWC files for 54 files and 1,446 lines overall. Its perfect in-corpus score is a deterministic regression guarantee, not a claim of universal parser accuracy. Code anchors are line-based: trailing-whitespace edits remain fresh, while formatting that inserts or removes lines is deliberately reported as drift because it shifts the cited range. `knowledge_admin action=\"status\"` reports the extension histogram supplied with recorded grep fallbacks, allowing later language priorities to follow real repository demand.",
+      "source": "README.md",
+      "sourceHeading": "Deterministic code-evidence languages",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-02.md",
+      "title": "Interpreting module references",
+      "type": "overview",
+      "body": "### Interpreting module references\n\nUse `knowledge_code action=\"references\"` with the indexed module's `symbol_id`\nto retrieve import edges. The adapter's `imports` list records source specifiers;\na returned `import` relation is the resolver's connection to a module in this\nproject. The current release includes declared Python backend layouts, JS/TS project\nownership and local package exports, Rust module attributes and workspace globs,\nand literal build-tool boundaries. Common manifest readers and bounded lookup\nstructures are reused across adapters; build tools and installed dependencies are\nnever executed or loaded.\n\nLWC links Apex, schema, labels, static resources, message channels and local bundles\nwithin declared Salesforce project boundaries. Platform modules are counted\nseparately. Literal trigger and Visualforce/Aura references reach indexed objects\nand Apex classes; inactive/deleted Apex remains searchable with its deployment status.\n`unresolvedImports` distinguishes verified unindexed paths and unsupported syntax,\nwhile declared external dependencies have a separate inventory count. These counts\nare separate from the observed request/fallback rate. See the\n[supported declarations and limits](docs/guides/code-evidence-retrieval.md).\n\nKnown manifests refresh on reference queries. New nested manifests, workspace members\nand Apex status companions require an explicit code update or rebuild. Projects\nwithout discovered Go manifests retain the diagnosed suffix fallback. Custom adapters\nwithout a resolver retain legacy stem matching.\nAn empty reference list does not prove that a module is unused. Inspect the\nextracted specifier and use a qualified `symbol` lookup or read the source when\nan import edge is missing; treat heuristic edges as candidates to verify.\nSee [the import resolution contract](benchmarks/README.md#local-import-references)\nfor supported cases and limitations.\n\nWhen a knowledge claim explains code, record its indexed `code://repo/...#symbol-...`\nresource as the Evidence IR `target.codeResourceUri`. Synthesis then places a\ndirect code link and line range on the wiki page if anchor capture succeeds;\nclaims without code evidence do not receive a fabricated link. The stored hash\nand parser version support drift checks. See [the workflow and verified examples](docs/guides/code-evidence-retrieval.md).",
+      "source": "README.md",
+      "sourceHeading": "Interpreting module references",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-03.md",
+      "title": "Requirements",
+      "type": "overview",
+      "body": "## Requirements\n\n- Node.js `22.12.0` or newer\n- npm\n- macOS, Windows, or Linux\n\nKnowledgeRail ships no browser or document renderer. Mermaid source remains ordinary Markdown and is rendered only by viewers that support it.",
+      "source": "README.md",
+      "sourceHeading": "Requirements",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-04.md",
+      "title": "Quick start with npx",
+      "type": "overview",
+      "body": "## Quick start with npx\n\nRun this from any directory inside the project in a terminal or another client that launches stdio servers with the project as its working directory:\n\n```bash\nnpx -y knowledge-rail@2.9.1\n```\n\nNo project path is needed when the MCP client guarantees a project-scoped process cwd or supplies one unambiguous legacy MCP Root. Cursor project setup is explicit because its global MCP process may be shared across windows.\n\nThe reviewed package is published to npm. Pin an exact version in persistent configurations; reserve `@latest` for one-time trials.",
+      "source": "README.md",
+      "sourceHeading": "Quick start with npx",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-05.md",
+      "title": "Install and run from source",
+      "type": "overview",
+      "body": "## Install and run from source\n\n### From source\n\n```bash\ngit clone https://github.com/Deviank88/KnowledgeRail.git\ncd KnowledgeRail\nnpm ci\nnpm run build\n```\n\nStart it from any directory inside the project whose knowledge you want to manage:\n\n```bash\ncd /path/to/your-project\nnode /absolute/path/to/KnowledgeRail/dist/index.js\n```",
+      "source": "README.md",
+      "sourceHeading": "Install and run from source",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-06.md",
+      "title": "From source",
+      "type": "overview",
+      "body": "### From source\n\n```bash\ngit clone https://github.com/Deviank88/KnowledgeRail.git\ncd KnowledgeRail\nnpm ci\nnpm run build\n```\n\nStart it from any directory inside the project whose knowledge you want to manage:\n\n```bash\ncd /path/to/your-project\nnode /absolute/path/to/KnowledgeRail/dist/index.js\n```",
+      "source": "README.md",
+      "sourceHeading": "From source",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-07.md",
+      "title": "Cursor configuration",
+      "type": "overview",
+      "body": "## Cursor configuration\n\nRun this once from the project root or any nested directory:\n\n```bash\nnpx -y knowledge-rail@2.9.1 setup cursor\n```\n\nThe command discovers the project upward and safely creates or merges `.cursor/mcp.json`. It preserves other MCP servers and pins an explicit `${workspaceFolder}` binding. Re-running it is idempotent.\n\nThe equivalent manual project configuration is:\n\n```json\n{\n  \"mcpServers\": {\n    \"knowledge-rail\": {\n      \"type\": \"stdio\",\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"knowledge-rail@2.9.1\",\n        \"--root\",\n        \"${workspaceFolder}\"\n      ]\n    }\n  }\n}\n```\n\nKeep this file at `<project>/.cursor/mcp.json`, not in the global `~/.cursor/mcp.json`. Recent Cursor releases can reuse a global stdio MCP process whose cwd is the user home or an empty window, so global cwd-based project inference is not a supported bound-workspace configuration. Cursor documents `type: \"stdio\"`, project configuration, and `${workspaceFolder}` interpolation in its [MCP guide](https://cursor.com/docs/mcp).\n\nFor a source checkout, use the compiled entry point while retaining the explicit workspace root:\n\n```json\n{\n  \"mcpServers\": {\n    \"knowledge-rail\": {\n      \"type\": \"stdio\",\n      \"command\": \"node\",\n      \"args\": [\n        \"/absolute/path/to/KnowledgeRail/dist/index.js\",\n        \"--root\",\n        \"${workspaceFolder}\"\n      ]\n    }\n  }\n}\n```\n\nFor a Cursor multi-root workspace, install one project configuration in every root that should expose KnowledgeRail. The server never selects the first open root silently.",
+      "source": "README.md",
+      "sourceHeading": "Cursor configuration",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-08.md",
+      "title": "Claude Code configuration",
+      "type": "overview",
+      "body": "## Claude Code configuration\n\nFrom the project, add KnowledgeRail at project scope:\n\n```bash\nclaude mcp add --transport stdio --scope project knowledge-rail -- npx -y knowledge-rail@2.9.1\n```\n\nClaude Code writes the shared project entry to `.mcp.json` and launches the local server in project context. Use `claude mcp list` to verify the connection. The command shape and project scope follow the [official Claude Code MCP guide](https://docs.anthropic.com/en/docs/claude-code/mcp).",
+      "source": "README.md",
+      "sourceHeading": "Claude Code configuration",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-09.md",
+      "title": "Other IDE and terminal clients",
+      "type": "overview",
+      "body": "## Other IDE and terminal clients\n\nFor a client that explicitly guarantees one stdio process per project with the project as cwd, the minimal server configuration remains:\n\n```json\n{\n  \"mcpServers\": {\n    \"knowledge-rail\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"knowledge-rail@2.9.1\"]\n    }\n  }\n}\n```\n\nIf the client does not guarantee that cwd contract, pass an absolute `--root` in its project-scoped configuration. Do not place a repository-specific absolute root in a global configuration.\n\nThe workspace precedence is explicit `--root`; one unambiguous legacy MCP Root; `WIKI_ROOT` for compatibility; the nearest existing KnowledgeRail marker; the nearest project/VCS marker; finally a safe non-empty cwd. Filesystem roots, the user home, package caches, and known Claude/Cursor application directories fail closed.\n\nInspect the exact choice without starting MCP:\n\n```bash\nnpx -y knowledge-rail@2.9.1 doctor\nnpx -y knowledge-rail@2.9.1 doctor --root /absolute/project/path\n```\n\nThe command prints the canonical root and its resolution source, or exits non-zero with corrective guidance.",
+      "source": "README.md",
+      "sourceHeading": "Other IDE and terminal clients",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-10.md",
+      "title": "Claude Desktop and other context-free desktop chats",
+      "type": "overview",
+      "body": "## Claude Desktop and other context-free desktop chats\n\nA desktop chat does not open a filesystem folder, so it cannot safely infer a project from its process cwd. The preferred installation is the self-contained MCP Bundle (`.mcpb`): it avoids npm/network resolution on every Claude launch and follows Claude Desktop's current local-extension path.\n\nFor a source/release checkout, build the deterministic bundle:\n\n```bash\nnpm run mcpb:build\n```\n\nThen install `artifacts/knowledge-rail-2.9.1.mcpb` from **Claude Desktop → Settings → Extensions → Advanced settings → Install Extension**. The bundle contains the compiled server and its production dependencies, starts the `desktop` adapter directly, and does not require a project path. See Anthropic's [local MCP server guide](https://support.anthropic.com/en/articles/10949351/getting-started-with-local-mcp-servers-on-claude-desktop) and the [MCP Bundle specification](https://github.com/modelcontextprotocol/mcpb).\n\nThe manual local-development configuration remains available for hosts that have not adopted MCP Bundles:\n\n```json\n{\n  \"mcpServers\": {\n    \"knowledge-rail\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"knowledge-rail@2.9.1\", \"desktop\"]\n    }\n  }\n}\n```\n\nFor a source checkout, use `node /absolute/path/to/KnowledgeRail/dist/index.js desktop`. The adapter discovers or starts the protected loopback gateway automatically and exposes `knowledge_workspace` in addition to the eight domain tools.\n\nIn a new chat, ask KnowledgeRail to list workspaces, choose one entry, and confirm `read` or `write` access. The returned opaque binding belongs to that conversation and must accompany its later domain calls. For compatibility with desktop hosts that expose only textual tool results, `knowledge_workspace` returns the same binding in both its declared structured output and a `workspace_binding: ...` text line. Two chats can select different customers/projects concurrently. Start a new chat when changing customer workspace: filesystem access is isolated, but information already present in conversation history cannot be removed by the server.\n\nProjects opened successfully by an IDE/terminal are added to the local catalog automatically without changing their clean eight-tool workflow. Operators can also manage catalog metadata locally:\n\n```bash\nnpx -y knowledge-rail@2.9.1 workspace list\nnpx -y knowledge-rail@2.9.1 workspace register\nnpx -y knowledge-rail@2.9.1 workspace register /absolute/project/path\nnpx -y knowledge-rail@2.9.1 workspace unregister ws_example\n```\n\nRegistration never copies, uploads, scans the disk, or deletes project files. `workspace register` without a path discovers only upward from cwd.",
+      "source": "README.md",
+      "sourceHeading": "Claude Desktop and other context-free desktop chats",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-11.md",
+      "title": "Local self-hosted HTTP gateway",
+      "type": "overview",
+      "body": "## Local self-hosted HTTP gateway\n\nStart one gateway for many concurrent local clients and workspaces:\n\n```bash\nnpx -y knowledge-rail@2.9.1 --transport http\n```\n\nThe default endpoint is `http://127.0.0.1:3333/mcp`; liveness only is available at `/healthz`. MCP requests require the random credential stored in the OS-protected per-user KnowledgeRail state directory. The desktop adapter reads it automatically, so it never belongs in project configuration or a repository.\n\nThe gateway does not have a current root. Every filesystem-capable request must resolve a valid opaque binding before the first path access. Bindings are scoped, expiring, revocable, and invalidated on gateway restart. Resource links are workspace-qualified and revalidated when read.\n\nThe shipped gateway deliberately rejects non-loopback binding. It is local self-hosting, not public OAuth or hostile-user multi-tenancy. `claude.ai` and Claude remote custom connectors cannot use a localhost endpoint because those connections originate from the provider cloud; Claude Desktop local MCP uses the `desktop` adapter above.\n\n| Client context | Entry point | Workspace behavior | Tool catalog |\n| --- | --- | --- | --- |\n| Cursor | default `stdio` | explicit project-scoped `${workspaceFolder}` binding | 8 domain tools |\n| Claude Code, cwd-aware IDE or terminal agent | default `stdio` | automatic from a project process cwd or one legacy Root | 8 domain tools |\n| Claude Desktop/local desktop chat | `desktop` | user chooses an approved catalog entry per chat | `knowledge_workspace` + 8 domain tools |\n| Generic trusted local HTTP client | `--transport http` | binding supplied on every filesystem-capable request | `knowledge_workspace` + 8 domain tools |\n\nPlatform state locations are `%LOCALAPPDATA%\\KnowledgeRail` on Windows, `~/Library/Application Support/KnowledgeRail` on macOS, and `${XDG_STATE_HOME:-~/.local/state}/knowledge-rail` on Linux. Set `KNOWLEDGE_RAIL_STATE_DIR` only for controlled testing or an intentional custom local installation. Docker/devcontainers and WSL have separate filesystems and therefore separate catalogs unless their state and project mounts are explicitly shared.\n\n### Operating-system notes\n\n- **Windows:** if an MCP host does not resolve npm command shims, use `\"command\": \"npx.cmd\"`; escape backslashes in JSON paths (`C:\\\\Tools\\\\KnowledgeRail\\\\dist\\\\index.js`). PowerShell operator commands use the same CLI arguments shown above. Drive-letter case and junction/real paths are canonicalized before binding.\n- **macOS:** the state directory is inside `Library/Application Support`, not the opened repository.\n- **Linux:** `XDG_STATE_HOME` is honored. No browser sandbox configuration is required.\n- **WSL and containers:** run the MCP process in the same filesystem environment as the project. A Windows Claude Desktop process and a WSL-only localhost/state directory are distinct unless an explicit bridge is configured.",
+      "source": "README.md",
+      "sourceHeading": "Local self-hosted HTTP gateway",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-12.md",
+      "title": "Operating-system notes",
+      "type": "overview",
+      "body": "### Operating-system notes\n\n- **Windows:** if an MCP host does not resolve npm command shims, use `\"command\": \"npx.cmd\"`; escape backslashes in JSON paths (`C:\\\\Tools\\\\KnowledgeRail\\\\dist\\\\index.js`). PowerShell operator commands use the same CLI arguments shown above. Drive-letter case and junction/real paths are canonicalized before binding.\n- **macOS:** the state directory is inside `Library/Application Support`, not the opened repository.\n- **Linux:** `XDG_STATE_HOME` is honored. No browser sandbox configuration is required.\n- **WSL and containers:** run the MCP process in the same filesystem environment as the project. A Windows Claude Desktop process and a WSL-only localhost/state directory are distinct unless an explicit bridge is configured.",
+      "source": "README.md",
+      "sourceHeading": "Operating-system notes",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-13.md",
+      "title": "Agent workflow",
+      "type": "overview",
+      "body": "## Agent workflow\n\nKnowledgeRail exposes eight stable tools. Agents choose a domain directly and use its `mode` or `action`; no menu, profile, session scope, or legacy alias is required.\n\n| Tool | Operations |\n| --- | --- |\n| `knowledge_context` | `task`, bounded page `list`, query-required `search`, and `graph`. |\n| `knowledge_page` | Read, write, edit, move, delete, and append the durable log. |\n| `knowledge_files` | List, read, and normalize controlled source files. |\n| `knowledge_ingest` | `start`, `next`, `apply_claims`, `record_segment`, `source_status`, `evidence_status`, `finalize`, report, and recovery actions. |\n| `knowledge_code` | Maintain and query deterministic code evidence. |\n| `knowledge_document_context` | Plan any document profile and compile section-specific evidence. |\n| `knowledge_document` | Write and review Markdown deliverables. |\n| `knowledge_admin` | Initialize, report status, verify/rebuild checkpoints, lint, detect code-evidence drift, and migrate KnowledgeRail data. |\n\nEvery successful operation returns a machine-readable `state` and either one `nextAction` or `null`. `nextAction` identifies the next tool, action, required arguments, and safe suggested arguments. Optional `guidance` and `resultText` complete the shared output envelope. Clients that only render text also receive concise `Next:` and `Guidance:` lines when applicable.\n\n### How it works\n\nKnowledgeRail separates context retrieval, durable memory, source ingestion, code evidence, and document production so an agent can enter at the operation it needs without learning an internal menu or carrying session state:\n\n```text\ntask objective\n    ↓\nknowledge_context ──→ ranked evidence links + coverage gaps\n    ↓                              ↓\nresources/read              bounded widening, if needed\n    ↓\nagent reasoning and project work\n    ├──→ knowledge_page / knowledge_code\n    ├──→ knowledge_ingest ──→ Evidence IR ──→ canonical wiki\n    └──→ knowledge_document_context ──→ knowledge_document\n```\n\nFor a normal task, the agent calls `knowledge_context mode=\"task\"` with a concrete objective. KnowledgeRail searches the canonical wiki and its derived lexical, graph, passage, code, and optional semantic indexes, ranks the available evidence, and returns a compact context envelope. Large page bodies are exposed as `knowledge-rail://` links instead of being inserted wholesale into the response; the client reads only the selected passages. Coverage is assessed over both the full retrieved candidate set and the smaller display set. The full pool distinguishes truly missing evidence from evidence that is merely `budget_limited`; progressive widening stops only when the evidence returned to the model is sufficient. If the token budget alone excluded relevant evidence, the returned `nextAction` proposes one bounded widening step. Missing, stale, contradictory, or unresolved evidence remains an explicit gap and is never filled by guessing.\n\nDecision pages are ordinary canonical wiki knowledge and already participate in that retrieval. Each page stays bounded to one coherent flow, component, or project context. Candidate prior choices are exposed in the structured `decisions` and `changeImpact.decisions` fields, but the agent inspects their metadata and materializes only a resource link that actually matches the task—normally the selected passage, or that single bounded page when no reliable passage exists. Detailed retrieval safeguards are included in the task response only when decision candidates exist, avoiding a large fixed instruction cost for unrelated sessions. The agent never loads every decision page, and the absence of a matching decision is normal rather than a coverage gap. When the human-model discussion reaches a clearly accepted, durable project choice, the agent closes the loop at task completion: it rereads and reuses the decision page for the same context (or creates a separate page for a different one), updates the current choice and concise rationale, appends a dated history note describing what changed and why, and writes one `DECISION` log entry. Proposals, unresolved options, incidental implementation details, raw conversation, hidden chain-of-thought, and secrets are never decision memory. The page remains valid if the independent log append must be retried. No decision means no write; an analysis-only or otherwise unauthorized session reports the proposed update instead of mutating the wiki.\n\nDurable knowledge lives as Markdown under `wiki/`. Page-tool paths are relative to that root (`concepts/RAG.md`); a redundant leading `wiki/` is accepted and removed, while a `wiki` directory deeper in the path is blocked so page writes cannot create `wiki/wiki/...`. Page directories remain open-ended and are created lazily, so projects can add domain-specific groupings without changing the catalog. Legacy nested pages are reported by lint; `knowledge_admin action=\"lint\" force=true dry_run=true` previews a collision-safe repair and `dry_run=false` moves them to canonical paths while updating relative links. Direct page operations preserve caller-owned content byte-for-byte. Larger source sets use `knowledge_ingest`: normalized sources are processed in bounded segments, claims are recorded in durable Evidence IR, coverage is reconciled, and finalization is blocked until every segment is represented or explicitly classified. Derived retrieval and graph indexes are refreshed from this canonical state rather than replacing it.\n\nNormalized sources originating in `docs/transcripts/` activate the required stakeholder-memory contract; `docs/client/` and `docs/reports/` activate lightweight discovery when explicit stakeholder evidence is present. Each unambiguous participant, role, group, organization, or affected party is recorded under `wiki/stakeholders/`. Later sources update the current role, organization, email domain, and affiliation while the Evidence IR block retains prior observations and provenance. The local user domain comes first from `KNOWLEDGE_RAIL_USER_EMAIL`, then project-root `git config user.email`, otherwise it is unknown. Only domains are persisted: equal domains classify as `internal` and different domains as `client`; without a comparable domain, an explicit source declaration of `client` or `internal` is retained, otherwise the value is `unknown`; `partner` always requires explicit evidence. Complete participant addresses are redacted from durable claims; unsupported attributes are not inferred and ambiguous identities are not merged. Identity resolution is cached for the server lifetime, so changing the environment variable or project Git email requires a KnowledgeRail server restart.\n\n### Verified warm start and phrase-aware retrieval\n\nKnowledgeRail resumes from project-local lexical and graph checkpoints, but never treats them as authority. Before a checkpoint can serve evidence, canonical Markdown is reconciled and the graph checkpoint must match the verified lexical corpus revision and its own builder version. A missing, stale, truncated, corrupt, oversized, symlinked, or incompatible artifact—or a symlinked/non-directory `.knowledge-rail` boundary—is discarded as one candidate generation; KnowledgeRail rebuilds from canonical pages and exposes a stable fallback reason through `knowledge_admin action=\"status\"`. Read-only requests may consume valid derived files but do not rewrite them. Authorized mutations append revision-bound lexical and graph journals under one cross-process lock; either journal is compacted into its snapshot after 100 deltas or 4 MiB, preventing unbounded growth.\n\nThe default integrity policy is `metadata`: path, size, modification/change timestamps, and portable file identity select which pages must be reread and hashed. `content` fingerprints every canonical page before accepting the generation and is intended for higher-assurance environments where the extra startup I/O is appropriate. Set `KNOWLEDGE_RAIL_INTEGRITY_MODE=content`, or use `integrity_mode=\"content\"` with the admin status/checkpoint actions. To explicitly verify and persist a clean generation, run `knowledge_admin action=\"checkpoint\"`; add `force=true` for an oracle rebuild from canonical Markdown.\n\nOrdered word bigrams positively rerank only a bounded BM25 pool and select the best canonical passage; a missing phrase never filters a unigram candidate. Compound identifiers such as `REQ-123`, `Asset__c`, `Retry-After`, and `/v2/invoices` remain single ordered tokens. Pages matching every strong identifier are protected, and queries containing three or more strong identifier tokens retain exact lexical passage selection instead of applying a phrase boost. The channel is enabled by default after its held-out quality gate; `KNOWLEDGE_RAIL_PHRASE_RERANK=off` provides an internal soak/diagnostic rollback. Trigrams and a persistent n-gram table are intentionally absent because the controlled A/B test found no additional quality gain and the bounded scorer meets the latency gate.\n\nSearch scores are relative ranking signals within one result set, not probabilities or stable values to compare across queries or releases.\n\nDocument production is a separate evidence-backed workflow. `knowledge_document_context` first creates a plan and a bounded evidence pack for each section. `knowledge_document` then writes and reviews the Markdown against the selected contract. A passing review is terminal and returns the SHA-256 of the exact inspected content; conversion or branded rendering belongs to the user's own LLM and tooling. This keeps generated documents traceable to project memory without treating the deliverable itself as canonical memory.\n\nAll public actions validate their own required arguments before reading or mutating state. The shared `state`/`nextAction` envelope makes progress explicit, but a suggested next action never grants permission to perform a consequential write: the connected client retains its normal approval policy. Compatibility with older MCP clients changes only the transport adapter, not these eight tool names or their behavior.\n\nA normal context request starts directly with:\n\n```text\nknowledge_context {\n  \"mode\":\"task\",\n  \"intent\":\"understand\",\n  \"objective\":\"Explain how lease renewal and expiry work\",\n  \"response_detail\":\"compact\",\n  \"heuristic_token_budget\":2000\n}\n```\n\nOn MCP `2026-07-28`, `knowledge_context` returns selected `knowledge-rail://` resource links. The client materializes only the passages it needs with `resources/read`; clients that do not expose resource reads can use `knowledge_page action=\"read\"` with the exact URI. The envelope always reports `retrieval.coverageMode` as `lexical`, `semantic-partial` or `semantic`, plus any progress or graceful-degradation warning. When evidence was omitted only because of the budget, `nextAction` provides the next bounded widening request. Semantic, stale, or unresolved gaps are returned without a futile widening loop and must remain explicit unknowns.\n\nFor source changes, `changed_paths` also accepts repository-relative indexed code\nfiles. Task context can return `changeImpact.codeRoots`, incoming `codeRelations`\nand related `codeWikiPages` from active anchored claims. Expansion uses the existing\ncode snapshot, with at most three roots and twelve candidates per root, further\nreduced by the token budget. Context does not rebuild missing or invalid code indexes.\nRead only relevant code links and verify freshness: lexical calls/references and\nheuristic imports remain candidates, and an empty result does not prove non-use.\nSee the [code evidence guide](docs/guides/code-evidence-retrieval.md) for scope and limits.\n\nThe consolidated catalog is deliberately action-oriented, but validation remains action-specific. For example, `knowledge_page action=\"edit\"` is rejected without `path`, `old_string`, and `new_string`; ingestion cannot finalize before complete coverage; document review reports blockers and delivery readiness for the exact inspected Markdown.\n\nCaller-owned page, file, and code bodies are never rewritten to modernize historical tool names. If a canonical `SCHEMA.md` still refers to a retired operation, `knowledge_admin action=\"migrate\"` can propose the corresponding current operation for explicit review; reads remain byte-preserving.\n\nA normalized-source loop is explicit and machine-guided:\n\n```text\nstart → next → apply_claims or record_segment → next\n      → source_status → finalize\n```\n\nUse `evidence_status` for claims and recovery debt; it is intentionally separate from per-source `source_status`. The old overloaded `apply` and `status` ingestion actions are rejected.\n\n### Why context has a token budget\n\nThe budget bounds evidence sent to the model; it does not declare omitted knowledge irrelevant. If coverage is insufficient because of the budget, the guided read workflow widens both `max_evidence` (up to 20) and the heuristic token allowance from `2,000` to `4,000`, `8,000`, and at most `12,000`. Widening stops as soon as no evidence is budget-omitted; any remaining semantic or freshness gap is exposed rather than guessed.\n\n`response_detail=\"compact\"` is recommended for normal agent use. `full` keeps the complete historical TaskContext payload for diagnostics and integrations that need it.",
+      "source": "README.md",
+      "sourceHeading": "Agent workflow",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-14.md",
+      "title": "How it works",
+      "type": "overview",
+      "body": "### How it works\n\nKnowledgeRail separates context retrieval, durable memory, source ingestion, code evidence, and document production so an agent can enter at the operation it needs without learning an internal menu or carrying session state:\n\n```text\ntask objective\n    ↓\nknowledge_context ──→ ranked evidence links + coverage gaps\n    ↓                              ↓\nresources/read              bounded widening, if needed\n    ↓\nagent reasoning and project work\n    ├──→ knowledge_page / knowledge_code\n    ├──→ knowledge_ingest ──→ Evidence IR ──→ canonical wiki\n    └──→ knowledge_document_context ──→ knowledge_document\n```\n\nFor a normal task, the agent calls `knowledge_context mode=\"task\"` with a concrete objective. KnowledgeRail searches the canonical wiki and its derived lexical, graph, passage, code, and optional semantic indexes, ranks the available evidence, and returns a compact context envelope. Large page bodies are exposed as `knowledge-rail://` links instead of being inserted wholesale into the response; the client reads only the selected passages. Coverage is assessed over both the full retrieved candidate set and the smaller display set. The full pool distinguishes truly missing evidence from evidence that is merely `budget_limited`; progressive widening stops only when the evidence returned to the model is sufficient. If the token budget alone excluded relevant evidence, the returned `nextAction` proposes one bounded widening step. Missing, stale, contradictory, or unresolved evidence remains an explicit gap and is never filled by guessing.\n\nDecision pages are ordinary canonical wiki knowledge and already participate in that retrieval. Each page stays bounded to one coherent flow, component, or project context. Candidate prior choices are exposed in the structured `decisions` and `changeImpact.decisions` fields, but the agent inspects their metadata and materializes only a resource link that actually matches the task—normally the selected passage, or that single bounded page when no reliable passage exists. Detailed retrieval safeguards are included in the task response only when decision candidates exist, avoiding a large fixed instruction cost for unrelated sessions. The agent never loads every decision page, and the absence of a matching decision is normal rather than a coverage gap. When the human-model discussion reaches a clearly accepted, durable project choice, the agent closes the loop at task completion: it rereads and reuses the decision page for the same context (or creates a separate page for a different one), updates the current choice and concise rationale, appends a dated history note describing what changed and why, and writes one `DECISION` log entry. Proposals, unresolved options, incidental implementation details, raw conversation, hidden chain-of-thought, and secrets are never decision memory. The page remains valid if the independent log append must be retried. No decision means no write; an analysis-only or otherwise unauthorized session reports the proposed update instead of mutating the wiki.\n\nDurable knowledge lives as Markdown under `wiki/`. Page-tool paths are relative to that root (`concepts/RAG.md`); a redundant leading `wiki/` is accepted and removed, while a `wiki` directory deeper in the path is blocked so page writes cannot create `wiki/wiki/...`. Page directories remain open-ended and are created lazily, so projects can add domain-specific groupings without changing the catalog. Legacy nested pages are reported by lint; `knowledge_admin action=\"lint\" force=true dry_run=true` previews a collision-safe repair and `dry_run=false` moves them to canonical paths while updating relative links. Direct page operations preserve caller-owned content byte-for-byte. Larger source sets use `knowledge_ingest`: normalized sources are processed in bounded segments, claims are recorded in durable Evidence IR, coverage is reconciled, and finalization is blocked until every segment is represented or explicitly classified. Derived retrieval and graph indexes are refreshed from this canonical state rather than replacing it.\n\nNormalized sources originating in `docs/transcripts/` activate the required stakeholder-memory contract; `docs/client/` and `docs/reports/` activate lightweight discovery when explicit stakeholder evidence is present. Each unambiguous participant, role, group, organization, or affected party is recorded under `wiki/stakeholders/`. Later sources update the current role, organization, email domain, and affiliation while the Evidence IR block retains prior observations and provenance. The local user domain comes first from `KNOWLEDGE_RAIL_USER_EMAIL`, then project-root `git config user.email`, otherwise it is unknown. Only domains are persisted: equal domains classify as `internal` and different domains as `client`; without a comparable domain, an explicit source declaration of `client` or `internal` is retained, otherwise the value is `unknown`; `partner` always requires explicit evidence. Complete participant addresses are redacted from durable claims; unsupported attributes are not inferred and ambiguous identities are not merged. Identity resolution is cached for the server lifetime, so changing the environment variable or project Git email requires a KnowledgeRail server restart.",
+      "source": "README.md",
+      "sourceHeading": "How it works",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-15.md",
+      "title": "Verified warm start and phrase-aware retrieval",
+      "type": "overview",
+      "body": "### Verified warm start and phrase-aware retrieval\n\nKnowledgeRail resumes from project-local lexical and graph checkpoints, but never treats them as authority. Before a checkpoint can serve evidence, canonical Markdown is reconciled and the graph checkpoint must match the verified lexical corpus revision and its own builder version. A missing, stale, truncated, corrupt, oversized, symlinked, or incompatible artifact—or a symlinked/non-directory `.knowledge-rail` boundary—is discarded as one candidate generation; KnowledgeRail rebuilds from canonical pages and exposes a stable fallback reason through `knowledge_admin action=\"status\"`. Read-only requests may consume valid derived files but do not rewrite them. Authorized mutations append revision-bound lexical and graph journals under one cross-process lock; either journal is compacted into its snapshot after 100 deltas or 4 MiB, preventing unbounded growth.\n\nThe default integrity policy is `metadata`: path, size, modification/change timestamps, and portable file identity select which pages must be reread and hashed. `content` fingerprints every canonical page before accepting the generation and is intended for higher-assurance environments where the extra startup I/O is appropriate. Set `KNOWLEDGE_RAIL_INTEGRITY_MODE=content`, or use `integrity_mode=\"content\"` with the admin status/checkpoint actions. To explicitly verify and persist a clean generation, run `knowledge_admin action=\"checkpoint\"`; add `force=true` for an oracle rebuild from canonical Markdown.\n\nOrdered word bigrams positively rerank only a bounded BM25 pool and select the best canonical passage; a missing phrase never filters a unigram candidate. Compound identifiers such as `REQ-123`, `Asset__c`, `Retry-After`, and `/v2/invoices` remain single ordered tokens. Pages matching every strong identifier are protected, and queries containing three or more strong identifier tokens retain exact lexical passage selection instead of applying a phrase boost. The channel is enabled by default after its held-out quality gate; `KNOWLEDGE_RAIL_PHRASE_RERANK=off` provides an internal soak/diagnostic rollback. Trigrams and a persistent n-gram table are intentionally absent because the controlled A/B test found no additional quality gain and the bounded scorer meets the latency gate.\n\nSearch scores are relative ranking signals within one result set, not probabilities or stable values to compare across queries or releases.\n\nDocument production is a separate evidence-backed workflow. `knowledge_document_context` first creates a plan and a bounded evidence pack for each section. `knowledge_document` then writes and reviews the Markdown against the selected contract. A passing review is terminal and returns the SHA-256 of the exact inspected content; conversion or branded rendering belongs to the user's own LLM and tooling. This keeps generated documents traceable to project memory without treating the deliverable itself as canonical memory.\n\nAll public actions validate their own required arguments before reading or mutating state. The shared `state`/`nextAction` envelope makes progress explicit, but a suggested next action never grants permission to perform a consequential write: the connected client retains its normal approval policy. Compatibility with older MCP clients changes only the transport adapter, not these eight tool names or their behavior.\n\nA normal context request starts directly with:\n\n```text\nknowledge_context {\n  \"mode\":\"task\",\n  \"intent\":\"understand\",\n  \"objective\":\"Explain how lease renewal and expiry work\",\n  \"response_detail\":\"compact\",\n  \"heuristic_token_budget\":2000\n}\n```\n\nOn MCP `2026-07-28`, `knowledge_context` returns selected `knowledge-rail://` resource links. The client materializes only the passages it needs with `resources/read`; clients that do not expose resource reads can use `knowledge_page action=\"read\"` with the exact URI. The envelope always reports `retrieval.coverageMode` as `lexical`, `semantic-partial` or `semantic`, plus any progress or graceful-degradation warning. When evidence was omitted only because of the budget, `nextAction` provides the next bounded widening request. Semantic, stale, or unresolved gaps are returned without a futile widening loop and must remain explicit unknowns.\n\nFor source changes, `changed_paths` also accepts repository-relative indexed code\nfiles. Task context can return `changeImpact.codeRoots`, incoming `codeRelations`\nand related `codeWikiPages` from active anchored claims. Expansion uses the existing\ncode snapshot, with at most three roots and twelve candidates per root, further\nreduced by the token budget. Context does not rebuild missing or invalid code indexes.\nRead only relevant code links and verify freshness: lexical calls/references and\nheuristic imports remain candidates, and an empty result does not prove non-use.\nSee the [code evidence guide](docs/guides/code-evidence-retrieval.md) for scope and limits.\n\nThe consolidated catalog is deliberately action-oriented, but validation remains action-specific. For example, `knowledge_page action=\"edit\"` is rejected without `path`, `old_string`, and `new_string`; ingestion cannot finalize before complete coverage; document review reports blockers and delivery readiness for the exact inspected Markdown.\n\nCaller-owned page, file, and code bodies are never rewritten to modernize historical tool names. If a canonical `SCHEMA.md` still refers to a retired operation, `knowledge_admin action=\"migrate\"` can propose the corresponding current operation for explicit review; reads remain byte-preserving.\n\nA normalized-source loop is explicit and machine-guided:\n\n```text\nstart → next → apply_claims or record_segment → next\n      → source_status → finalize\n```\n\nUse `evidence_status` for claims and recovery debt; it is intentionally separate from per-source `source_status`. The old overloaded `apply` and `status` ingestion actions are rejected.",
+      "source": "README.md",
+      "sourceHeading": "Verified warm start and phrase-aware retrieval",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-16.md",
+      "title": "Why context has a token budget",
+      "type": "overview",
+      "body": "### Why context has a token budget\n\nThe budget bounds evidence sent to the model; it does not declare omitted knowledge irrelevant. If coverage is insufficient because of the budget, the guided read workflow widens both `max_evidence` (up to 20) and the heuristic token allowance from `2,000` to `4,000`, `8,000`, and at most `12,000`. Widening stops as soon as no evidence is budget-omitted; any remaining semantic or freshness gap is exposed rather than guessed.\n\n`response_detail=\"compact\"` is recommended for normal agent use. `full` keeps the complete historical TaskContext payload for diagnostics and integrations that need it.",
+      "source": "README.md",
+      "sourceHeading": "Why context has a token budget",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-17.md",
+      "title": "Code-backed claims and drift detection",
+      "type": "overview",
+      "body": "## Code-backed claims and drift detection\n\nEvidence IR claims can cite a symbol returned by `knowledge_code action=\"search\"` or `action=\"symbol\"`. Pass that exact `code://repo/...#symbol-...` URI as the claim target's `code_resource_uri` during `knowledge_ingest action=\"apply_claims\"`. If the symbol resolves against the current deterministic code index, KnowledgeRail stores a repository-relative line range, a trailing-whitespace-insensitive SHA-256 range hash, the parser version, and the capture time. A missing or stale symbol produces an explicit anchor warning; KnowledgeRail never fabricates an anchor.\n\nRun a complete read-only check through the MCP tool:\n\n```text\nknowledge_admin {\n  \"action\":\"drift\"\n}\n```\n\nFor a bounded pre-commit or CI check, pass repository-relative files or directory prefixes:\n\n```text\nknowledge_admin {\n  \"action\":\"drift\",\n  \"scope\":\"paths\",\n  \"paths\":[\"src/payments.ts\",\"src/invoices\"]\n}\n```\n\nThe same detector is available without an MCP server for agent hooks and CI. Hook mode reports non-fresh anchors but never blocks the calling tool; it is silent when everything checked is fresh:\n\n```bash\nnpx -y knowledge-rail@2.9.1 drift --no-ledger\nnpx -y knowledge-rail@2.9.1 drift --no-ledger --path src/payments.ts --path src/invoices\n```\n\nAn absolute event path is accepted only when it is confined to the discovered project. For pre-commit or CI, `--check` exits `2` on any non-fresh anchor or timeout; operational failures exit `1`. JSON mode returns the complete shared-core result:\n\n```bash\nnpx -y knowledge-rail@2.9.1 drift --check --no-ledger\nnpx -y knowledge-rail@2.9.1 drift --format json --no-ledger\n```\n\nText output is capped at 20 affected anchors. Its `stale` count is the aggregate of `drift_suspected` and `anchor_unresolvable`, not a fourth detector verdict. The default timeout is three seconds: ordinary hook mode reports a timeout on stderr and exits `0`, while `--check` exits `2`. Omit `--no-ledger` only when the disposable freshness ledger should be updated for later context compilation.\n\nThe action reads current code and writes only disposable state to `wiki/.knowledge-rail/drift/ledger.json`; it never edits claim text, canonical pages, or source code. A changed range, missing file, or invalidated line range becomes `drift_suspected`. An unreadable path, a non-file target, or a symlink that escapes the repository becomes `anchor_unresolvable` without aborting checks for other anchors. Trailing-whitespace-only edits and a parser-version change with identical range content stay fresh. `knowledge_context` keeps affected evidence visible for provenance, marks it `stale` with the corresponding reason, excludes it from clean evidence buckets, and returns an explicit `stale_evidence` gap even when stale evidence was retrieved but omitted from the display. Re-verification and correction remain normal Evidence IR work—there is intentionally no automatic fix.",
+      "source": "README.md",
+      "sourceHeading": "Code-backed claims and drift detection",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-18.md",
+      "title": "Project client hooks integration",
+      "type": "overview",
+      "body": "## Project client hooks integration\n\nClaude Code, Codex and Cursor can receive project-scoped KnowledgeRail rules and read-only drift hooks directly. Preview with `npx -y knowledge-rail@2.9.1 setup clients`; apply only after review with the same command plus `--apply`. From an MCP client, ask the model to call `knowledge_admin action=\"client_setup\" setup_mode=\"preview\"`, then explicitly request `setup_mode=\"apply\"`. Applying through the desktop/catalog profile requires a write-scoped workspace binding; preview and status remain read-only. Ordinary initialization never installs hooks implicitly.\n\nThe full guide, generated files, client trust steps and security boundaries are in [docs/guides/claude-code-hooks.md](docs/guides/claude-code-hooks.md).\n\nThe CLI hook bridge is harness-neutral and emits the native output contract for Claude Code, Codex or Cursor. All generated files and recovery manifests remain inside the selected project. Before a changed configuration is applied, exact existing bytes are copied under `.knowledge-rail/backups/client-setup/<run-id>/`; a no-op reapply creates no backup. KnowledgeRail retains the newest 20 successfully applied transactions while preserving incomplete, rolled-back, failed and unrecognized recovery evidence.",
+      "source": "README.md",
+      "sourceHeading": "Project client hooks integration",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-19.md",
+      "title": "Project data",
+      "type": "overview",
+      "body": "## Project data\n\n`knowledge_admin action=\"init\"` creates this structure inside the selected project. The roots are intentionally stable: `wiki/` is canonical agent memory; `docs/` is the document plane for sources, normalized copies, durable evidence state, and deliverables.\n\n```text\nproject/\n├── wiki/\n│   ├── index.md\n│   ├── log.md\n│   ├── SCHEMA.md\n│   ├── .knowledge-rail/     # derived indexes, drift ledger, manifests and migration state\n│   └── <page-type>/         # created lazily when the first typed page is written\n└── docs/\n    ├── client/\n    ├── transcripts/\n    ├── reports/\n    ├── changelogs/\n    ├── normalized/\n    ├── evidence-ir/         # durable Evidence IR and knowledge-recovery state\n    ├── deliverables/\n    └── assets/\n```\n\nMarkdown pages are canonical knowledge. Files below `wiki/.knowledge-rail/` are derived or operational state and can be rebuilt where the corresponding workflow supports it. Source documents remain under `docs/`; normalization never overwrites the original.\n\n`knowledge_admin action=\"migrate\"` also recognizes the pre-rebrand `wiki/.llm-wiki/` namespace. It backs up both namespaces, assesses the legacy manifest, imports valid source-coverage ledgers, and rebuilds manifests and indexes from the current checkout instead of copying stale sizes, mtimes, or hashes. The internal manifest v2 is deterministic across Windows, macOS, and Linux: paths use `/` and Unicode NFC, Markdown line endings are normalized to LF before `size` and SHA-256 are computed, entries have a stable order, and the serialized file contains neither timestamps nor filesystem mtimes. Trees that differ only in platform path representation, CRLF/LF line endings, or timestamps therefore produce byte-identical manifest files and the same manifest hash; case-insensitive path collisions are rejected as non-portable. Existing manifest v1 files remain readable and are upgraded when rebuilt or invalidated. The old namespace remains untouched after a successful migration and is retained in the migration backup; ambiguous partial state in both namespaces is blocked for explicit operator review.\n\nThese directories may contain private project information. Decide deliberately whether the consuming project should commit them.",
+      "source": "README.md",
+      "sourceHeading": "Project data",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-20.md",
+      "title": "Document memory and deliverables",
+      "type": "overview",
+      "body": "## Document memory and deliverables\n\nDocument generation starts with `knowledge_document_context action=\"plan\"`. Follow its `nextAction` to compile a separate bounded evidence pack for every section, then use `knowledge_document action=\"write\"` and `action=\"review\"`. Review is terminal when no blocker remains and returns `contentSha256` so the caller can bind the verdict to the exact Markdown bytes inspected. It writes no manifest or sidecar and makes no certification claim.\n\nBuilt-in presets cover functional specifications and analyses, technical analyses, architecture documents, project briefs, user manuals, onboarding guides, API references, ADRs, runbooks, test plans, incident reports, and release notes. They are not a closed taxonomy: any non-empty `document_type` is valid, and `required_sections` lets the user or their LLM define the outline. Each preset supplies a purpose, default language and audience, minimum useful content, and type-specific checks; callers can override the outline, language, and client-facing status.\n\nDiagrams are opt-in. Omitting `diagram_mode` means that review applies no diagram-mode constraint; clients that want an explicit choice must propagate `none`, `mermaid`, or `external_asset` through planning and review. With `mermaid`, the user's LLM writes a fenced Mermaid block directly in the Markdown; [Obsidian supports Mermaid code blocks](https://obsidian.md/help/advanced-syntax#Diagram), as do other compatible viewers. With `external_asset`, the caller supplies an SVG/PNG in `docs/assets/` and links it from the deliverable as `../assets/name.svg` or `../assets/name.png`; review validates confinement, signature, size, and active SVG content. Remote images and other local image formats receive portability warnings instead of security blockers. Because KnowledgeRail has no asset-write action, chat-only clients without filesystem access should offer only `none` and `mermaid`.\n\nThe generated document is an output of agent memory, not its replacement. Confirmed facts belong in `wiki/`; source artifacts remain in `docs/`; delivery-ready Markdown belongs in `docs/deliverables/`.\n\nKnowledgeRail keeps its MCP catalog, prompts, stable identifiers, operational messages, and generated control files in English. This is an internal interoperability choice, not an output-language restriction: human-readable wiki pages and deliverables follow the language of the user's current request, an explicit language override takes precedence, and edits preserve the existing page language unless translation is requested. The policy has no locale allowlist.",
+      "source": "README.md",
+      "sourceHeading": "Document memory and deliverables",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-21.md",
+      "title": "Optional OCR and semantic retrieval",
+      "type": "overview",
+      "body": "## Optional OCR and semantic retrieval\n\nText, Markdown, JSON, YAML, CSV/TSV, XLSX, and PPTX normalization works locally. Images and PDFs require either an Ollama-compatible OCR service or a configured native OCR endpoint.\n\nCommon OCR variables:\n\n| Variable | Purpose |\n| --- | --- |\n| `KNOWLEDGE_RAIL_OCR_MODE` | `ollama` (default) or `native`. |\n| `KNOWLEDGE_RAIL_OLLAMA_HOST` | Ollama base URL; defaults to `http://localhost:11434`. |\n| `KNOWLEDGE_RAIL_NATIVE_HOST` | Native OCR base URL; defaults to `http://localhost:5002`. |\n| `KNOWLEDGE_RAIL_OCR_MODEL` | OCR model; defaults to `glm-ocr:latest`. |\n| `KNOWLEDGE_RAIL_OCR_TIMEOUT_MS` | Positive request timeout in milliseconds. |\n| `KNOWLEDGE_RAIL_OCR_RETRIES` | Retry count. |\n\nSemantic retrieval and semantic-aware coverage are optional. Without an embedding provider, deterministic lexical/graph/passage retrieval and delimiter-, stemming-, and artifact-equivalence-aware coverage remain fully available offline. With a provider, query facets and entities are additionally checked against indexed passage embeddings, which improves GAP precision. Page coverage uses the strongest indexed passage, while displayed-passage coverage is scored only against the excerpt actually selected; a relevant page therefore cannot hide a weak displayed excerpt. If the configured provider is unavailable, times out, or returns incompatible vectors, `knowledge_context` falls back to lexical coverage and reports the warning instead of failing.\n\nThe recommended local-first setup is an OpenAI-compatible Ollama endpoint; choose a pinned local model and use its declared vector dimensions:\n\n```text\nKNOWLEDGE_RAIL_EMBEDDING_BASE_URL=http://localhost:11434/v1\nKNOWLEDGE_RAIL_EMBEDDING_MODEL=<pinned-local-embedding-model>\nKNOWLEDGE_RAIL_EMBEDDING_MODEL_VERSION=<pinned-version>\nKNOWLEDGE_RAIL_EMBEDDING_DIMENSIONS=<model-dimensions>\n```\n\nA remote OpenAI-compatible endpoint is also supported when explicitly configured:\n\n```text\nKNOWLEDGE_RAIL_EMBEDDING_BASE_URL=https://provider.example/v1\nKNOWLEDGE_RAIL_EMBEDDING_MODEL=embedding-model\nKNOWLEDGE_RAIL_EMBEDDING_DIMENSIONS=1536\n```\n\nOptional embedding variables are `KNOWLEDGE_RAIL_EMBEDDING_API_KEY`, `KNOWLEDGE_RAIL_EMBEDDING_MODEL_VERSION`, and `KNOWLEDGE_RAIL_EMBEDDING_TIMEOUT_MS`.\n\nPersisted vectors use int8 by default. Set `KNOWLEDGE_RAIL_SEMANTIC_DTYPE=f32` for\nFloat32 storage. Quantization changes storage and similarity computation, not the\nconfigured embedding model: Ollama still computes document and query embeddings.\nSee [memory evolution](docs/guides/memory-evolution.md) for the measured quality,\nmemory tradeoff and complete startup timings that include Ollama.\n\n`KNOWLEDGE_RAIL_EMBEDDING_QUERY_PREFIX` optionally prepends a model-specific instruction\nto queries only. Changing it changes provider identity and triggers a full document\nre-embedding on the next semantic-index synchronization, even though document inputs\nare unchanged. See the [prefix contract and measured model limits](docs/guides/code-evidence-retrieval.md#optional-live-semantic-evaluation).\n\n| Coverage mode | Provider | Behavior |\n| --- | --- | --- |\n| `lexical` | none, or provider degraded | Offline deterministic coverage with normalized facets/entities and shared artifact equivalences. |\n| `semantic` | configured and healthy | Batched embedding similarity over indexed passages, with the same bounded display and explicit-gap guarantees. |\n| `semantic-partial` | configured, building | Current embedded pages contribute semantic evidence; remaining pages retain lexical coverage, with progress reported. |\n\nThe 2.9.0 implementation persists vectors and per-batch progress automatically. A page\nedit regenerates all embeddings for that page; a model/provider change regenerates\nthe entire corpus. Restarting with unchanged pages reuses the persisted vectors.\nSee [memory evolution](docs/guides/memory-evolution.md) for lifecycle, optional static\nmodels, usage-based ranking, task repository maps, historical claims and measured limits.",
+      "source": "README.md",
+      "sourceHeading": "Optional OCR and semantic retrieval",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-22.md",
+      "title": "Compatibility",
+      "type": "overview",
+      "body": "## Compatibility\n\n| Capability | Status |\n| --- | --- |\n| MCP SDK | official `@modelcontextprotocol/server`, `client`, and `node` `2.x` packages |\n| Modern protocol | `2026-07-28` |\n| Cursor transport | project-scoped local `stdio`, explicit `${workspaceFolder}` root, exact eight-tool bound profile |\n| Cwd-aware IDE/terminal transport | local `stdio`, automatic project root, exact eight-tool bound profile |\n| Local HTTP transport | self-hosted loopback gateway, stateless per-request workspace resolution |\n| Desktop chat | local `stdio`-to-HTTP adapter with user-selected opaque per-chat binding |\n| Legacy wire adapter | Served for existing 2025-era clients with the same eight public tool names |\n| Modern selective reads | MCP `resources/read` |\n| Public/hosted Streamable HTTP | Not implemented; the shipped gateway rejects non-loopback binding |\n| Claude remote connectors to localhost | Not supported; use Claude Desktop local MCP |\n| Serverless multi-tenant storage | Not implemented |\n\nAll public tools use the `knowledge_*` prefix in both protocol eras. Historical `wiki_*` tools and `knowledge_menu` are not advertised. The legacy adapter is transport/workspace compatibility only: it does not restore the old tool catalog. Conservative migration of existing wiki data remains supported independently of protocol compatibility.",
+      "source": "README.md",
+      "sourceHeading": "Compatibility",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-23.md",
+      "title": "Development and verification",
+      "type": "overview",
+      "body": "## Development and verification\n\n```bash\nnpm ci\nnpm run verify\nnpm run audit:runtime\nnpm run audit:signatures\nnpm run package:smoke\n```\n\nRun all deterministic retrieval and quality gates:\n\n```bash\nnpm run eval:gates\n```\n\nThe aggregate command runs these unchanged individual gates:\n\n```bash\nnpm run eval:retrieval:gate\nnpm run eval:hybrid:gate\nnpm run eval:widening:gate\nnpm run eval:source-coverage:gate\nnpm run eval:evidence-ir:gate\nnpm run eval:code-evidence:gate\nnpm run eval:drift:gate\nnpm run eval:recovery:gate\nnpm run eval:task-context:gate\nnpm run eval:semantic:gate\nnpm run eval:migration:gate\nnpm run eval:editorial:gate\nnpm run eval:documents:gate\nnpm run eval:tool-surface:gate\n```\n\nThe benchmark fixtures and acceptance rules are documented in [benchmarks/README.md](benchmarks/README.md). CI verifies Node.js 22 and 24, all regression gates, benchmark smoke tests, the runtime dependency audit, and installed-tarball smokes on Ubuntu, macOS, and Windows.\n\nSee [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request and [SECURITY.md](SECURITY.md) for vulnerability reporting.",
+      "source": "README.md",
+      "sourceHeading": "Development and verification",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-24.md",
+      "title": "License",
+      "type": "overview",
+      "body": "## License\n\nLicensed under the [Apache License 2.0](LICENSE). You may use, modify, and distribute the project, including commercially, subject to the license terms and preservation of required notices. The license does not require derivative products to be open source.",
+      "source": "README.md",
+      "sourceHeading": "License",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "readme/readme-25.md",
+      "title": "Origins and acknowledgement",
+      "type": "overview",
+      "body": "## Origins and acknowledgement\n\nKnowledgeRail is an independent project. Its starting point was inspired in part by Andrej Karpathy's [LLM Wiki idea file](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): an LLM maintains durable Markdown knowledge that compounds instead of reconstructing everything from raw sources on every query.\n\nKnowledgeRail has since evolved into a distinct MCP 2.0 agent-memory system with bounded hybrid retrieval, coverage and gap reporting, Evidence IR, deterministic code evidence, migration support, and contract-driven document production. It is not affiliated with or endorsed by Andrej Karpathy. See [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md).",
+      "source": "README.md",
+      "sourceHeading": "Origins and acknowledgement",
+      "sourceSha256": "3648116ce7f939eb80696d0d5f6a2613fe930f0c114608a841ed491c4024cb2d"
+    },
+    {
+      "path": "security/security-00.md",
+      "title": "Supported versions",
+      "type": "rule",
+      "body": "## Supported versions\n\nSecurity fixes are provided for the latest `2.x` release line. Pre-release users should test the exact reviewed commit on the default development branch.",
+      "source": "SECURITY.md",
+      "sourceHeading": "Supported versions",
+      "sourceSha256": "764ee54609622af557a77d1d515716d60d0a5e1398de3566f27a965e9c278c55"
+    },
+    {
+      "path": "security/security-01.md",
+      "title": "Reporting a vulnerability",
+      "type": "rule",
+      "body": "## Reporting a vulnerability\n\nDo not open a public issue for a suspected vulnerability. Use the repository's private [GitHub security advisory form](https://github.com/Deviank88/KnowledgeRail/security/advisories/new) and include:\n\n- affected version or commit;\n- operating system and Node.js version;\n- reproduction steps or a minimal proof of concept;\n- expected impact and any known workaround.\n\nPlease avoid accessing data that is not yours and do not publish details before a fix is available.",
+      "source": "SECURITY.md",
+      "sourceHeading": "Reporting a vulnerability",
+      "sourceSha256": "764ee54609622af557a77d1d515716d60d0a5e1398de3566f27a965e9c278c55"
+    },
+    {
+      "path": "security/security-02.md",
+      "title": "Current trust boundary",
+      "type": "rule",
+      "body": "## Current trust boundary\n\nKnowledgeRail is local-first. Cursor binds project-scoped `stdio` through an explicit `${workspaceFolder}` root; cwd-aware IDE/terminal processes can infer one project independently. The self-hosted loopback HTTP gateway resolves an opaque workspace binding on every filesystem-capable request, and context-free desktop chats select from an approved local catalog. Its tools can read and modify files under the selected workspace, and optional providers can receive source text or document images when explicitly configured. Review MCP tool calls and provider privacy terms before using it with sensitive repositories.\n\nThe shipped HTTP mode authenticates requests but accepts loopback binding only. It is not a public endpoint, OAuth deployment, or hostile-user multi-tenant service. Exposing it through an ad-hoc tunnel or reverse proxy bypasses the controls required in [SELF_HOSTING.md](SELF_HOSTING.md).\n\nWorkspace IDs and bindings are capabilities, not display-only metadata. Do not paste them into issues, logs, shared prompts, analytics, or repositories. The gateway credential and registry live in the protected per-user state directory, never under a project. Catalog selection prevents model-authored arbitrary paths; it does not make prompt injection harmless. Confirm the displayed workspace and requested scope before approving `knowledge_workspace select`, and prefer a new chat when changing customer context.\n\nThe gateway validates canonical roots again when a binding is used. Missing, malformed, expired, released, wrong-principal, read-only, unavailable, or substituted workspace bindings fail before path access. Resource links are binding-qualified and revalidated at read time. Please report any case where one concurrent workspace can observe or mutate another as a security vulnerability.\n\nKeep secrets in environment variables, never in wiki pages, source documents, MCP configuration committed to Git, logs, or issue reports. KnowledgeRail ships no browser renderer. Document review uses an exact-pinned CommonMark/GFM tokenizer to classify source without rewriting it. Mermaid is validated as source, and referenced SVG/PNG assets must remain below `docs/assets`; active Mermaid or SVG content, executable or private URI schemes, path escapes, invalid signatures, and oversized validated assets are review blockers. Remote images and other local image formats are reported as portability warnings; those formats do not receive SVG/PNG signature or active-content guarantees.",
+      "source": "SECURITY.md",
+      "sourceHeading": "Current trust boundary",
+      "sourceSha256": "764ee54609622af557a77d1d515716d60d0a5e1398de3566f27a965e9c278c55"
+    }
+  ],
+  "queries": [
+    {
+      "id": "durability-0",
+      "split": "development",
+      "category": "lifecycle",
+      "language": "it",
+      "query": "Perché una pagina invariata non richiede nuovi vettori dopo il riavvio?",
+      "relevant": [
+        {
+          "path": "memory/memory-00.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "durability-1",
+      "split": "evaluation",
+      "category": "lifecycle",
+      "language": "en",
+      "query": "What persists completed passage work if indexing is interrupted halfway through a large document?",
+      "relevant": [
+        {
+          "path": "memory/memory-00.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "durability-2",
+      "split": "evaluation",
+      "category": "lifecycle",
+      "language": "it",
+      "query": "Quali dati devono essere rigenerati quando cambiano solo i metadati di una pagina?",
+      "relevant": [
+        {
+          "path": "memory/memory-00.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "static-0",
+      "split": "development",
+      "category": "paraphrase",
+      "language": "it",
+      "query": "Come funziona la ricerca senza un servizio di inferenza sempre acceso?",
+      "relevant": [
+        {
+          "path": "memory/memory-01.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "static-1",
+      "split": "evaluation",
+      "category": "paraphrase",
+      "language": "en",
+      "query": "Where can word representations be computed entirely on this machine without a network daemon?",
+      "relevant": [
+        {
+          "path": "memory/memory-01.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "static-2",
+      "split": "evaluation",
+      "category": "paraphrase",
+      "language": "it",
+      "query": "Che cosa succede quando la tabella delle parole supera la memoria assegnata?",
+      "relevant": [
+        {
+          "path": "memory/memory-01.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "usage-0",
+      "split": "development",
+      "category": "exact_identifier",
+      "language": "it",
+      "query": "Come disabilitare KNOWLEDGE_RAIL_USAGE_RANKING durante un confronto?",
+      "relevant": [
+        {
+          "path": "memory/memory-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "usage-1",
+      "split": "evaluation",
+      "category": "exact_identifier",
+      "language": "en",
+      "query": "How much can repeated useful materializations boost an existing candidate?",
+      "relevant": [
+        {
+          "path": "memory/memory-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "usage-2",
+      "split": "evaluation",
+      "category": "exact_identifier",
+      "language": "it",
+      "query": "Quali osservazioni scadono dal registro locale e quanto pesa il loro invecchiamento?",
+      "relevant": [
+        {
+          "path": "memory/memory-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "audit-0",
+      "split": "development",
+      "category": "similar_pages",
+      "language": "it",
+      "query": "Come distinguere chiamate effettivamente osservate da una dichiarazione di conformità?",
+      "relevant": [
+        {
+          "path": "memory/memory-03.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "audit-1",
+      "split": "evaluation",
+      "category": "similar_pages",
+      "language": "en",
+      "query": "Can a successful retrieval completed after a text search establish knowledge-first ordering?",
+      "relevant": [
+        {
+          "path": "memory/memory-03.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "audit-2",
+      "split": "evaluation",
+      "category": "similar_pages",
+      "language": "it",
+      "query": "Un audit privo di osservazioni dimostra che nessuno ha usato la knowledge?",
+      "relevant": [
+        {
+          "path": "memory/memory-03.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "claims-0",
+      "split": "development",
+      "category": "exact_identifier",
+      "language": "it",
+      "query": "Come funziona as_of per le claim con valid_from e valid_until?",
+      "relevant": [
+        {
+          "path": "memory/memory-04.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "claims-1",
+      "split": "evaluation",
+      "category": "exact_identifier",
+      "language": "en",
+      "query": "Can a shifted source range retain its verified anchor if the content hash still matches?",
+      "relevant": [
+        {
+          "path": "memory/memory-04.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "claims-2",
+      "split": "evaluation",
+      "category": "exact_identifier",
+      "language": "it",
+      "query": "La consultazione storica ricostruisce anche il contenuto passato delle pagine Markdown?",
+      "relevant": [
+        {
+          "path": "memory/memory-04.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "measurements-0",
+      "split": "development",
+      "category": "many_passages",
+      "language": "it",
+      "query": "Quali misure separano avvio completo con Ollama e caricamento sintetico dei vettori?",
+      "relevant": [
+        {
+          "path": "memory/memory-05.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "measurements-1",
+      "split": "evaluation",
+      "category": "many_passages",
+      "language": "en",
+      "query": "Does a reported resident-memory peak prove the same bound on temporary allocations?",
+      "relevant": [
+        {
+          "path": "memory/memory-05.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "measurements-2",
+      "split": "evaluation",
+      "category": "many_passages",
+      "language": "it",
+      "query": "Le misure di caricamento su cinquantamila passaggi includono il calcolo del modello?",
+      "relevant": [
+        {
+          "path": "memory/memory-05.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "references-0",
+      "split": "development",
+      "category": "similar_pages",
+      "language": "it",
+      "query": "Gli import non risolti restituiti da references appartengono tutti al file interrogato?",
+      "relevant": [
+        {
+          "path": "code/code-01.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "references-1",
+      "split": "evaluation",
+      "category": "similar_pages",
+      "language": "en",
+      "query": "Does a lexical dependency edge establish which function actually executes?",
+      "relevant": [
+        {
+          "path": "code/code-01.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "references-2",
+      "split": "evaluation",
+      "category": "similar_pages",
+      "language": "it",
+      "query": "Come vengono protette le pagine specifiche dalla selezione di una panoramica più ampia?",
+      "relevant": [
+        {
+          "path": "code/code-01.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "fallback-0",
+      "split": "development",
+      "category": "exact_identifier",
+      "language": "it",
+      "query": "Come collegare record_fallback al requestId della ricerca precedente?",
+      "relevant": [
+        {
+          "path": "code/code-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "fallback-1",
+      "split": "evaluation",
+      "category": "exact_identifier",
+      "language": "en",
+      "query": "Are unreported command-line searches included in the fallback-rate denominator?",
+      "relevant": [
+        {
+          "path": "code/code-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "fallback-2",
+      "split": "evaluation",
+      "category": "exact_identifier",
+      "language": "it",
+      "query": "Che cosa accade ai contatori danneggiati e ai vecchi identificativi di richiesta?",
+      "relevant": [
+        {
+          "path": "code/code-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "impact-0",
+      "split": "development",
+      "category": "filter",
+      "language": "it",
+      "query": "Come fornire i file cambiati al contesto per conoscere le dipendenze interessate?",
+      "relevant": [
+        {
+          "path": "code/code-03.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "implementation"
+      ]
+    },
+    {
+      "id": "impact-1",
+      "split": "evaluation",
+      "category": "filter",
+      "language": "en",
+      "query": "How can a task request include code-backed change-impact candidates?",
+      "relevant": [
+        {
+          "path": "code/code-03.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "implementation"
+      ]
+    },
+    {
+      "id": "impact-2",
+      "split": "evaluation",
+      "category": "filter",
+      "language": "it",
+      "query": "Quali riferimenti al codice entrano nel contesto quando specifico changed_paths?",
+      "relevant": [
+        {
+          "path": "code/code-03.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "implementation"
+      ]
+    },
+    {
+      "id": "boundary-0",
+      "split": "development",
+      "category": "paraphrase",
+      "language": "it",
+      "query": "Come si impedisce che una chat usi per errore il progetto selezionato da un’altra?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-01.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "boundary-1",
+      "split": "evaluation",
+      "category": "paraphrase",
+      "language": "en",
+      "query": "What keeps concurrent local projects separated when the host has no trustworthy conversation identity?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-01.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "boundary-2",
+      "split": "evaluation",
+      "category": "paraphrase",
+      "language": "it",
+      "query": "La separazione per conversazione protegge anche da utenti ostili del sistema operativo?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-01.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "state-0",
+      "split": "development",
+      "category": "exact_identifier",
+      "language": "it",
+      "query": "Dove si trova lo stato locale su macOS e come cambiare KNOWLEDGE_RAIL_STATE_DIR?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "state-1",
+      "split": "evaluation",
+      "category": "exact_identifier",
+      "language": "en",
+      "query": "When can a desktop adapter reuse an already healthy local gateway?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "state-2",
+      "split": "evaluation",
+      "category": "exact_identifier",
+      "language": "it",
+      "query": "Quali controlli di compatibilità precedono il riuso del processo locale?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "workspace-0",
+      "split": "development",
+      "category": "exact_identifier",
+      "language": "it",
+      "query": "Che cosa accade aprendo il sesto progetto con KNOWLEDGE_RAIL_WORKSPACE_STATE_CAP predefinito?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-08.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "workspace-1",
+      "split": "evaluation",
+      "category": "exact_identifier",
+      "language": "en",
+      "query": "Does an idle workspace expire automatically or notice external edits without another query?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-08.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "workspace-2",
+      "split": "evaluation",
+      "category": "exact_identifier",
+      "language": "it",
+      "query": "Il limite stimato delle cache equivale a un tetto effettivo sulla memoria residente?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-08.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "drift-0",
+      "split": "development",
+      "category": "filter",
+      "language": "it",
+      "query": "Come controllare le claim relative ai soli file staged prima di un commit?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-03.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "overview"
+      ]
+    },
+    {
+      "id": "drift-1",
+      "split": "evaluation",
+      "category": "filter",
+      "language": "en",
+      "query": "Which drift outcomes should fail a continuous integration check?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-03.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "overview"
+      ]
+    },
+    {
+      "id": "drift-2",
+      "split": "evaluation",
+      "category": "filter",
+      "language": "it",
+      "query": "Un hook può correggere automaticamente le pagine canoniche quando trova divergenze?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-03.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "overview"
+      ]
+    },
+    {
+      "id": "setup-0",
+      "split": "development",
+      "category": "similar_pages",
+      "language": "it",
+      "query": "L’installazione degli hook conserva byte e permessi della configurazione esistente?",
+      "relevant": [
+        {
+          "path": "hooks/hooks-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "setup-1",
+      "split": "evaluation",
+      "category": "similar_pages",
+      "language": "en",
+      "query": "How can an interrupted client setup transaction be restored without overwriting later edits?",
+      "relevant": [
+        {
+          "path": "hooks/hooks-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "setup-2",
+      "split": "evaluation",
+      "category": "similar_pages",
+      "language": "it",
+      "query": "Quali backup vengono conservati dopo una nuova configurazione del client?",
+      "relevant": [
+        {
+          "path": "hooks/hooks-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "trust-0",
+      "split": "development",
+      "category": "filter",
+      "language": "it",
+      "query": "Come verificare le definizioni esatte degli hook prima di renderle eseguibili?",
+      "relevant": [
+        {
+          "path": "hooks/hooks-04.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "rule"
+      ]
+    },
+    {
+      "id": "trust-1",
+      "split": "evaluation",
+      "category": "filter",
+      "language": "en",
+      "query": "Can KnowledgeRail grant trust to its own generated hook definitions?",
+      "relevant": [
+        {
+          "path": "hooks/hooks-04.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "rule"
+      ]
+    },
+    {
+      "id": "trust-2",
+      "split": "evaluation",
+      "category": "filter",
+      "language": "it",
+      "query": "Dopo la configurazione è necessario aprire una nuova sessione per verificare il comportamento?",
+      "relevant": [
+        {
+          "path": "hooks/hooks-04.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "rule"
+      ]
+    },
+    {
+      "id": "ocr-0",
+      "split": "development",
+      "category": "many_passages",
+      "language": "it",
+      "query": "Quali formati si normalizzano senza un motore per riconoscere il testo delle immagini?",
+      "relevant": [
+        {
+          "path": "readme/readme-21.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "ocr-1",
+      "split": "evaluation",
+      "category": "many_passages",
+      "language": "en",
+      "query": "Does an unavailable embedding service prevent ordinary evidence retrieval?",
+      "relevant": [
+        {
+          "path": "readme/readme-21.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "ocr-2",
+      "split": "evaluation",
+      "category": "many_passages",
+      "language": "it",
+      "query": "La rilevanza di un’intera pagina può nascondere un estratto mostrato che non risponde?",
+      "relevant": [
+        {
+          "path": "readme/readme-21.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "security-0",
+      "split": "development",
+      "category": "filter",
+      "language": "it",
+      "query": "Quali contenuti attivi nei diagrammi e nelle immagini bloccano la revisione?",
+      "relevant": [
+        {
+          "path": "security/security-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "rule"
+      ]
+    },
+    {
+      "id": "security-1",
+      "split": "evaluation",
+      "category": "filter",
+      "language": "en",
+      "query": "Where must local gateway credentials and workspace capabilities never be copied?",
+      "relevant": [
+        {
+          "path": "security/security-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "rule"
+      ]
+    },
+    {
+      "id": "security-2",
+      "split": "evaluation",
+      "category": "filter",
+      "language": "it",
+      "query": "Quali limiti impediscono che una risorsa documentale acceda a file esterni al progetto?",
+      "relevant": [
+        {
+          "path": "security/security-02.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true,
+      "pageTypes": [
+        "rule"
+      ]
+    },
+    {
+      "id": "remote-0",
+      "split": "development",
+      "category": "similar_pages",
+      "language": "it",
+      "query": "Il gateway installato può essere presentato come servizio pubblico multi-tenant?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-04.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "remote-1",
+      "split": "evaluation",
+      "category": "similar_pages",
+      "language": "en",
+      "query": "Why can a cloud-origin connector not reach a user’s localhost MCP endpoint?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-04.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "remote-2",
+      "split": "evaluation",
+      "category": "similar_pages",
+      "language": "it",
+      "query": "Un tunnel pubblico con un token statico soddisfa i requisiti di autorizzazione remota?",
+      "relevant": [
+        {
+          "path": "hosting/hosting-04.md",
+          "grade": 2
+        }
+      ],
+      "answerable": true
+    },
+    {
+      "id": "absent-medical-0",
+      "split": "development",
+      "category": "absent",
+      "language": "it",
+      "query": "Qual è la dose pediatrica di un farmaco contro la malaria?",
+      "relevant": [],
+      "answerable": false
+    },
+    {
+      "id": "absent-medical-1",
+      "split": "evaluation",
+      "category": "absent",
+      "language": "en",
+      "query": "What clinical trial establishes the efficacy of this malaria vaccine?",
+      "relevant": [],
+      "answerable": false
+    },
+    {
+      "id": "absent-medical-2",
+      "split": "evaluation",
+      "category": "absent",
+      "language": "it",
+      "query": "Quali controindicazioni mediche sono documentate per una terapia antimalarica?",
+      "relevant": [],
+      "answerable": false
+    },
+    {
+      "id": "absent-astronomy-0",
+      "split": "development",
+      "category": "absent",
+      "language": "it",
+      "query": "Qual è la composizione isotopica dei crateri lunari?",
+      "relevant": [],
+      "answerable": false
+    },
+    {
+      "id": "absent-astronomy-1",
+      "split": "evaluation",
+      "category": "absent",
+      "language": "en",
+      "query": "Which telescope measured the methane concentration in the atmosphere of Neptune?",
+      "relevant": [],
+      "answerable": false
+    },
+    {
+      "id": "absent-astronomy-2",
+      "split": "evaluation",
+      "category": "absent",
+      "language": "it",
+      "query": "Quali orbite dei satelliti di Nettuno sono state misurate nel 2025?",
+      "relevant": [],
+      "answerable": false
+    }
+  ]
+}

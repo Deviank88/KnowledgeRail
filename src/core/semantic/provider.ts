@@ -66,7 +66,7 @@ export class OpenAiCompatibleEmbeddingProvider implements EmbeddingProvider {
   readonly descriptor: EmbeddingProviderDescriptor;
   private readonly endpoint: URL;
   private readonly apiKey?: string;
-  private readonly timeoutMs: number;
+  readonly timeoutMs: number;
   private readonly queryPrefix: string;
 
   constructor(options: OpenAiCompatibleEmbeddingOptions) {
@@ -98,7 +98,8 @@ export class OpenAiCompatibleEmbeddingProvider implements EmbeddingProvider {
     };
   }
 
-  private async embed(texts: readonly string[]): Promise<readonly (readonly number[])[]> {
+  private async embed(texts: readonly string[], signal?: AbortSignal): Promise<readonly (readonly number[])[]> {
+    signal?.throwIfAborted();
     if (texts.length === 0) return [];
     if (texts.length > 256) throw new Error("Embedding requests are limited to 256 inputs per batch.");
     const input = texts.map(inputText);
@@ -111,7 +112,7 @@ export class OpenAiCompatibleEmbeddingProvider implements EmbeddingProvider {
         model: this.descriptor.model,
         input,
       }),
-      signal: AbortSignal.timeout(this.timeoutMs),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs),
     });
     if (!response.ok) {
       throw new Error(`Embedding provider returned HTTP ${response.status}.`);
@@ -126,16 +127,16 @@ export class OpenAiCompatibleEmbeddingProvider implements EmbeddingProvider {
     return ordered.map((item) => validatedVector(item.embedding, this.descriptor.dimensions));
   }
 
-  embedDocuments(texts: readonly string[]): Promise<readonly (readonly number[])[]> {
-    return this.embed(texts);
+  embedDocuments(texts: readonly string[], signal?: AbortSignal): Promise<readonly (readonly number[])[]> {
+    return this.embed(texts, signal);
   }
 
-  embedQueries(texts: readonly string[]): Promise<readonly (readonly number[])[]> {
-    return this.embed(this.queryPrefix ? texts.map((text) => this.queryPrefix + inputText(text)) : texts);
+  embedQueries(texts: readonly string[], signal?: AbortSignal): Promise<readonly (readonly number[])[]> {
+    return this.embed(this.queryPrefix ? texts.map((text) => this.queryPrefix + inputText(text)) : texts, signal);
   }
 
-  async embedQuery(text: string): Promise<readonly number[]> {
-    return (await this.embedQueries([text]))[0]!;
+  async embedQuery(text: string, signal?: AbortSignal): Promise<readonly number[]> {
+    return (await this.embedQueries([text], signal))[0]!;
   }
 }
 

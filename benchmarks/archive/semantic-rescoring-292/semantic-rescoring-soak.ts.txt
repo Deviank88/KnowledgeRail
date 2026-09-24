@@ -1,0 +1,64 @@
+import assert from "node:assert/strict";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
+import { createHash } from "node:crypto";
+import { parseWikiPageRecord } from "../src/core/page-record.js";
+import { PersistentSemanticIndex } from "../src/core/semantic/index.js";
+import type { EmbeddingProvider } from "../src/core/semantic/types.js";
+
+// Synthetic workload. No model service or operating-system cold-cache claim.
+const dimensions = 1024, passagesPerWorkspace = 1000, workspaces = 2, rounds = 400;
+const root = await fs.mkdtemp(path.join(os.tmpdir(), "kr292-soak-"));
+const counts = { documents: 0, queries: 0 };
+const vector = (text: string) => {
+  const hash = createHash("sha256").update(text).digest();
+  return Array.from({ length: dimensions }, (_, i) => 1 + hash[i % hash.length]! / 255);
+};
+const provider: EmbeddingProvider = { descriptor: { id: "soak-292", model: "synthetic", version: "1", dimensions },
+  async embedDocuments(texts) { counts.documents += texts.length; await new Promise((r) => setTimeout(r, 5)); return texts.map(vector); },
+  async embedQuery(text) { counts.queries++; return vector(text); },
+};
+const memory = async () => { global.gc?.(); await new Promise<void>((r) => setImmediate(r)); global.gc?.(); return process.memoryUsage(); };
+const indexes: PersistentSemanticIndex[] = [], samples = [], latencies: number[] = [];
+try {
+  for (let workspace = 0; workspace < workspaces; workspace++) {
+    const wikiRoot = path.join(root, `w${workspace}`); await fs.mkdir(wikiRoot);
+    const records = Array.from({ length: 20 }, (_, page) => {
+      const body = Array.from({ length: passagesPerWorkspace / 20 }, (_, i) => `## Topic ${workspace}-${page}-${i}\n\nSynthetic documentary evidence ${workspace}-${page}-${i}.`).join("\n\n");
+      return parseWikiPageRecord(`p${page}.md`, `---\ntitle: Page ${workspace}-${page}\ntype: analysis\n---\n\n${body}`, { mtimeMs: 1, size: body.length });
+    });
+    for (const record of records) await fs.writeFile(path.join(wikiRoot, record.path), record.raw);
+    const index = new PersistentSemanticIndex(wikiRoot, provider, undefined, { rescore: true });
+    indexes.push(index); await index.startBackground(records);
+  }
+  let complete = false;
+  const done = Promise.all(indexes.map((i) => i.idle())).then(() => { complete = true; });
+  let buildingQueries = 0;
+  while (!complete) {
+    await Promise.all(indexes.map(async (index, i) => {
+      const started = performance.now(); await index.searchWithDiagnostics(`Build query ${i}-${buildingQueries}`, 64);
+      latencies.push(performance.now() - started); buildingQueries++;
+    }));
+  }
+  await done;
+  assert.equal(counts.documents, passagesPerWorkspace * workspaces);
+  const before = await memory();
+  for (let round = 0; round < rounds; round++) {
+    for (const [workspace, index] of indexes.entries()) {
+      const started = performance.now();
+      const result = await index.searchWithDiagnostics(`Unseen query ${round}-${workspace}`, 64);
+      latencies.push(performance.now() - started);
+      assert.equal(result.diagnostics.rescoreFallback, undefined);
+      assert.ok((result.diagnostics.originalReads?.cacheBytes ?? 0) <= 1024 * 1024);
+      assert.ok(result.hits.every((hit) => hit.text.includes(`${workspace}-`)), "workspace isolation");
+    }
+    if (round % 100 === 99) samples.push({ round, memory: await memory() });
+  }
+  const after = await memory();
+  for (const index of indexes) await index.checkpoint();
+  console.log(JSON.stringify({ synthetic: true, dimensions, passagesPerWorkspace, workspaces, rounds, buildingQueries,
+    counts, before, after, samples, settledHeapBuffersGrowth: after.heapUsed + after.arrayBuffers - before.heapUsed - before.arrayBuffers,
+    maxQueryMs: Math.max(...latencies), queryCount: latencies.length, io: indexes.map((i) => i.ioStats),
+    limitation: "Short bounded soak, not production uptime. Warm OS filesystem cache; model memory excluded." }, null, 2));
+} finally { indexes.forEach((i) => i.dispose()); await fs.rm(root, { recursive: true, force: true }); }

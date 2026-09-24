@@ -23,9 +23,10 @@ import {
 } from "./graph-runtime.js";
 import type { RetrievalProfile } from "./text-analysis.js";
 import { wikiPageUri } from "../context/resource-uri.js";
+import { SemanticBudget } from "./semantic/budget.js";
 import { configuredSemanticIndex } from "./semantic/index.js";
 import type {
-  AnnSearchDiagnostics,
+  SemanticSearchDiagnostics,
   SemanticIndex,
   SemanticIndexDescriptor,
   SemanticCoverageScore,
@@ -34,6 +35,7 @@ import type {
 import { registerWorkspaceState } from "./workspace-state.js";
 import { selectLexicalEvidence } from "./retrieval-selection.js";
 import { rerankWithUsage } from "./usage-ledger.js";
+import { configuredReranker, RerankSession, type RerankDiagnostics, type RerankProvider } from "./reranker.js";
 
 export type RetrievalWideningLevel = 0 | 1 | 2 | 3;
 
@@ -50,6 +52,7 @@ export interface HybridRetrievalChannels {
   lexicalScore?: number;
   lexicalConfidence?: number;
   semanticScore?: number;
+  rerankScore?: number;
 }
 
 export interface HybridRetrievalHit extends RetrievalHit {
@@ -74,6 +77,9 @@ export interface HybridRetrievalAttempt {
 }
 
 export interface HybridRetrievalResult {
+  rerank?: RerankDiagnostics;
+  /** References to recovered evidence outside this display; not relevance rejections. */
+  additionalEvidence?: Array<{ path: string; uri: string; reason: "display_budget" | "selection" }>;
   hits: HybridRetrievalHit[];
   /** Full fused set used for coverage; never serialized as display evidence. */
   coverageHits: HybridRetrievalHit[];
@@ -89,7 +95,10 @@ export interface HybridRetrievalResult {
   estimatedContextTokens: number;
 }
 
-export interface HybridSemanticDiagnostics {
+export interface HybridSemanticDiagnostics extends SemanticSearchDiagnostics {
+  budgetMs?: number;
+  elapsedMs?: number;
+  budgetExceeded?: boolean;
   enabled: boolean;
   available: boolean;
   candidateCount: number;
@@ -137,6 +146,16 @@ export interface HybridRetrievalParams {
   /** Replaceable semantic backend, primarily for local providers and deterministic evaluation. */
   semanticIndex?: SemanticIndex;
   semanticPoolSize?: number;
+  semanticCandidatePolicy?: "threshold" | "top-k";
+  expandSemanticCandidates?: boolean;
+  maximumSemanticCandidates?: number;
+  preserveAdditionalEvidence?: boolean;
+  reranker?: RerankProvider;
+  rerankEnabled?: boolean;
+  rerankPoolSize?: number;
+  rerankBudgetMs?: number;
+  /** Total foreground semantic deadline; background construction is separate. */
+  semanticBudgetMs?: number;
   /** Persist disposable lexical/graph indexes. Semantic work is always journaled. */
   persistDerivedIndexes?: boolean;
 }
@@ -223,7 +242,8 @@ function safeSemanticPagePath(value: string): string | null {
 async function resolveSemantic(
   request: HybridRetrievalParams,
   maxResults: number,
-  lexicalPaths: readonly string[]
+  lexicalPaths: readonly string[],
+  budget: SemanticBudget
 ): Promise<ResolvedSemantic> {
   const enabled = request.semanticEnabled === true || request.semanticIndex !== undefined;
   const unavailable: HybridSemanticDiagnostics = {
@@ -235,79 +255,87 @@ async function resolveSemantic(
   };
   if (!enabled) return { hits: [], diagnostics: unavailable };
   try {
-    const index = request.semanticIndex ?? await configuredSemanticIndex(request.wikiRoot, {
-      background: true,
-    });
-    if (!index) {
-      emitMissingEmbeddingNotice(request.wikiRoot);
-      return { hits: [], diagnostics: unavailable };
-    }
-    await index.prioritize?.(lexicalPaths, 1_000);
-    const poolSize = Math.min(1_000, Math.max(
-      maxResults,
-      positiveInteger(request.semanticPoolSize, Math.max(maxResults * 4, 20))
-    ));
-    let diagnostics: AnnSearchDiagnostics = {
-      candidateCount: 0,
-      visitedBuckets: 0,
-      vectorCount: index.descriptor.passageCount,
-    };
-    let semanticHits;
-    const synchronizable = index as Partial<SynchronizableSemanticIndex>;
-    if (typeof synchronizable.searchWithDiagnostics === "function") {
-      const result = await synchronizable.searchWithDiagnostics(request.query, poolSize);
-      semanticHits = result.hits;
-      diagnostics = result.diagnostics;
-    } else {
-      semanticHits = await index.search(request.query, poolSize);
-      diagnostics = {
-        ...diagnostics,
-        candidateCount: semanticHits.length,
-      };
-    }
-    const typeFilter = request.pageTypes ? new Set(request.pageTypes) : null;
-    const recordsByPath = new Map(
-      (await getWikiPageRecords(request.wikiRoot, false, {
-        persist: request.persistDerivedIndexes,
-      })).map((record) => [record.path, record] as const)
-    );
-    const byPath = new Map<string, RetrievalHit>();
-    const orderedSemanticHits = [...semanticHits]
-      .filter((hit) => Number.isFinite(hit.score))
-      .sort((left, right) =>
-        right.score - left.score || left.pagePath.localeCompare(right.pagePath) ||
-        left.passageId.localeCompare(right.passageId)
-      )
-      .slice(0, poolSize);
-    for (const hit of orderedSemanticHits) {
-      const pagePath = safeSemanticPagePath(hit.pagePath);
-      if (!pagePath || byPath.has(pagePath)) continue;
-      const record = recordsByPath.get(pagePath);
-      if (!record || (typeFilter && !typeFilter.has(record.type))) continue;
-      byPath.set(pagePath, {
-        path: record.path,
-        title: record.title,
-        type: record.type,
-        tags: record.tags,
-        sources: record.sources,
-        requestId: record.requestId,
-        score: hit.score,
-        excerpt: hit.text.replace(/\s+/g, " ").trim().slice(0, 420),
-        heading: hit.heading.normalize("NFKC").replace(/[\r\n\t]+/g, " ").slice(0, 256),
-        record,
+    return await budget.run(async () => {
+      const index = request.semanticIndex ?? await configuredSemanticIndex(request.wikiRoot, {
+        background: true,
       });
-    }
-    return {
-      hits: [...byPath.values()],
-      index,
-      diagnostics: {
-        enabled: true,
-        available: true,
-        ...diagnostics,
-        descriptor: { ...index.descriptor },
-      },
-    };
+      if (!index) {
+        emitMissingEmbeddingNotice(request.wikiRoot);
+        budget.stop();
+        return { hits: [], diagnostics: unavailable };
+      }
+      budget.signal.throwIfAborted();
+      await index.prioritize?.(lexicalPaths, Math.min(1_000, budget.remainingMs));
+      budget.signal.throwIfAborted();
+      const typeFilter = request.pageTypes ? new Set(request.pageTypes) : null;
+      const recordsByPath = new Map(
+        (await getWikiPageRecords(request.wikiRoot, false, { persist: request.persistDerivedIndexes }))
+          .map((record) => [record.path, record] as const)
+      );
+      const searchOptions = { signal: budget.signal, distinctPages: true, candidatePolicy: request.semanticCandidatePolicy,
+        expandCandidates: request.expandSemanticCandidates, maximumCandidates: request.maximumSemanticCandidates,
+        ...(typeFilter ? { pagePaths: new Set([...recordsByPath.values()].filter((r) => typeFilter.has(r.type)).map((r) => r.path)) } : {}) };
+      const poolSize = Math.min(1_000, Math.max(
+        maxResults,
+        positiveInteger(request.semanticPoolSize, Math.max(maxResults * 4, 20))
+      ));
+      let diagnostics: SemanticSearchDiagnostics = {
+        candidateCount: 0,
+        visitedBuckets: 0,
+        vectorCount: index.descriptor.passageCount,
+      };
+      let semanticHits;
+      const synchronizable = index as Partial<SynchronizableSemanticIndex>;
+      if (typeof synchronizable.searchWithDiagnostics === "function") {
+        const result = await synchronizable.searchWithDiagnostics(request.query, poolSize, searchOptions);
+        semanticHits = result.hits;
+        diagnostics = result.diagnostics;
+      } else {
+        semanticHits = await index.search(request.query, poolSize, searchOptions);
+        diagnostics = {
+          ...diagnostics,
+          candidateCount: semanticHits.length,
+        };
+      }
+      const byPath = new Map<string, RetrievalHit>();
+      const orderedSemanticHits = [...semanticHits]
+        .filter((hit) => Number.isFinite(hit.score))
+        .sort((left, right) =>
+          right.score - left.score || left.pagePath.localeCompare(right.pagePath) ||
+          left.passageId.localeCompare(right.passageId)
+        )
+        .slice(0, diagnostics.searchedPool ?? poolSize);
+      for (const hit of orderedSemanticHits) {
+        const pagePath = safeSemanticPagePath(hit.pagePath);
+        if (!pagePath || byPath.has(pagePath)) continue;
+        const record = recordsByPath.get(pagePath);
+        if (!record || (typeFilter && !typeFilter.has(record.type))) continue;
+        byPath.set(pagePath, {
+          path: record.path,
+          title: record.title,
+          type: record.type,
+          tags: record.tags,
+          sources: record.sources,
+          requestId: record.requestId,
+          score: hit.score,
+          excerpt: hit.text.replace(/\s+/g, " ").trim().slice(0, 420),
+          heading: hit.heading.normalize("NFKC").replace(/[\r\n\t]+/g, " ").slice(0, 256),
+          record,
+        });
+      }
+      return {
+        hits: [...byPath.values()],
+        index,
+        diagnostics: {
+          enabled: true,
+          available: true,
+          ...diagnostics,
+          descriptor: { ...index.descriptor },
+        },
+      };
+    });
   } catch (error: unknown) {
+    budget.close();
     return {
       hits: [],
       diagnostics: { ...unavailable, error: safeSemanticError(error) },
@@ -494,6 +522,8 @@ async function retrieveAttempt(params: {
   maxResults: number;
   fallbackHits: readonly RetrievalHit[];
   resolveSemantic: (paths: readonly string[]) => Promise<ResolvedSemantic>;
+  rerank?: RerankSession;
+  semanticBudget: SemanticBudget;
 }): Promise<AttemptResult> {
   const { request, level, budget, maxResults } = params;
   const baseLexicalPool = Math.max(
@@ -659,6 +689,33 @@ async function retrieveAttempt(params: {
     return b.score - a.score || a.path.localeCompare(b.path);
   });
   await rerankWithUsage(request.wikiRoot, request.query, fused);
+  if (params.rerank) {
+    const pool = fused.slice(0, Math.min(64, positiveInteger(request.rerankPoolSize, 32)));
+    const documents = pool.map((hit) => {
+      const passage = hit.record?.passages.find((p) => p.heading === hit.heading);
+      return `${hit.title}\n${hit.heading}\n${passage?.text ?? hit.excerpt}`.slice(0, 2048);
+    });
+    const scores = await params.semanticBudget.excluding(() => params.rerank!.score(request.query, documents));
+    const stale = new Set<string>();
+    if (params.rerank.diagnostics.calls) {
+      await Promise.all(pool.map(async (hit) => {
+        const current = await readWikiPageRecord(request.wikiRoot, hit.path).catch(() => null);
+        if (!current || current.raw !== hit.record?.raw) stale.add(hit.path);
+      }));
+    }
+    if (stale.size) {
+      params.rerank.diagnostics.reason = "stale_candidates"; params.rerank.diagnostics.applied = false;
+      for (let i = fused.length - 1; i >= 0; i--) if (stale.has(fused[i]!.path)) fused.splice(i, 1);
+    } else if (scores) {
+      const ordered = pool.map((hit, i) => ({ hit, i, score: scores[i]! })).sort((a, b) => b.score - a.score || a.i - b.i);
+      for (const row of ordered) row.hit.channels.rerankScore = row.score;
+      fused.splice(0, pool.length, ...ordered.map((row) => row.hit));
+      // Preserve the same lexical identifier anchor, including lexical-only reranking.
+      const anchor = hasExactIdentifierSignal(request.query) ? lexicalHits[0]?.path : undefined;
+      const position = anchor ? fused.findIndex((hit) => hit.path === anchor) : -1;
+      if (position > 0) fused.unshift(fused.splice(position, 1)[0]!);
+    }
+  }
   const evidenceSignals = createRetrievalEvidenceSignals(request.query);
   const hits = limitHitsByBudget(selectLexicalEvidence(request.query, fused, request.coverageRequirements, evidenceSignals), maxResults, budget);
   return {
@@ -690,17 +747,18 @@ function lexicalCoverageWarning(semantic: HybridSemanticDiagnostics): string[] {
 
 async function assessAttemptCoverage(
   request: HybridRetrievalParams,
-  result: AttemptResult
+  result: AttemptResult,
+  budget: SemanticBudget
 ): Promise<RetrievalCoverage> {
   let coverageMode: RetrievalCoverage["coverageMode"] = "lexical";
   let semanticScores: readonly SemanticCoverageScore[] = [];
   let warnings = lexicalCoverageWarning(result.semantic);
   if (result.semantic.available && result.semanticIndex?.assessCoverage) {
     try {
-      semanticScores = await result.semanticIndex.assessCoverage(
+      semanticScores = await budget.run(() => result.semanticIndex!.assessCoverage!(
         semanticCoverageQueries(request.query, request.coverageRequirements),
-        result.coverageHits.map((hit) => hit.path)
-      );
+        result.coverageHits.map((hit) => hit.path), budget.signal
+      ));
       const descriptor = result.semanticIndex.descriptor;
       result.semantic.descriptor = { ...descriptor };
       coverageMode = descriptor.state === "building" || (descriptor.pendingPages ?? 0) > 0 ? "semantic-partial" : "semantic";
@@ -729,9 +787,40 @@ async function assessAttemptCoverage(
   });
 }
 
-export async function retrieveWikiHybrid(
-  params: HybridRetrievalParams
-): Promise<HybridRetrievalResult> {
+export async function retrieveWikiHybrid(params: HybridRetrievalParams): Promise<HybridRetrievalResult> {
+  let budget: SemanticBudget;
+  let rerank: RerankSession | undefined;
+  try { budget = new SemanticBudget(params.semanticBudgetMs ?? Number(process.env["KNOWLEDGE_RAIL_SEMANTIC_BUDGET_MS"] ?? 1_500)); }
+  catch (error) {
+    const baseline = await retrieveWithBudget({ ...params, semanticEnabled: false, semanticIndex: undefined }, new SemanticBudget(1500));
+    baseline.semantic.error = safeSemanticError(error);
+    baseline.coverage.warnings.push(`Semantic configuration degraded to lexical mode: ${safeSemanticError(error)}`);
+    return baseline;
+  }
+  if (params.rerankEnabled !== false) {
+    try {
+      const provider = params.reranker ?? configuredReranker();
+      if (provider || params.rerankEnabled) rerank = new RerankSession(provider, params.rerankBudgetMs ?? Number(process.env["KNOWLEDGE_RAIL_RERANK_BUDGET_MS"] ?? provider?.defaultBudgetMs ?? 0));
+    } catch {
+      rerank = new RerankSession(null); Object.assign(rerank.diagnostics, { enabled: true, reason: "invalid_configuration" });
+    }
+  }
+  try {
+    const result = await retrieveWithBudget(params, budget, rerank);
+    // A timed-out coverage operation must not leave a semantic ranking in the output.
+    if (budget.expired || (budget.elapsedMs >= budget.milliseconds && result.semantic.descriptor !== undefined)) {
+      const baseline = await retrieveWithBudget({ ...params, semanticEnabled: false, semanticIndex: undefined }, budget);
+      baseline.semantic = { ...result.semantic, available: false, budgetExceeded: true,
+        error: "semantic_budget_exceeded", budgetMs: budget.milliseconds, elapsedMs: budget.elapsedMs };
+      baseline.coverage.warnings = [...baseline.coverage.warnings, "Semantic budget exceeded; lexical and graph evidence returned."];
+      return baseline;
+    }
+    result.semantic.budgetMs = budget.milliseconds; result.semantic.elapsedMs = budget.elapsedMs;
+    return result;
+  } finally { budget.close(); rerank?.close(); }
+}
+
+async function retrieveWithBudget(params: HybridRetrievalParams, semanticBudget: SemanticBudget, rerank?: RerankSession): Promise<HybridRetrievalResult> {
   const maxResults = Math.max(1, params.maxResults ?? 10);
   const initialBudget = resolveInitialBudget(params, maxResults);
   const maximumBudget = resolveMaximumBudget(params, initialBudget, maxResults);
@@ -767,12 +856,14 @@ export async function retrieveWikiHybrid(
       budget,
       maxResults,
       fallbackHits,
+      rerank,
+      semanticBudget,
       resolveSemantic: (paths) => {
-        semanticPromise ??= resolveSemantic(params, maxResults, paths);
+        semanticPromise ??= resolveSemantic(params, maxResults, paths, semanticBudget);
         return semanticPromise;
       },
     });
-    const coverage = await assessAttemptCoverage(params, result);
+    const coverage = await assessAttemptCoverage(params, result, semanticBudget);
     attempts.push({
       level,
       budget,
@@ -802,7 +893,13 @@ export async function retrieveWikiHybrid(
   if (!finalAttempt || !finalCoverage) {
     throw new Error("Hybrid retrieval did not execute an evaluation attempt.");
   }
+  const selectedCandidatePaths = params.preserveAdditionalEvidence ? new Set(selectLexicalEvidence(
+    params.query, finalAttempt.coverageHits, params.coverageRequirements, finalAttempt.evidenceSignals
+  ).map((hit) => hit.path)) : undefined;
   return {
+    ...(rerank ? { rerank: { ...rerank.diagnostics } } : {}),
+    ...(params.preserveAdditionalEvidence ? { additionalEvidence: finalAttempt.coverageHits.filter((hit) => !finalAttempt.hits.some((shown) => shown.path === hit.path))
+      .map((hit) => ({ path: hit.path, uri: wikiPageUri(hit.path), reason: selectedCandidatePaths!.has(hit.path) ? "display_budget" as const : "selection" as const })) } : {}),
     hits: finalAttempt.hits,
     coverageHits: finalAttempt.coverageHits,
     lexicalHits: finalAttempt.lexicalHits,

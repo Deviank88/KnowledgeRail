@@ -7,7 +7,8 @@ import { wikiPassageId } from "../../context/passage-id.js";
 import { wikiPageUri } from "../../context/resource-uri.js";
 import { withDerivedCheckpointLock } from "../checkpoint-lock.js";
 import { SemanticStorage, type StoredPage, type StoredPassage, type SemanticBatch, type StoredState } from "./storage.js";
-import { storeVector, cosine, DEFAULT_VECTOR_DTYPE, type VectorDtype } from "./vector.js";
+import { storeVector, normalizeVector, cosine, DEFAULT_VECTOR_DTYPE, type VectorDtype } from "./vector.js";
+import { abortable } from "./budget.js";
 import { EmbeddingRequestQueue, SemanticBuildQueue } from "./build-queue.js";
 import { registerWorkspaceState, touchWorkspaceState } from "../workspace-state.js";
 import { wikiMetaDir } from "../manifest-service.js";
@@ -18,7 +19,7 @@ import {
   getWikiPageRecords,
 } from "../retrieval-index.js";
 import { readFileSafe } from "../utils.js";
-import { LshAnnEngine } from "./lsh-engine.js";
+import { configuredAnnEngine } from "./engine.js";
 import { configuredEmbeddingProvider } from "./provider.js";
 import type {
   AnnEngine,
@@ -28,6 +29,8 @@ import type {
   SemanticHit,
   SemanticIndexDescriptor,
   SemanticSearchResult,
+  SemanticSearchOptions,
+  SemanticSearchDiagnostics,
   SynchronizableSemanticIndex,
 } from "./types.js";
 
@@ -230,14 +233,17 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
   private reason: string | undefined;
   private disposed = false;
   private needsCompaction = false;
+  private backgroundCheckpoint?: Promise<SemanticIndexDescriptor>;
   private readonly buildQueue: SemanticBuildQueue;
   private readonly embeddingRequests = new EmbeddingRequestQueue();
+  private readonly lifetime = new AbortController();
+  private readonly candidatePolicy: "threshold" | "top-k";
 
   constructor(
     private readonly wikiRoot: string,
     private readonly provider: EmbeddingProvider,
-    private readonly engine: AnnEngine = new LshAnnEngine({ dimensions: provider.descriptor.dimensions }),
-    options: { dtype?: VectorDtype } = {}
+    private readonly engine: AnnEngine = configuredAnnEngine(provider.descriptor.dimensions),
+    options: { dtype?: VectorDtype; candidatePolicy?: "threshold" | "top-k" } = {}
   ) {
     if (engine.descriptor.dimensions !== provider.descriptor.dimensions) {
       throw new Error("Semantic provider and ANN engine dimensions do not match.");
@@ -245,6 +251,9 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
     const dtype = options.dtype ?? process.env["KNOWLEDGE_RAIL_SEMANTIC_DTYPE"] ?? DEFAULT_VECTOR_DTYPE;
     if (dtype !== "f32" && dtype !== "i8") throw new Error("Semantic dtype must be f32 or i8.");
     this.dtype = dtype;
+    const policy = options.candidatePolicy ?? process.env["KNOWLEDGE_RAIL_SEMANTIC_CANDIDATES"] ?? "threshold";
+    if (policy !== "threshold" && policy !== "top-k") throw new Error("Semantic candidates must be threshold or top-k.");
+    this.candidatePolicy = policy;
     this.storage = new SemanticStorage(wikiRoot, provider.descriptor, dtype);
     this.buildQueue = new SemanticBuildQueue(async (pagePaths) => {
       if (this.disposed) return pagePaths;
@@ -269,12 +278,14 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
       totalPages: this.desired?.size ?? this.pages.size,
       pendingPages: Math.max(0, (this.desired?.size ?? this.pages.size) - ready),
       state: this.buildQueue.error ? "degraded" : this.state, dtype: this.dtype,
+      candidatePolicy: this.candidatePolicy,
       ...(this.reason ? { reason: this.reason } : {}),
       ...(this.generatedAt ? { generatedAt: this.generatedAt } : {}),
     };
   }
-  dispose(): void { this.disposed = true; this.buildQueue.stop(); this.engine.dispose?.(); }
+  dispose(): void { this.disposed = true; this.lifetime.abort(); this.buildQueue.stop(); this.engine.dispose?.(); }
   async idle(): Promise<void> { await this.buildQueue.idle(); }
+  get ioStats() { return { ann: { ...this.storage.io } }; }
 
   private async stamp(): Promise<string> {
     return (await Promise.all(["semantic-index.json", "semantic-vectors.bin", "semantic-journal.bin"].map(async (name) => {
@@ -289,6 +300,7 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
     await previous.catch(() => undefined);
     try {
       await this.storage.assertSafe(true);
+      await this.load();
       return await withDerivedCheckpointLock(this.wikiRoot, async () => {
         if (this.disposed) throw new Error("Semantic index was evicted or its provider changed.");
         if (this.loaded && this.diskStamp !== await this.stamp()) this.loaded = false;
@@ -301,9 +313,10 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
 
   private async load(): Promise<void> {
     if (this.loaded) return;
-    this.loadPromise ??= (async () => {
+    const loadState = async () => {
       const started = performance.now();
       const state = await this.storage.load();
+      this.needsCompaction ||= state.needsCompaction ?? false;
       Object.assign(this.loadTimings, this.storage.loadTimings);
       if (!state.pages.size) {
         const raw = await readFileSafe(semanticIndexFile(this.wikiRoot));
@@ -329,14 +342,35 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
       const restoreStarted = performance.now();
       const entries = [...this.passages.values()].filter((p) => !this.desired ||
         this.desired.get(p.pagePath)?.fingerprint === this.pages.get(p.pagePath)?.fingerprint);
-      if (this.engine.restore) this.engine.restore(entries, true);
-      else this.engine.rebuild(entries.map((p) => ({ ...p, normalized: true })));
+      const graphBase = state.graphBasePassages ?? state.passages;
+      const restoredGraph = state.graphSnapshot && this.engine.restoreSnapshot?.([...graphBase.values()].map((p) => ({ ...p, normalized: true })), state.graphSnapshot);
+      if (restoredGraph) {
+        // A checkpoint graph belongs to checkpoint vectors, not the later journal
+        // revision. Validate that pair first, then reconcile only actual deltas.
+        const wanted = new Map(entries.map((entry) => [entry.id, entry]));
+        let changed = false;
+        for (const [id, original] of graphBase) {
+          const current = wanted.get(id);
+          if (!current) { this.engine.remove(id); changed = true; }
+          else if (current.vector !== original.vector) { this.engine.upsert({ ...current, normalized: true }); changed = true; }
+        }
+        for (const entry of entries) if (!graphBase.has(entry.id)) { this.engine.upsert({ ...entry, normalized: true }); changed = true; }
+        this.needsCompaction ||= changed;
+      }
+      if (!restoredGraph) {
+        if (this.engine.restore) this.engine.restore(entries, true);
+        else this.engine.rebuild(entries.map((p) => ({ ...p, normalized: true })));
+        // Existing vectors may come from LSH, a journal, or a damaged graph. Save
+        // the rebuilt topology even when no document needs another embedding.
+        if (this.engine.snapshot && entries.length) this.needsCompaction = true;
+      }
       this.loadTimings.restoreMs = performance.now() - restoreStarted;
       this.generatedAt = state.generatedAt;
       this.diskStamp = await this.stamp();
       this.loaded = true;
       this.loadTimings.totalMs = performance.now() - started;
-    })();
+    };
+    this.loadPromise ??= loadState();
     try { await this.loadPromise; }
     finally { this.loadPromise = undefined; }
   }
@@ -353,8 +387,6 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
         if (previous?.fingerprint !== page.fingerprint || !wanted.has(id)) { this.engine.remove(id); this.passages.delete(id); }
       }
       this.pages.set(page.path, page);
-      const desired = this.desired?.get(page.path);
-      if (page.complete && desired?.fingerprint === page.fingerprint) desired.passages = [];
     }
     for (const passage of batch.passages) {
       this.passages.set(passage.id, passage);
@@ -362,15 +394,20 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
         this.engine.upsert({ ...passage, normalized: true });
       }
     }
+    for (const page of batch.pages) {
+      const desired = this.desired?.get(page.path);
+      if (desired && this.pageReady(page.path)) desired.passages = [];
+    }
   }
   private async commitBatch(batch: SemanticBatch): Promise<void> {
     await this.storage.append(batch);
     this.applyBatch(batch);
     if (await this.storage.needsCompaction()) {
       await this.engine.ready?.();
+      this.lifetime.signal.throwIfAborted();
       for (const passage of this.passages.values()) passage.signatures = this.engine.signatures?.(passage.id);
       this.generatedAt = await this.storage.compact({ pages: this.pages, passages: this.passages }, this.engine.descriptor,
-        getRetrievalCorpusRevision(this.wikiRoot) ?? undefined);
+        getRetrievalCorpusRevision(this.wikiRoot) ?? undefined, this.engine.snapshot?.());
     }
   }
 
@@ -392,7 +429,11 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
     }
     if (!selected.length) return 0;
     const inputs = selected.flatMap((item) => item.passages);
-    const vectors = inputs.length ? await this.embeddingRequests.run(() => this.provider.embedDocuments(inputs.map(passageInput))) : [];
+    // Explicit synchronization stops between durable batches; foreground query
+    // cancellation is independent and never discards a completed background batch.
+    const requestSignal = AbortSignal.any([this.lifetime.signal, AbortSignal.timeout(this.provider.timeoutMs ?? 30_000)]);
+    const vectors = inputs.length ? await this.embeddingRequests.run(() => this.provider.embedDocuments(inputs.map(passageInput), requestSignal), false, requestSignal) : [];
+    requestSignal.throwIfAborted();
     if (vectors.length !== inputs.length) throw new Error("Embedding provider returned an invalid result count.");
     const stored = vectors.map((v) => storeVector(v, this.provider.descriptor.dimensions, this.dtype));
     const batch: SemanticBatch = { pages: [], passages: [], removed: [] };
@@ -401,7 +442,7 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
       const pagePassages = item.passages.map(({ text: _text, ...p }) => ({ ...p, ...stored[cursor++]! }));
       // A concurrent query can observe a newer canonical page while the provider is busy.
       if (this.desired?.get(item.page.path)?.fingerprint !== item.page.fingerprint || this.disposed) continue;
-      const ids = [...item.previousIds, ...pagePassages.map((p) => p.id)];
+      const ids = [...new Set([...item.previousIds, ...pagePassages.map((p) => p.id)])];
       batch.pages.push({ path: item.page.path, fingerprint: item.page.fingerprint,
         ...(item.page.sourceFingerprint ? { sourceFingerprint: item.page.sourceFingerprint } : {}),
         passageEntryIds: ids, complete: ids.length === item.page.passages.length });
@@ -417,7 +458,7 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
       const existing = this.pages.get(record.path);
       // Canonical bytes are checked once per page. A matching fingerprint lets
       // restart reuse passage IDs without hashing every passage twice again.
-      if (existing?.complete && existing.sourceFingerprint === sourceFingerprint) {
+      if (existing?.complete && existing.sourceFingerprint === sourceFingerprint && this.pageReady(record.path)) {
         return [record.path, { path: record.path, fingerprint: existing.fingerprint, sourceFingerprint,
           passages: [] }];
       }
@@ -459,7 +500,10 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
         this.buildQueue.enqueue([record.path], (/decision|rule/.test(record.type) ? 1 : 0) + degree / (1 + degree));
       }
     }
-    if (!pending.length && [...this.pages.keys()].some((p) => !this.desired!.has(p))) await this.checkpoint();
+    if (!pending.length && (this.needsCompaction || [...this.pages.keys()].some((p) => !this.desired!.has(p)))) {
+      this.backgroundCheckpoint ??= this.checkpoint().finally(() => { this.backgroundCheckpoint = undefined; });
+      await this.backgroundCheckpoint;
+    }
   }
   async prioritize(pagePaths: readonly string[], budgetMs = 1_000): Promise<void> {
     const wanted = pagePaths.filter((p) => this.desired?.has(p) && !this.pageReady(p));
@@ -476,11 +520,13 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
         if (removed.length) await this.commitBatch({ pages: [], passages: [], removed });
       }
       await this.engine.ready?.();
+      this.lifetime.signal.throwIfAborted();
       for (const passage of this.passages.values()) passage.signatures = this.engine.signatures?.(passage.id);
       this.generatedAt = await this.storage.compact({ pages: this.pages, passages: this.passages }, this.engine.descriptor,
-        getRetrievalCorpusRevision(this.wikiRoot) ?? undefined);
+        getRetrievalCorpusRevision(this.wikiRoot) ?? undefined, this.engine.snapshot?.());
       this.state = !this.desired || [...this.desired.keys()].every((p) => this.pageReady(p)) ? "ready" : "building";
     });
+    this.needsCompaction = false;
     if (force && this.desired) this.buildQueue.enqueue([...this.desired.keys()]);
     return this.descriptor;
   }
@@ -513,9 +559,10 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
         while (paths.some((p) => !this.pageReady(p))) embeddedPassages += await this.embedBatch(paths, options.signal);
         if (changed.length || removed.length || this.needsCompaction) {
           await this.engine.ready?.();
+          this.lifetime.signal.throwIfAborted();
           for (const passage of this.passages.values()) passage.signatures = this.engine.signatures?.(passage.id);
           this.generatedAt = await this.storage.compact({ pages: this.pages, passages: this.passages }, this.engine.descriptor,
-            getRetrievalCorpusRevision(this.wikiRoot) ?? undefined);
+            getRetrievalCorpusRevision(this.wikiRoot) ?? undefined, this.engine.snapshot?.());
           this.needsCompaction = false;
         }
         this.state = "ready";
@@ -524,7 +571,9 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
     });
   }
 
-  async searchWithDiagnostics(query: string, k: number): Promise<SemanticSearchResult> {
+  async searchWithDiagnostics(query: string, k: number, options: SemanticSearchOptions = {}): Promise<SemanticSearchResult> {
+    const signal = options.signal ? AbortSignal.any([options.signal, this.lifetime.signal]) : this.lifetime.signal;
+    signal.throwIfAborted();
     await this.load();
     const normalizedQuery = query.normalize("NFKC").replace(/\s+/g, " ").trim();
     if (!normalizedQuery || normalizedQuery.length > 4_096 || normalizedQuery.includes("\0")) {
@@ -533,41 +582,71 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
     if (!Number.isInteger(k) || k < 1 || k > 1_000) {
       throw new Error("Semantic result limit must be an integer between 1 and 1,000.");
     }
-    const vector = await this.embeddingRequests.run(() => this.provider.embedQuery(normalizedQuery), true);
-    const result = this.engine.search(vector, k);
-    // Hydrate only selected pages and retain no canonical text in the vector index.
-    // Check the page fingerprint so edits made during a query cannot acquire an old score.
+    const vector = await this.embeddingRequests.run(() => this.provider.embedQuery(normalizedQuery, signal), true, signal);
+    signal.throwIfAborted();
+    const candidatePolicy = options.candidatePolicy ?? this.candidatePolicy;
+    if (candidatePolicy !== "threshold" && candidatePolicy !== "top-k") throw new Error("Invalid candidate policy.");
+    const minimumScore = candidatePolicy === "top-k" ? -1 : this.engine.descriptor.minimumScore ?? -1;
+    const expand = options.expandCandidates ?? process.env["KNOWLEDGE_RAIL_SEMANTIC_EXPAND"] === "true";
+    const maximum = options.maximumCandidates ?? 1000;
+    if (!Number.isInteger(maximum) || maximum < k || maximum > 1000) throw new Error("Invalid maximum candidate batch.");
+    let searchedPool = k, searchPasses = 1;
+    let result = this.engine.search(vector, searchedPool, { minimumScore, signal });
+    while (expand && searchedPool < Math.min(maximum, result.diagnostics.vectorCount) &&
+      ((result.diagnostics.poolTruncated ?? 0) > 0 || (this.engine.descriptor.id === "hnsw-cosine" && result.hits.length >= searchedPool))) {
+      await new Promise<void>((resolve) => setImmediate(resolve)); signal.throwIfAborted();
+      searchedPool = Math.min(maximum, result.diagnostics.vectorCount, searchedPool * 2); searchPasses++;
+      result = this.engine.search(vector, searchedPool, { minimumScore, signal });
+    }
+    const diagnostics: SemanticSearchDiagnostics = { ...result.diagnostics,
+      candidatePolicy, filteredPassages: 0, stalePassages: 0, deduplicatedPassages: 0 };
+    if (expand) Object.assign(diagnostics, { requestedPool: k, searchedPool, searchPasses,
+      candidateLimitReached: (result.diagnostics.poolTruncated ?? 0) > 0 || (searchedPool === maximum && result.hits.length >= maximum && maximum < result.diagnostics.vectorCount),
+      approximate: result.diagnostics.indexMode !== "exact" && result.diagnostics.candidateCount < result.diagnostics.vectorCount });
+    // Capture identities before asynchronous canonical reads.
+    const candidates = result.hits.flatMap((hit) => {
+      const passage = this.passages.get(hit.id), page = passage && this.pages.get(passage.pagePath);
+      return passage && page ? [{ ...hit, passage, page }] : [];
+    });
+    signal.throwIfAborted();
     const selectedPages = new Map<string, Promise<WikiPageRecord | null>>();
-    const hydrated = await Promise.all(result.hits.map(async (hit): Promise<SemanticHit | null> => {
-      const passage = this.passages.get(hit.id);
-      if (!passage) return null;
-      const page = this.pages.get(passage.pagePath);
-      if (!page) return null;
-      if (!selectedPages.has(passage.pagePath)) selectedPages.set(passage.pagePath,
-        readWikiPageRecord(this.wikiRoot, passage.pagePath).catch(() => null));
-      const record = await selectedPages.get(passage.pagePath)!;
-      if (!record || this.passages.get(hit.id) !== passage || this.pages.get(page.path)?.fingerprint !== page.fingerprint) return null;
+    const seen = new Set<string>();
+    const hits: SemanticHit[] = [];
+    // Selection precedes hydration; hybrid needs only the best passage per page.
+    for (const hit of candidates) {
+      signal.throwIfAborted();
+      const { passage, page } = hit;
+      if (options.pagePaths && !options.pagePaths.has(page.path)) { diagnostics.filteredPassages!++; continue; }
+      if (options.distinctPages && seen.has(page.path)) { diagnostics.deduplicatedPassages!++; continue; }
+      if (!selectedPages.has(page.path)) selectedPages.set(page.path,
+        readWikiPageRecord(this.wikiRoot, page.path).catch(() => null));
+      const record = await selectedPages.get(page.path)!;
+      if (!record || this.passages.get(hit.id) !== passage || this.pages.get(page.path)?.fingerprint !== page.fingerprint) { diagnostics.stalePassages!++; continue; }
       if (page.sourceFingerprint
         ? createHash("sha256").update(record.raw).digest("hex") !== page.sourceFingerprint
-        : pageFingerprint(record.path, record.passages) !== page.fingerprint) return null;
+        : pageFingerprint(record.path, record.passages) !== page.fingerprint) { diagnostics.stalePassages!++; continue; }
       const canonical = record.passages.find((p) => wikiPassageId(p) === passage.passageId);
-      if (!canonical) return null;
-      return { pagePath: passage.pagePath, passageId: passage.passageId,
+      if (!canonical) continue;
+      seen.add(page.path);
+      hits.push({ pagePath: passage.pagePath, passageId: passage.passageId,
         heading: canonical.heading, text: canonical.text, score: hit.score,
-        provider: { ...this.provider.descriptor } };
-    }));
-    const hits = hydrated.filter((hit): hit is SemanticHit => hit !== null);
-    return { hits, diagnostics: result.diagnostics };
+        provider: { ...this.provider.descriptor } });
+    }
+    diagnostics.returnedPassages = hits.length; diagnostics.distinctPages = seen.size;
+    return { hits, diagnostics };
   }
 
-  async search(query: string, k: number): Promise<SemanticHit[]> {
-    return (await this.searchWithDiagnostics(query, k)).hits;
+  async search(query: string, k: number, options?: SemanticSearchOptions): Promise<SemanticHit[]> {
+    return (await this.searchWithDiagnostics(query, k, options)).hits;
   }
 
   async assessCoverage(
     queries: readonly SemanticCoverageQuery[],
-    pagePaths: readonly string[]
+    pagePaths: readonly string[],
+    signal?: AbortSignal
   ): Promise<SemanticCoverageScore[]> {
+    signal = signal ? AbortSignal.any([signal, this.lifetime.signal]) : this.lifetime.signal;
+    signal.throwIfAborted();
     await this.load();
     if (queries.length === 0) return [];
     if (queries.length > 256) throw new Error("Semantic coverage is limited to 256 concepts per request.");
@@ -586,11 +665,11 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
     let vectorPromise = this.coverageVectorCache.get(cacheKey);
     if (!vectorPromise) {
       vectorPromise = this.embeddingRequests.run(async () => {
-        if (this.provider.embedQueries) return this.provider.embedQueries(normalizedQueries.map((query) => query.text));
+        if (this.provider.embedQueries) return this.provider.embedQueries(normalizedQueries.map((query) => query.text), signal);
         const vectors: Array<readonly number[]> = [];
-        for (const query of normalizedQueries) vectors.push(await this.provider.embedQuery(query.text));
+        for (const query of normalizedQueries) { signal?.throwIfAborted(); vectors.push(await this.provider.embedQuery(query.text, signal)); }
         return vectors;
-      }, true);
+      }, true, signal);
       this.coverageVectorCache.set(cacheKey, vectorPromise);
       if (this.coverageVectorCache.size > 32) {
         const oldest = this.coverageVectorCache.keys().next().value as string | undefined;
@@ -598,11 +677,15 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
       }
       vectorPromise.catch(() => this.coverageVectorCache.delete(cacheKey));
     }
-    const vectors = await vectorPromise;
+    const vectors = await abortable(() => vectorPromise!, signal);
+    signal.throwIfAborted();
     if (vectors.length !== normalizedQueries.length) {
       throw new Error("Embedding provider returned an invalid semantic coverage result count.");
     }
-    return normalizedQueries.map((query, queryIndex) => {
+    const results: SemanticCoverageScore[] = [];
+    for (const [queryIndex, query] of normalizedQueries.entries()) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      signal.throwIfAborted();
       const vector = vectors[queryIndex]!;
       if (!validVector(vector, this.provider.descriptor.dimensions)) {
         throw new Error("Embedding provider returned an invalid semantic coverage vector.");
@@ -610,7 +693,10 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
       const byPage = new Map<string, number>();
       const coverageVector = this.dtype === "i8" ? storeVector(vector, this.provider.descriptor.dimensions, "i8").vector : vector;
       const passagesByPage = new Map<string, Array<{ passageId: string; score: number }>>();
+      let scored = 0;
       for (const passage of passages) {
+        if (++scored % 128 === 0) { await new Promise<void>((resolve) => setImmediate(resolve)); signal.throwIfAborted(); }
+        if (this.passages.get(passage.id) !== passage || !this.pageReady(passage.pagePath)) continue;
         const score = cosine(coverageVector, passage.vector);
         const current = byPage.get(passage.pagePath);
         if (current === undefined || score > current) byPage.set(passage.pagePath, score);
@@ -618,7 +704,7 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
         pagePassages.push({ passageId: passage.passageId, score });
         passagesByPage.set(passage.pagePath, pagePassages);
       }
-      return {
+      results.push({
         id: query.id,
         pages: [...byPage.entries()]
           .map(([pagePath, score]) => ({
@@ -629,8 +715,9 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
             ),
           }))
           .sort((left, right) => right.score - left.score || left.pagePath.localeCompare(right.pagePath)),
-      };
-    });
+      });
+    }
+    return results;
   }
 }
 
@@ -641,7 +728,7 @@ export async function configuredSemanticIndex(
   const provider = configuredEmbeddingProvider();
   const root = path.resolve(wikiRoot);
   const dtype = process.env["KNOWLEDGE_RAIL_SEMANTIC_DTYPE"] ?? DEFAULT_VECTOR_DTYPE;
-  const key = provider ? `${root}\0${descriptorKey(provider)}\0${dtype}` : "";
+  const key = provider ? `${root}\0${descriptorKey(provider)}\0${dtype}\0${process.env["KNOWLEDGE_RAIL_SEMANTIC_ENGINE"] ?? "lsh"}\0${process.env["KNOWLEDGE_RAIL_SEMANTIC_CANDIDATES"] ?? "threshold"}` : "";
   for (const [oldKey, cached] of indexCache) {
     if (oldKey.startsWith(`${root}\0`) && oldKey !== key) { cached.index.dispose(); indexCache.delete(oldKey); }
   }

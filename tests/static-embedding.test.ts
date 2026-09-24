@@ -33,6 +33,15 @@ test("local model2vec pooling is deterministic, hash-verified and identical with
   assert.deepEqual(result[2], [0, 1]); assert.deepEqual(result[3], [1, 0]);
   assert.ok(Math.abs(result[1]![0]! - 2 / Math.sqrt(5)) < 1e-12);
   await assert.rejects(cached.embedQuery("unrecognized"), /no known tokens/);
+  for (const instance of [cached, uncached]) {
+    const aborted = new AbortController(); aborted.abort();
+    await assert.rejects(instance.embedQuery("cat", aborted.signal));
+    const during = new AbortController();
+    const pending = instance.embedDocuments(Array.from({ length: 256 }, () => "cat dog"), during.signal);
+    setImmediate(() => during.abort());
+    await assert.rejects(pending);
+    assert.deepEqual(await instance.embedQuery("dog"), [0, 1], "cancelled local inference can recover");
+  }
   await fs.appendFile(path.join(directory, "model.safetensors"), "corrupt");
   await assert.rejects(new StaticEmbeddingProvider(directory, "fixture", spec).embedQuery("cat"), /integrity mismatch/);
 });

@@ -4,6 +4,50 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Add experimental exact/HNSW engines alongside LSH, candidate admission separate
+  from coverage, and expandable batches with visible approximation/resource limits.
+  Persist HNSW topology independently from the knowledge graph, with checksums and
+  exact vector/parameter binding; reuse valid vectors when topology must be rebuilt.
+- Maintain HNSW incrementally: coalesce deletions/replacements, repair affected
+  neighborhoods and preserve completed work when changes arrive during a build.
+  Restore a valid graph checkpoint before applying journal deltas; use current
+  vectors for exact search during maintenance and persist only complete topology.
+- Add optional Ollama reranking activated by MCP base URL/model configuration,
+  with a checksum-verified small BGE Q8 preparation script, guarded Ollama 0.34.3
+  compatibility and no default reranking deadline. Exclude reranker time from the
+  separate embedding budget and preserve retrieval on failure.
+- Add optional HTTP cross-encoder reranking with optional cumulative time limits,
+  repeated-pool reuse, canonical freshness checks and base-ranking fallback.
+- Add task-context evidence/history continuations and explicit sourced `reinstates`
+  relations. Display limits do not make later candidates irrelevant; cursors reject
+  changed evidence, and history preserves closed intervals and unresolved states.
+- Evaluate three embedding providers, four search variants and a pinned real
+  multilingual cross-encoder; retain separate quality, live latency and scale results.
+- Add a frozen bilingual 20/40 development/evaluation corpus from real repository
+  documentation, retain 16 historical queries, and compare fixed 32/64 pools,
+  resident Float32 and exhaustive neighbors using the same real model outputs.
+
+### Removed
+
+- Retire the unreleased float32 candidate-rescoring experiment and dual-vector
+  storage after no measured ranking gain. Preserve reports and archived benchmark
+  sources; reuse compatible int8 snapshots and remove obsolete sidecars only after
+  a successful checkpoint. Keep progressive candidate expansion, HNSW, optional
+  reranking, evidence history and the frozen regression matrix.
+
+### Fixed
+
+- Bound the complete foreground semantic contribution (1,500 ms by default),
+  including queueing, page priority, search and coverage. On expiry,
+  return lexical/graph evidence with explicit diagnostics. Propagate cancellation
+  to HTTP/static providers, bound pending work and retry after a circuit cooldown.
+- Check passage identity again after asynchronous coverage embedding, and hydrate
+  only selected canonical pages after candidate scoring and page/type selection.
+
 ## [2.9.1] - 2026-09-23
 
 ### Fixed

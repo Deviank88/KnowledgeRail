@@ -1,6 +1,8 @@
 import { normalizeRepositoryPath, staleClaimsByPage } from "../core/drift-detection.js";
 import { pagePathsByClaim, readEvidenceIrStore } from "../core/ingestion/evidence-store.js";
 import { claimValidAt } from "../core/ingestion/evidence-claim.js";
+import { evidenceHistory, type ClaimHistoryEntry } from "../core/ingestion/evidence-history.js";
+import { createHash } from "node:crypto";
 import { tokenizeSearchText } from "../core/text-analysis.js";
 import { wikiPageUri } from "./resource-uri.js";
 import { expandCodeImpact, taskCodePaths, type CodeImpactFields } from "./code-impact.js";
@@ -60,6 +62,11 @@ export interface TaskContextAttempt {
 }
 
 export interface TaskContextRetrieval {
+  evidenceOffset?: number;
+  evidenceRevision?: string;
+  nextEvidenceOffset?: number;
+  remainingEvidenceCount?: number;
+  candidateSearchLimited?: boolean;
   strategy: "hybrid_progressive_widening" | "temporal_claims";
   coverageMode: RetrievalCoverage["coverageMode"];
   coverageWarnings: string[];
@@ -105,6 +112,7 @@ export interface ChangeImpact extends CodeImpactFields {
 }
 
 export interface TaskContext {
+  history?: { asOf: string; claims: ClaimHistoryEntry[]; warnings: string[]; totalClaims: number; revision: string; warningCount: number; nextOffset?: number };
   version: 2;
   task: {
     intent: ContextIntent;
@@ -144,6 +152,12 @@ export interface TaskContext {
 }
 
 export interface CompileTaskContextParams {
+  includeAdditional?: boolean;
+  evidenceOffset?: number;
+  evidenceRevision?: string;
+  includeHistory?: boolean;
+  historyOffset?: number;
+  historyRevision?: string;
   wikiRoot: string;
   intent: ContextIntent;
   objective: string;
@@ -778,6 +792,11 @@ function contextWithoutSize(params: {
     retrieval: {
       ...params.retrieval,
       selectedEvidenceCount: evidence.length,
+      ...(params.retrieval.evidenceOffset !== undefined ? {
+        remainingEvidenceCount: Math.max(0, params.available.length - params.retrieval.evidenceOffset - evidence.length),
+        nextEvidenceOffset: params.retrieval.evidenceOffset + evidence.length < params.available.length
+          ? params.retrieval.evidenceOffset + evidence.length : undefined,
+      } : {}),
     },
     intent: params.intent,
     objective: params.objective,
@@ -829,7 +848,7 @@ function resolvedIntentPolicy(
   };
 }
 
-export async function compileTaskContext(params: CompileTaskContextParams): Promise<TaskContext> {
+async function compileTaskContextBody(params: CompileTaskContextParams): Promise<TaskContext> {
   if (params.asOf !== undefined) return compileHistoricalTaskContext(params);
   const objective = boundedText(params.objective, "Task objective");
   const query = boundedText(params.query ?? objective, "Task retrieval query");
@@ -847,6 +866,9 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
   const maxEvidence = Math.max(1, Math.min(20, params.maxEvidence ?? 8));
   const tokenBudget = Math.max(256, Math.min(12_000, params.heuristicTokenBudget ?? 2_000));
   const profile = params.retrievalProfile ?? "balanced";
+  const additional = params.includeAdditional || params.evidenceOffset !== undefined;
+  const offset = params.evidenceOffset ?? 0;
+  if (!Number.isInteger(offset) || offset < 0 || offset > 1_000_000) throw new Error("Invalid evidence offset.");
   const policy = resolvedIntentPolicy(INTENT_POLICIES[params.intent], params.evidencePolicy);
   const coverageRequirements: RetrievalCoverageRequirements = {
     ...params.coverageRequirements,
@@ -863,6 +885,7 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
     pageTypes: params.pageTypes,
     profile,
     semanticEnabled: true,
+    expandSemanticCandidates: additional ? true : undefined,
     persistDerivedIndexes: params.persistDerivedIndexes ?? false,
     coverageRequirements,
     initialBudget: {
@@ -895,7 +918,7 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
     }
   }
   const candidateByPath = new Map(availableCandidates.map((candidate) => [candidate.hit.path, candidate] as const));
-  const candidates = hybrid.hits
+  const candidates = (additional ? hybrid.coverageHits : hybrid.hits)
     .map((hit) => candidateByPath.get(hit.path))
     .filter((candidate): candidate is ClassifiedCandidate => candidate !== undefined);
   const runtime = await getRuntimeWikiGraph(params.wikiRoot, false, {
@@ -905,7 +928,11 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
   markGraphDependencies(availableCandidates, availableGraph);
   markContradictionGroups(availableCandidates);
   const taskGraph = localTaskGraph(runtime, candidates);
-  const ordered = orderCandidates(candidates, policy.priorities);
+  const allOrdered = orderCandidates(candidates, policy.priorities);
+  const revision = createHash("sha256").update(JSON.stringify([query, params.intent, params.pageTypes, allOrdered.map((c) => [c.hit.path, c.hit.record.raw])])).digest("hex");
+  if (params.evidenceRevision !== undefined && params.evidenceRevision !== revision) throw new Error("Evidence changed since the preceding batch; restart retrieval to avoid gaps or duplicates.");
+  const ordered = additional ? allOrdered.slice(offset, offset + maxEvidence) : allOrdered;
+  const allHitCount = additional ? Math.max(0, allOrdered.length - offset) : ordered.length;
   for (const candidate of ordered) {
     const categoryLabels = [...candidate.categories]
       .map((category) => CATEGORY_LABELS[category])
@@ -923,6 +950,8 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
     } : evidence;
   }
   const retrieval: TaskContextRetrieval = {
+    ...(additional ? { evidenceOffset: offset, evidenceRevision: revision,
+      candidateSearchLimited: hybrid.semantic.approximate === true || hybrid.semantic.candidateLimitReached === true } : {}),
     strategy: "hybrid_progressive_widening",
     coverageMode: hybrid.coverage.coverageMode,
     coverageWarnings: [...hybrid.coverage.warnings],
@@ -961,7 +990,7 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
     requestedPaths,
     selected,
     available: availableCandidates,
-    allHitCount: ordered.length,
+    allHitCount,
     policy,
     graph: taskGraph,
     coverage: hybrid.coverage,
@@ -976,7 +1005,7 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
       requestedPaths,
       selected,
       available: availableCandidates,
-      allHitCount: ordered.length,
+      allHitCount,
       policy,
       graph: taskGraph,
       coverage: hybrid.coverage,
@@ -1067,13 +1096,35 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
   while (expanded.size.heuristicTokens > tokenBudget && selected.length > 1 && fields.codeRoots!.length) {
     selected = selected.slice(0, -1);
     context = withSize(contextWithoutSize({ intent: params.intent, objective, requestedPaths, selected,
-      available: availableCandidates, allHitCount: ordered.length, policy, graph: taskGraph,
+      available: availableCandidates, allHitCount, policy, graph: taskGraph,
       coverage: hybrid.coverage, retrieval, tokenBudget,
     }), tokenBudget);
     trimNotice(); expanded = assemble();
   }
   fitPrefix("codeRoots");
   return attachMap(expanded);
+}
+
+export async function compileTaskContext(params: CompileTaskContextParams): Promise<TaskContext> {
+  if (!params.includeHistory) return compileTaskContextBody(params);
+  const tokenBudget = Math.max(256, Math.min(12_000, params.heuristicTokenBudget ?? 2_000));
+  const reserve = Math.min(1400, Math.floor(tokenBudget * .45));
+  const context = await compileTaskContextBody({ ...params, heuristicTokenBudget: Math.max(256, tokenBudget - reserve) });
+  const offset = params.historyOffset ?? 0;
+  if (!Number.isInteger(offset) || offset < 0) throw new Error("Invalid history offset.");
+  const history = evidenceHistory(await readEvidenceIrStore(params.wikiRoot), context.evidence.map((e) => e.path), params.asOf ?? new Date().toISOString());
+  const revision = createHash("sha256").update(JSON.stringify([history.claims, history.warnings])).digest("hex");
+  if (params.historyRevision !== undefined && params.historyRevision !== revision) throw new Error("Claim history changed since the preceding batch; restart history retrieval.");
+  // History is another paged evidence stream, not a score-derived current state.
+  const claims = history.claims.slice(offset, offset + 20).map((claim) => ({ ...claim, text: claim.text.slice(0, 640),
+    supersededBy: claim.supersededBy.map((event) => ({ ...event, reason: event.reason.slice(0, 320) })) }));
+  const { size: _size, ...base } = context;
+  base.budget = { ...base.budget, requestedHeuristicTokens: tokenBudget };
+  const assemble = () => withSize({ ...base, history: { ...history, warnings: history.warnings.slice(0, 6), warningCount: history.warnings.length, revision, claims, totalClaims: history.claims.length,
+    ...(offset + claims.length < history.claims.length ? { nextOffset: offset + claims.length } : {}) } }, tokenBudget);
+  let result = assemble();
+  while (!result.budget.withinHeuristicBudget && claims.length > 1) { claims.pop(); result = assemble(); }
+  return result;
 }
 
 async function compileHistoricalTaskContext(params: CompileTaskContextParams): Promise<TaskContext> {
@@ -1092,7 +1143,12 @@ async function compileHistoricalTaskContext(params: CompileTaskContextParams): P
   }).sort((a, b) => b.score - a.score || a.claim.id.localeCompare(b.claim.id));
   const maximum = Math.max(1, Math.min(20, params.maxEvidence ?? 8));
   const tokenBudget = Math.max(256, Math.min(12_000, params.heuristicTokenBudget ?? 2_000));
-  let selected = candidates.slice(0, maximum);
+  const additional = params.includeAdditional || params.evidenceOffset !== undefined;
+  const offset = params.evidenceOffset ?? 0;
+  if (!Number.isInteger(offset) || offset < 0 || offset > 1_000_000) throw new Error("Invalid evidence offset.");
+  const revision = createHash("sha256").update(JSON.stringify([query, asOf, params.pageTypes, candidates.map(({ claim }) => claim)])).digest("hex");
+  if (params.evidenceRevision !== undefined && params.evidenceRevision !== revision) throw new Error("Evidence changed since the preceding batch; restart retrieval.");
+  let selected = candidates.slice(offset, offset + maximum);
   const assemble = (): TaskContext => {
     const buckets = buildBuckets([]);
     const evidence: EvidenceRef[] = uniqueEvidence(selected.map(({ claim, page, score }) => {
@@ -1111,7 +1167,11 @@ async function compileHistoricalTaskContext(params: CompileTaskContextParams): P
     if (!selected.length) unknowns.push({ kind: "missing_evidence", description: "No matching claim with recorded validity at as_of. Unversioned page prose cannot establish historical validity.", widenable: false });
     if (buckets.contradictions.length) unknowns.push({ kind: "contradiction", description: "Matching claims have unresolved ambiguity or contradiction; their historical status is not reconstructed." });
     if (selected.length < candidates.length) unknowns.push({ kind: "budget_limited", description: "Additional historical claims were omitted by the evidence or token budget." });
-    const retrieval: TaskContextRetrieval = { strategy: "temporal_claims", coverageMode: "lexical", coverageWarnings: ["Historical lookup uses claim validity; current page prose and current code are not historical evidence."],
+    const retrieval: TaskContextRetrieval = {
+      ...(additional ? { evidenceOffset: offset, evidenceRevision: revision,
+        remainingEvidenceCount: Math.max(0, candidates.length - offset - selected.length),
+        ...(selected.length && offset + selected.length < candidates.length ? { nextEvidenceOffset: offset + selected.length } : {}) } : {}),
+      strategy: "temporal_claims", coverageMode: "lexical", coverageWarnings: ["Historical lookup uses claim validity; current page prose and current code are not historical evidence."],
       query, profile: params.retrievalProfile ?? "balanced", wideningLevel: 0, coverageSufficient: selected.length > 0 && !buckets.contradictions.length,
       evidenceGaps: unknowns.map((gap) => gap.kind), estimatedContextTokens: 0, hitCount: selected.length, coverageCandidateCount: candidates.length,
       selectedEvidenceCount: selected.length, fallbackUsed: false, fullGraphScanAttempted: false, attempts: [] };

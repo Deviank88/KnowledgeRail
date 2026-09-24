@@ -47,6 +47,7 @@ export const EVIDENCE_RELATION_TYPES = [
   "duplicate",
   "contradicts",
   "supersedes",
+  "reinstates",
 ] as const;
 
 export type EvidenceClaimKind = (typeof EVIDENCE_CLAIM_KINDS)[number];

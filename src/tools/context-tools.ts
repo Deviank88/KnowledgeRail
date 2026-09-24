@@ -88,6 +88,18 @@ function compactManifestText(manifest: TaskContext): string {
     lines.push("", `Historical claim validity at ${manifest.temporal.asOf} (page links open current pages):`);
     for (const claim of manifest.temporal.claims) lines.push(`- ${claim.id}: ${claim.text}`);
   }
+  if (manifest.history) {
+    lines.push("", `Recorded claim history at ${manifest.history.asOf}:`);
+    for (const claim of manifest.history.claims) {
+      lines.push(`- ${claim.id} [${claim.validity}; recorded=${claim.recordedStatus}] ${claim.validFrom}..${claim.validUntil ?? "open"}: ${claim.text} — ${claim.sourceUri}#${claim.segmentId}`);
+      for (const event of claim.supersededBy) lines.push(`  superseded by ${event.claimId} from ${event.effectiveAt}: ${event.reason} — ${event.sourceUri}#${event.segmentId}`);
+      for (const relation of claim.relations.filter((r) => r.type === "reinstates")) lines.push(`  explicitly reinstates ${relation.targetClaimId} in a new validity interval`);
+    }
+    for (const warning of manifest.history.warnings) lines.push(`HISTORY WARNING: ${warning}`);
+    if (manifest.history.nextOffset !== undefined) lines.push(`Additional history is available at history_cursor=${manifest.history.nextOffset}:${manifest.history.revision}.`);
+  }
+  if (manifest.retrieval.nextEvidenceOffset !== undefined) lines.push(`Additional retrieved candidates remain available at evidence_cursor=${manifest.retrieval.nextEvidenceOffset}:${manifest.retrieval.evidenceRevision}; omission from this batch is not a relevance rejection.`);
+  if (manifest.retrieval.candidateSearchLimited) lines.push("Candidate discovery is approximate or limited; this batch is not proof of exhaustive retrieval.");
   for (const gap of manifest.unknowns) lines.push(`UNKNOWN ${gap.kind}: ${gap.description}`);
   for (const warning of manifest.retrieval.coverageWarnings) lines.push(`WARNING: ${warning}`);
   lines.push("", ...dynamicLines);
@@ -132,6 +144,7 @@ export function compactStructuredContext(manifest: TaskContext) {
     })),
     ...(manifest.repositoryMap ? { repositoryMap: manifest.repositoryMap } : {}),
     ...(manifest.temporal ? { temporal: manifest.temporal } : {}),
+    ...(manifest.history ? { history: manifest.history } : {}),
     changeImpact: {
       mode: manifest.changeImpact.mode,
       decisions: manifest.changeImpact.decisions,
@@ -146,6 +159,11 @@ export function compactStructuredContext(manifest: TaskContext) {
     },
     gaps: manifest.unknowns,
     retrieval: {
+      evidenceOffset: manifest.retrieval.evidenceOffset,
+      evidenceRevision: manifest.retrieval.evidenceRevision,
+      nextEvidenceOffset: manifest.retrieval.nextEvidenceOffset,
+      remainingEvidenceCount: manifest.retrieval.remainingEvidenceCount,
+      candidateSearchLimited: manifest.retrieval.candidateSearchLimited,
       profile: manifest.retrieval.profile,
       coverageMode: manifest.retrieval.coverageMode,
       coverageWarnings: manifest.retrieval.coverageWarnings,
@@ -196,6 +214,8 @@ export function registerContextTools(
         response_detail: z.enum(["full", "compact"]).default("full"),
         include_repository_map: z.boolean().optional(),
         as_of: z.iso.datetime().optional(),
+        evidence_cursor: z.string().refine((v) => v.length <= 72 && /^(start|[0-9]{1,7}:[a-f0-9]{64})$/u.test(v)).optional().describe("start or returned cursor."),
+        history_cursor: z.string().refine((v) => v.length <= 72 && /^(start|[0-9]{1,7}:[a-f0-9]{64})$/u.test(v)).optional().describe("start or returned cursor."),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
     },
@@ -211,6 +231,7 @@ export function registerContextTools(
       response_detail,
       include_repository_map,
       as_of,
+      evidence_cursor, history_cursor,
     }) => {
       try {
         const manifest = await compileTaskContext({
@@ -225,6 +246,12 @@ export function registerContextTools(
           heuristicTokenBudget: heuristic_token_budget,
           includeRepositoryMap: include_repository_map,
           asOf: as_of,
+          includeAdditional: evidence_cursor !== undefined,
+          evidenceOffset: evidence_cursor && evidence_cursor !== "start" ? Number(evidence_cursor.split(":")[0]) : undefined,
+          evidenceRevision: evidence_cursor?.split(":")[1],
+          includeHistory: history_cursor !== undefined,
+          historyOffset: history_cursor && history_cursor !== "start" ? Number(history_cursor.split(":")[0]) : undefined,
+          historyRevision: history_cursor?.split(":")[1],
         });
         return {
           content: [

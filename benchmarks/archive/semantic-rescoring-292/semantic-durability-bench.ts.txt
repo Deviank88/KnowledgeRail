@@ -16,9 +16,8 @@ const runtime = argument("runtime", path.resolve("."));
 const scale = Number(argument("scale", "1000"));
 const dtype = argument("dtype", "f32");
 const dimensions = 1024;
-if (process.argv.includes("--rescore") || process.argv.some((a) => a.startsWith("--migrate-from="))) {
-  throw new Error("Rescoring was retired; use the archived experiment and its matching runtime.");
-}
+const rescore = process.argv.includes("--rescore");
+const migrateFrom = argument("migrate-from", "");
 const { PersistentSemanticIndex } = await import(pathToFileURL(path.join(runtime, "src/core/semantic/index.ts")).href);
 const reloadRoot = argument("reload-root", "");
 const root = reloadRoot || await fs.mkdtemp(path.join(os.tmpdir(), "kr-semantic-durability-"));
@@ -47,7 +46,7 @@ const settledMemory = async () => {
   return memory();
 };
 if (reloadRoot) {
-  const index = new PersistentSemanticIndex(root, provider, undefined, { dtype });
+  const index = new PersistentSemanticIndex(root, provider, undefined, { dtype, rescore });
   const start = performance.now(); await index.synchronize(records); const reloadMs = performance.now() - start;
   const queryStart = performance.now(), result = await index.searchWithDiagnostics("Documentary fact 12: durable semantic evidence with page provenance.", 10);
   const firstQueryMs = performance.now() - queryStart;
@@ -60,11 +59,19 @@ try {
     const file = path.join(root, record.path); await fs.mkdir(path.dirname(file), { recursive: true });
     await fs.writeFile(file, record.raw);
   }
+  let migrationDocumentInputs = 0;
+  if (migrateFrom) {
+    if (!["i8", "f32"].includes(migrateFrom) || !rescore) throw new Error("Migration requires --rescore and --migrate-from=i8|f32.");
+    const previous = new PersistentSemanticIndex(root, provider, undefined, { dtype: migrateFrom, rescore: false });
+    await previous.synchronize(records); previous.dispose();
+    migrationDocumentInputs = documentInputs;
+  }
   const before = await settledMemory();
-  const first = new PersistentSemanticIndex(root, provider, undefined, runtime === path.resolve(".") ? { dtype } : true);
+  const first = new PersistentSemanticIndex(root, provider, undefined, runtime === path.resolve(".") ? { dtype, rescore } : true);
   let start = performance.now();
   await first.synchronize(records);
   const buildMs = performance.now() - start;
+  const migration = migrateFrom ? { from: migrateFrom, elapsedMs: buildMs, embeddedDocuments: documentInputs - migrationDocumentInputs } : undefined;
   const peakBuildRss = process.resourceUsage().maxRSS * 1024;
   const builtImmediate = memory();
   const built = await settledMemory();
@@ -83,7 +90,7 @@ try {
   let identicalHits = true;
   for (let run = 0; run < Number(argument("reloads", "5")); run++) {
     global.gc?.();
-    const restarted = new PersistentSemanticIndex(root, provider, undefined, runtime === path.resolve(".") ? { dtype } : true);
+    const restarted = new PersistentSemanticIndex(root, provider, undefined, runtime === path.resolve(".") ? { dtype, rescore } : true);
     start = performance.now();
     await restarted.synchronize(records);
     const reloadMs = performance.now() - start;
@@ -131,8 +138,8 @@ try {
     }
   }
   const graphBytes = (await fs.stat(path.join(root, ".knowledge-rail", "semantic-graph.bin")).catch(() => null))?.size ?? 0;
-  console.log(JSON.stringify({ runtime, scale, dtype, engine: first.descriptor.engine, graphBytes, buildMs, reloadMs, firstQueryMs, bytes,
-    reloadSamples, processRestarts, signatures, checkpoint, io: first.ioStats,
+  console.log(JSON.stringify({ runtime, scale, dtype, rescore, engine: first.descriptor.engine, graphBytes, buildMs, reloadMs, firstQueryMs, bytes,
+    reloadSamples, processRestarts, signatures, checkpoint, migration, io: first.ioStats,
     documentInputs, reusedOnRestart: documentInputs === countBeforeRestart,
     identicalHits,
     before, builtImmediate, built, stableBytesPerPassage: (built.heap + built.buffers - before.heap - before.buffers) / scale, peakBuildRss, peakRss }));
