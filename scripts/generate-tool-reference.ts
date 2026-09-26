@@ -94,6 +94,18 @@ function renderTool(tool: CatalogTool): string {
       "evidence excluded from display is `budget_limited`, not `missing_evidence`. Configured embedding " +
       "provider failures degrade to lexical mode without failing the tool call."
     : undefined;
+  const languageNote = tool.name === "knowledge_context" || tool.name === "knowledge_document_context"
+    ? "Once the workspace declares a knowledge language, every retrieval query (task, search, graph with a query, " +
+      "and document section evidence) must set `query_language` to it: keep `objective` in the user's language and " +
+      "pass `query` translated into the knowledge language. Otherwise no retrieval runs and the result is " +
+      "`state=\"query_language_required\"` with a `nextAction`. Results carry `languageContract`."
+    : tool.name === "knowledge_admin"
+      ? "`action=\"init\"` or `action=\"language\"` with `options.knowledge_language` (a BCP 47 tag) declares the " +
+        "knowledge language in `wiki/SCHEMA.md`; `language` previews by default and records with `setup_mode=\"apply\"`. " +
+        "It is locked by the first canonical page. `action=\"status\"` reports it."
+      : tool.name === "knowledge_page" || tool.name === "knowledge_ingest"
+        ? "For `knowledge_page write/edit` and `knowledge_ingest apply_claims`, translate human-readable content and titles into the workspace knowledge language live and declare it with `content_language`. Missing or incompatible declarations are rejected before mutation when a language is configured. Answers to the user stay in the user's language; source references and identifiers are preserved."
+        : undefined;
   const contractNote = tool.name === "knowledge_admin"
     ? "For `action=\"lint\"`, `force=true` enables nested-wiki recovery. Omit `dry_run` or set it to `true` to preview; set `dry_run=false` to apply. Recovery removes nested `wiki` path segments, updates relative links, and blocks the complete operation if any destination collides."
     : tool.name === "knowledge_ingest"
@@ -105,6 +117,7 @@ function renderTool(tool: CatalogTool): string {
     tool.description ?? "",
     "",
     ...(coverageNote ? [coverageNote, ""] : []),
+    ...(languageNote ? [languageNote, ""] : []),
     ...(contractNote ? [contractNote, ""] : []),
     ...(actions.length > 0 ? [`Actions/modes: ${actions.map((value) => `\`${value}\``).join(", ")}.`, ""] : []),
     "| Parameter | Type / values | Required | Default | Constraints | Description |",

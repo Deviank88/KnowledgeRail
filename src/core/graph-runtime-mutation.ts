@@ -163,6 +163,12 @@ export function primeRuntimeGraphMutationState(runtime: RuntimeGraph): void {
   if (!stateByRuntime.has(runtime)) buildMutationState(runtime);
 }
 
+/** Uses the same edge index maintained by incremental mutations; no graph-wide scan. */
+export function findRuntimeGraphEdge(runtime: RuntimeGraph, edge: GraphEdge): GraphEdge | undefined {
+  const index = mutationState(runtime).edgeIndex.get(edgeKey(edge));
+  return index === undefined ? undefined : runtime.graph.edges[index];
+}
+
 function reindexMovedNode(runtime: RuntimeGraph, state: RuntimeMutationState, index: number): void {
   const node = runtime.graph.nodes[index];
   if (node) state.nodeIndex.set(node.id, index);

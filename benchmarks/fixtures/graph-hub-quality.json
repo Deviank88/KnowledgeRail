@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "description": "Synthetic stress cases for graph evidence recall. Targets, topology and budgets are fixed before measurement; this is not a representative query distribution or an end-to-end answer-quality evaluation.",
+  "budgets": {
+    "initial": { "maxNodes": 24, "maxDepth": 1, "beamWidth": 16, "maxVisitedNodes": 48 },
+    "wide": { "maxNodes": 96, "maxDepth": 3, "beamWidth": 64, "maxVisitedNodes": 192 }
+  },
+  "cases": [
+    { "id": "small-early", "group": "control", "topology": "outgoing", "distractors": 1000, "position": "early", "penalizeDistractors": true },
+    { "id": "small-late", "group": "control", "topology": "outgoing", "distractors": 1000, "position": "late", "penalizeDistractors": true },
+    { "id": "medium-late-widening", "group": "stress", "topology": "outgoing", "distractors": 6000, "position": "late", "penalizeDistractors": true },
+    { "id": "large-early", "group": "control", "topology": "outgoing", "distractors": 16000, "position": "early", "penalizeDistractors": true },
+    { "id": "large-late", "group": "stress", "topology": "outgoing", "distractors": 16000, "position": "late", "penalizeDistractors": true },
+    { "id": "large-incoming-late", "group": "stress", "topology": "incoming", "distractors": 16000, "position": "late", "penalizeDistractors": true },
+    { "id": "request-sibling-late", "group": "stress", "topology": "request", "distractors": 16000, "position": "late", "penalizeDistractors": true },
+    { "id": "second-seed-starvation", "group": "stress", "topology": "starved_seed", "distractors": 16000, "position": "late", "penalizeDistractors": true },
+    { "id": "late-two-hop", "group": "stress", "topology": "two_hop", "distractors": 16000, "position": "late", "penalizeDistractors": true },
+    { "id": "very-large-late", "group": "stress", "topology": "outgoing", "distractors": 100000, "position": "late", "penalizeDistractors": true },
+    { "id": "high-priority-edge-late", "group": "control", "topology": "outgoing", "distractors": 16000, "position": "late", "penalizeDistractors": true, "targetEdgeKind": "implements" },
+    { "id": "direct-target-seed", "group": "control", "topology": "outgoing", "distractors": 16000, "position": "late", "penalizeDistractors": true, "seedTarget": true },
+    { "id": "beam-loss-control", "group": "control", "topology": "outgoing", "distractors": 16000, "position": "late", "penalizeDistractors": false },
+    { "id": "disconnected-control", "group": "control", "topology": "disconnected", "distractors": 1000, "position": "late", "penalizeDistractors": true }
+  ]
+}

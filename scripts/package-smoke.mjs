@@ -97,6 +97,9 @@ try {
     "dist/index.js",
     "README.md",
     "LICENSE",
+    "NOTICE",
+    "LICENSING.md",
+    "licenses/Apache-2.0-legacy.txt",
     "package.json",
     "scripts/prepare-ollama-reranker.py",
     "server.json",
@@ -128,6 +131,14 @@ try {
   const installedBin = path.join(installDirectory, "node_modules", "knowledge-rail", "dist", "index.js");
   const installedPackageRoot = path.dirname(path.dirname(installedBin));
   const installedPackage = JSON.parse(await fs.readFile(path.join(installedPackageRoot, "package.json"), "utf8"));
+  const sourcePackage = JSON.parse(await fs.readFile(path.join(process.cwd(), "package.json"), "utf8"));
+  if (installedPackage.license !== sourcePackage.license) throw new Error("Packed package license differs from the source.");
+  for (const notice of ["LICENSE", "NOTICE", "LICENSING.md", "licenses/Apache-2.0-legacy.txt"]) {
+    const [source, installed] = await Promise.all([
+      fs.readFile(path.join(process.cwd(), notice)), fs.readFile(path.join(installedPackageRoot, notice)),
+    ]);
+    if (!installed.equals(source)) throw new Error(`Packed licensing document differs from the source: ${notice}`);
+  }
   const [sourceReadme, installedReadme, sourceLogo, installedLogo] = await Promise.all([
     fs.readFile(path.join(process.cwd(), "README.md")),
     fs.readFile(path.join(installedPackageRoot, "README.md")),

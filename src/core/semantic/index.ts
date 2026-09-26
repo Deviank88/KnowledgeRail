@@ -237,6 +237,8 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
   private readonly buildQueue: SemanticBuildQueue;
   private readonly embeddingRequests = new EmbeddingRequestQueue();
   private readonly lifetime = new AbortController();
+  private queryWarmup?: Promise<void>;
+  private queryProviderState: "idle" | "warming" | "ready" | "failed" = "idle";
   private readonly candidatePolicy: "threshold" | "top-k";
 
   constructor(
@@ -277,6 +279,7 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
       passageCount: this.passages.size, pageCount: ready,
       totalPages: this.desired?.size ?? this.pages.size,
       pendingPages: Math.max(0, (this.desired?.size ?? this.pages.size) - ready),
+      queryProviderState: this.queryProviderState,
       state: this.buildQueue.error ? "degraded" : this.state, dtype: this.dtype,
       candidatePolicy: this.candidatePolicy,
       ...(this.reason ? { reason: this.reason } : {}),
@@ -505,6 +508,25 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
       await this.backgroundCheckpoint;
     }
   }
+  /** Load the configured query model even when persisted document vectors are reusable. */
+  warmQueryProvider(): Promise<void> {
+    if (this.queryWarmup) return this.queryWarmup;
+    if (this.queryProviderState === "ready" || !this.descriptor.totalPages) return Promise.resolve();
+    this.queryProviderState = "warming";
+    const signal = AbortSignal.any([this.lifetime.signal, AbortSignal.timeout(Math.min(this.provider.timeoutMs ?? 30_000, 30_000))]);
+    const pending = this.embeddingRequests.run(async () => {
+      const vector = await this.provider.embedQuery("KnowledgeRail query model warmup", signal);
+      if (!validVector(vector, this.provider.descriptor.dimensions)) throw new Error("Invalid warmup embedding.");
+      this.queryProviderState = "ready";
+    }, false, signal);
+    this.queryWarmup = pending.catch((error: unknown) => {
+      this.queryProviderState = "failed";
+      this.queryWarmup = undefined;
+      throw error;
+    });
+    return this.queryWarmup;
+  }
+
   async prioritize(pagePaths: readonly string[], budgetMs = 1_000): Promise<void> {
     const wanted = pagePaths.filter((p) => this.desired?.has(p) && !this.pageReady(p));
     this.buildQueue.enqueue(wanted, 2);
@@ -582,7 +604,10 @@ export class PersistentSemanticIndex implements SynchronizableSemanticIndex {
     if (!Number.isInteger(k) || k < 1 || k > 1_000) {
       throw new Error("Semantic result limit must be an integer between 1 and 1,000.");
     }
+    // A foreground timeout releases this caller without cancelling shared warmup.
+    if (this.queryWarmup) await abortable(() => this.queryWarmup!, signal).catch(() => signal.throwIfAborted());
     const vector = await this.embeddingRequests.run(() => this.provider.embedQuery(normalizedQuery, signal), true, signal);
+    this.queryProviderState = "ready";
     signal.throwIfAborted();
     const candidatePolicy = options.candidatePolicy ?? this.candidatePolicy;
     if (candidatePolicy !== "threshold" && candidatePolicy !== "top-k") throw new Error("Invalid candidate policy.");
@@ -762,8 +787,8 @@ export function clearSemanticIndexes(): void {
   indexCache.clear();
 }
 
-export function warmSemanticIndex(wikiRoot: string): void {
-  void configuredSemanticIndex(wikiRoot, { background: true }).catch(() => {
+export async function warmSemanticIndex(wikiRoot: string): Promise<void> {
+  await configuredSemanticIndex(wikiRoot, { background: true }).then((index) => index?.warmQueryProvider()).catch(() => {
     logger.warn("semantic-index", "warmup_unavailable", { retryOnQuery: true });
   });
 }

@@ -31,6 +31,7 @@ import {
   wikiDir,
 } from "../core/paths.js";
 import { currentWorkspaceUserIdentity } from "../core/user-identity.js";
+import { readKnowledgeLanguage } from "../core/knowledge-language.js";
 import { ensureDir, readFileSafe } from "../core/utils.js";
 import { errorResult } from "./helpers.js";
 import { toolName, type ProtocolEra } from "../mcp/tool-names.js";
@@ -181,6 +182,7 @@ export function registerDocumentTools(server: McpServer, era: ProtocolEra = "mod
       language,
       maxSections: max_sections,
       template,
+      knowledgeLanguage: (await readKnowledgeLanguage(wikiDir())).tag,
     });
     const diagramChoice = {
       required: false,

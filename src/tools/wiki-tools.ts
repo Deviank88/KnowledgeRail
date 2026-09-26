@@ -18,6 +18,8 @@ import {
   wikiLinkNameVariants,
   wikiLinkTargets,
 } from "../core/link-resolution.js";
+import { KnowledgeLanguageError, readKnowledgeLanguage, resolveKnowledgePageLanguage, sameLanguage } from "../core/knowledge-language.js";
+import { estimateProseLanguage } from "../core/language-detection.js";
 import { invalidateManifestEntries } from "../core/manifest-service.js";
 import {
   docsDir,
@@ -89,6 +91,15 @@ async function pageContentWarnings(
     if (resolveWikiLinkName(name, knownFiles, titlesByPath).length === 0) {
       warnings.push(`[[${name}]] does not match any existing page.`);
     }
+  }
+
+  const knowledgeLanguage = (await readKnowledgeLanguage(wikiDir())).tag;
+  const estimate = knowledgeLanguage ? estimateProseLanguage(content).language : null;
+  if (knowledgeLanguage && estimate && !sameLanguage(estimate, knowledgeLanguage)) {
+    warnings.push(
+      `Page prose appears to be "${estimate}", but this workspace's knowledge language is "${knowledgeLanguage}". ` +
+      `Write canonical pages in "${knowledgeLanguage}" and keep answers and deliverables in the user's language.`
+    );
   }
 
   const title = frontmatterString(frontmatter, "title");
@@ -472,7 +483,14 @@ export function registerWikiTools(
   server.registerTool(toolName("writePage", era), { description: "Create or overwrite a wiki page (path relative to wiki/, required YAML frontmatter). Validate content, report broken wikilinks and duplicate titles, and rebuild index.md.", inputSchema: z.object({
               path: z.string().describe("Markdown path relative to wiki/ (for example 'concepts/RAG.md'); a leading 'wiki/' is accepted and removed"),
               content: z.string().describe("Complete Markdown content, including frontmatter"),
-            }) }, async ({ path: requestedPath, content }) => withWikiMutationLock(async () => {
+              content_language: z.string().optional().describe("BCP 47 language of the translated page; required when the workspace declares a knowledge language."),
+            }) }, async ({ path: requestedPath, content, content_language }) => withWikiMutationLock(async () => {
+              try {
+                await resolveKnowledgePageLanguage(wikiDir(), content_language, true);
+              } catch (error) {
+                if (error instanceof KnowledgeLanguageError) return errorResult(error.message);
+                throw error;
+              }
               const relPath = normalizeWikiPagePath(requestedPath, { allowWikiRootPrefix: true });
               const absPath = await resolveRealWithin(wikiDir(), relPath);
               const validation = await validateWikiPageContent(content, { checkSourceExists: true });
@@ -504,12 +522,19 @@ export function registerWikiTools(
               path: z.string().describe("Markdown path relative to wiki/; a leading 'wiki/' is accepted and removed"),
               old_string: z.string().describe("Exact text to replace"),
               new_string: z.string().describe("Replacement text"),
+              content_language: z.string().optional().describe("BCP 47 language of the edited page; required when the workspace declares a knowledge language."),
               replace_all: z
                 .boolean()
                 .optional()
                 .default(false)
                 .describe("Replace every occurrence (by default old_string must be unique)"),
-            }) }, async ({ path: requestedPath, old_string, new_string, replace_all }) => withWikiMutationLock(async () => {
+            }) }, async ({ path: requestedPath, old_string, new_string, replace_all, content_language }) => withWikiMutationLock(async () => {
+              try {
+                await resolveKnowledgePageLanguage(wikiDir(), content_language, true);
+              } catch (error) {
+                if (error instanceof KnowledgeLanguageError) return errorResult(error.message);
+                throw error;
+              }
               const relPath = normalizeWikiPagePath(requestedPath, { allowWikiRootPrefix: true });
               const absPath = await resolveRealWithin(wikiDir(), relPath);
               const content = await readFileSafe(absPath);

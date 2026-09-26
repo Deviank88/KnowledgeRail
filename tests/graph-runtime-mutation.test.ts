@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
 import { getWikiGraph, invalidateWikiGraph } from "../src/core/graph-index.js";
+import { findRuntimeGraphEdge } from "../src/core/graph-runtime-mutation.js";
 import {
   clearRuntimeWikiGraphs,
   getRuntimeWikiGraph,
@@ -103,6 +104,9 @@ test("warm page edit patches the same runtime object and only recomputes affecte
     assert.equal(edgeExists(runtime, requirementId, implementationId, "implements"), false);
     assert.equal(edgeExists(runtime, requirementId, "request:REQ_1", "same_request"), false);
     assert.equal(edgeExists(runtime, requirementId, "request:REQ_2", "same_request"), true);
+    assert.equal(findRuntimeGraphEdge(runtime, { from: requirementId, to: implementationId, kind: "implements" }), undefined);
+    assert.equal(findRuntimeGraphEdge(runtime, { from: requirementId, to: "request:REQ_1", kind: "same_request" }), undefined);
+    for (const edge of runtime.graph.edges) assert.deepEqual(findRuntimeGraphEdge(runtime, edge), edge);
     assert.equal(runtime.nodesById.has("request:REQ_1"), true, "REQ-1 remains referenced by the implementation");
 
     const patched = {

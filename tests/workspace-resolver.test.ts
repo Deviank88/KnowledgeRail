@@ -11,6 +11,7 @@ import {
   WikiWorkspacePendingError,
 } from "../src/core/paths.js";
 import {
+  pinExplicitWorkspaceRoot,
   resolveLegacyMcpWorkspace,
   resolveWorkspace,
 } from "../src/mcp/workspace.js";
@@ -100,6 +101,30 @@ test("failed legacy Roots negotiation falls back safely instead of blocking work
   });
 
   assert.deepEqual(result, { root: envRoot, source: "env" });
+});
+
+test("a pinned --root survives the legacy Roots refresh after initialization", async () => {
+  const original = getWikiRoot();
+  const pinned = path.resolve("tmp-pinned-root");
+  let listed = 0;
+  const server = {
+    server: {
+      listRoots: async () => {
+        listed++;
+        return { roots: [{ uri: pathToFileURL(path.resolve("tmp-client-cwd")).href }] };
+      },
+    },
+  };
+  try {
+    pinExplicitWorkspaceRoot(pinned);
+    const result = await resolveLegacyMcpWorkspace(server, { cwd: path.resolve("tmp-cwd") });
+    assert.deepEqual(result, { root: pinned, source: "explicit" });
+    assert.equal(getWikiRoot(), pinned);
+    assert.equal(listed, 0, "client Roots are not consulted when --root was given");
+  } finally {
+    pinExplicitWorkspaceRoot(null);
+    setWikiRoot(original);
+  }
 });
 
 test("legacy MCP adapter skips invalid root URI and activates the first usable project", async () => {

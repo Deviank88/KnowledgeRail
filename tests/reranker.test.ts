@@ -36,7 +36,9 @@ test("absent, incomplete or invalid reranker configuration preserves offline kno
       Object.assign(process.env, scenario.env);
       const result = await retrieveWikiHybrid({ ...request, rerankEnabled: scenario.enabled });
       assert.deepEqual(result.hits, base.hits);
-      assert.deepEqual(result.coverage, base.coverage);
+      assert.deepEqual({ ...result.coverage, warnings: base.coverage.warnings }, base.coverage);
+      const warning = result.coverage.warnings.find((text) => text.startsWith("Reranker unavailable"));
+      assert.equal(warning, scenario.reason === "invalid_configuration" ? "Reranker unavailable (invalid_configuration); results use the base hybrid ranking." : undefined);
       assert.equal(result.rerank?.reason, scenario.reason);
       assert.equal(result.rerank?.calls ?? 0, 0);
       assert.equal(result.rerank?.applied ?? false, false);
@@ -62,7 +64,35 @@ test("identical widening pools reuse scores and changed pools share one cumulati
     assert.equal(await session.score("query", ["one", "two"]), null);
     assert.equal(session.diagnostics.reason, "budget_exceeded"); assert.equal(session.diagnostics.applied, false);
     assert.equal(session.diagnostics.calls, 2);
+    assert.equal(session.diagnostics.pairs, 2); assert.equal(session.diagnostics.cachedPairs, 2);
   } finally { session.close(); }
+});
+test("widened pools send only unscored pairs and keep scores aligned with their documents", async () => {
+  const sent: string[][] = [];
+  const provider: RerankProvider = { descriptor, async rerank(_query, documents) { sent.push([...documents]); return documents.map((d) => d.length); } };
+  const session = new RerankSession(provider);
+  try {
+    assert.deepEqual(await session.score("query", ["aa", "b"]), [2, 1]);
+    assert.deepEqual(await session.score("query", ["cccc", "b", "aa", "cccc"]), [4, 1, 2, 4]);
+    assert.deepEqual(await session.score("other query", ["b"]), [1]);
+    assert.deepEqual(sent, [["aa", "b"], ["cccc"], ["b"]]);
+    assert.deepEqual({ calls: session.diagnostics.calls, pairs: session.diagnostics.pairs, cachedPairs: session.diagnostics.cachedPairs }, { calls: 3, pairs: 4, cachedPairs: 3 });
+  } finally { session.close(); }
+});
+test("coverage widening reranks each candidate once with unchanged scores", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "kr-rerank-widen-"));
+  try {
+    for (let i = 0; i < 12; i++) await fs.writeFile(path.join(root, `page${i}.md`), `---\ntitle: caching ${i}\ntype: concept\n---\nCaching storage ${"durable ".repeat(i)}results link to [[page${(i + 1) % 12}]].`);
+    const score = (document: string) => Number(/caching (\d+)/.exec(document)?.[1] ?? 0) % 5;
+    const sent: string[] = [];
+    const reranker: RerankProvider = { descriptor, async rerank(_query, documents) { sent.push(...documents); return documents.map(score); } };
+    const result = await retrieveWikiHybrid({ wikiRoot: root, query: "caching storage", maxResults: 3, profile: "coverage", reranker, semanticEnabled: false, persistDerivedIndexes: false });
+    assert.ok(result.attempts.length > 1);
+    assert.equal(new Set(sent).size, sent.length);
+    assert.equal(result.rerank?.pairs, sent.length); assert.ok((result.rerank?.cachedPairs ?? 0) > 0);
+    assert.ok(result.coverageHits.length > 0);
+    for (const hit of result.coverageHits.filter((h) => h.channels.rerankScore !== undefined)) assert.equal(hit.channels.rerankScore, Number(/caching (\d+)/.exec(hit.title)?.[1]) % 5);
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
 test("reranking failure, timeout and invalid scores return the original hybrid order", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "kr-rerank-"));
@@ -78,7 +108,8 @@ test("reranking failure, timeout and invalid scores return the original hybrid o
       const started = performance.now();
       const result = await retrieveWikiHybrid({ ...request, reranker: provider, rerankBudgetMs: 30 });
       assert.deepEqual(result.hits.map((h) => h.path), base.hits.map((h) => h.path));
-      assert.deepEqual(result.coverage, base.coverage);
+      assert.deepEqual({ ...result.coverage, warnings: base.coverage.warnings }, base.coverage);
+      assert.match(result.coverage.warnings.join(" "), new RegExp(`Reranker unavailable \\(${result.rerank?.reason}\\)`));
       assert.ok(performance.now() - started < 500);
       assert.ok(result.rerank?.reason); assert.ok(!JSON.stringify(result).includes("secret provider failure"));
     }

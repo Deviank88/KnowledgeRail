@@ -53,6 +53,28 @@ const QUERY_STOP_WORDS = new Set([
   "sistema", "spiega", "spiegare", "trova", "trovare", "verifica", "verificare",
 ]);
 
+// Interrogatives, modals, auxiliaries and other function words that often open a
+// question. They never become entities; facets keep them because removing them
+// lowered measured coverage quality (benchmarks/coverage-diagnostics-2.9.2.md).
+const FUNCTION_WORDS = new Set([
+  "about", "after", "all", "also", "any", "been", "before", "being", "both", "but", "can", "could", "did", "do",
+  "does", "done", "during", "each", "every", "had", "has", "have", "i", "if", "into", "it", "its", "just", "may",
+  "me", "might", "must", "my", "no", "not", "only", "other", "our", "same", "shall", "should", "so", "some",
+  "such", "than", "then", "there", "their", "them", "these", "they", "those", "through", "too", "us", "very",
+  "was", "we", "were", "who", "whom", "whose", "why", "will", "within", "without", "would", "you", "your",
+  "abbia", "abbiamo", "agli", "ai", "allo", "anche", "ancora", "avere", "che", "chi", "ci", "coi", "col",
+  "come", "cosa", "cui", "dagli", "dai", "dall", "dalle", "dallo", "degli", "dell", "delle", "dello", "deve",
+  "devi", "devo", "devono", "dopo", "dove", "due", "durante", "è", "era", "essere", "fa", "fare", "fra", "già",
+  "gia", "ha", "hai", "hanno", "ho", "io", "loro", "ma", "mai", "mi", "mio", "mia", "ne", "negli", "nei", "nell",
+  "nelle", "nello", "noi", "non", "ogni", "oppure", "perché", "perche", "più", "piu", "poi", "posso", "possono",
+  "prima", "può", "puo", "qual", "quale", "quali", "quando", "quanta", "quante", "quanti", "quanto", "quella", "quelle",
+  // Elided forms: "Qual è", "Cos'è", "Dov'è", "Com'è".
+  "cos", "dov", "com",
+  "quelli", "quello", "questa", "queste", "questi", "questo", "se", "sempre", "senza", "si", "sia", "siano",
+  "solo", "soltanto", "sono", "sua", "sue", "sugli", "sui", "sul", "sull", "sulla", "sulle", "sullo", "suo",
+  "suoi", "tutte", "tutti", "tutto", "uno", "vengono", "vi", "viene", "voglio", "vorrei",
+]);
+
 const REQUIRED_TYPE_PATTERNS: ReadonlyArray<[string, RegExp]> = [
   ["requirement", /\b(requirement|requirements|requisito|requisiti)\b/i],
   ["decision", /\b(decision|decisions|decisione|decisioni)\b/i],
@@ -102,8 +124,19 @@ function inferredRequiredTypes(query: string): string[] {
     .map(([pageType]) => pageType);
 }
 
+function quotedAt(query: string, index: number, length: number): boolean {
+  return /[`"'“‘]/u.test(query[index - 1] ?? "") && /[`"'”’]/u.test(query[index + length] ?? "");
+}
+
+function quotedIn(query: string, candidate: string): boolean {
+  for (let index = query.indexOf(candidate); index >= 0; index = query.indexOf(candidate, index + 1)) {
+    if (quotedAt(query, index, candidate.length)) return true;
+  }
+  return false;
+}
+
 export function extractQueryEntities(query: string): string[] {
-  const subjectPattern = /\b(?:funzionamento|comportamento|architettura|contesto|functioning|behavior|behaviour|architecture|context)\s+(?:di|del|della|dei|degli|delle|su|sui|sulle|of|about|for)\s+(?:the\s+)?([A-Za-z][A-Za-z0-9_.#/-]*)/gi;
+  const subjectPattern = /\b(?:funzionamento|comportamento|architettura|contesto|functioning|behavior|behaviour|architecture|context)\s+(?:di|del|della|dei|degli|delle|su|sui|sulle|of|about|for)\s+(?:the\s+)?(\p{L}[\p{L}\p{N}_.#/-]*)/giu;
   const subjects = [...query.matchAll(subjectPattern)].map((match) => match[1]!).filter(Boolean);
   // Delimiters cannot overlap with the adjacent identifier components, so
   // matching remains linear even for adversarial delimiter-heavy input.
@@ -112,20 +145,24 @@ export function extractQueryEntities(query: string): string[] {
     const candidate = match[0];
     const prefix = query.slice(Math.max(0, (match.index ?? 0) - 24), match.index ?? 0);
     if (/\b(?:client|cliente|project|progetto|system|sistema)\s+$/i.test(prefix)) return [];
+    // Lowercase hyphenated words ("production-ready") are prose, not identifiers,
+    // unless the query quotes them. Digits, capitals and other delimiters still count.
+    if (/^[a-z]+(?:-[a-z]+)+$/.test(candidate) && !quotedAt(query, match.index ?? 0, candidate.length)) return [];
     return [candidate];
   });
-  const standalone = [...query.matchAll(/\b[A-Z][a-zA-Z0-9]{2,}\b/g)].flatMap((match) => {
+  // Unicode letter classes keep accented words whole ("Perché", not "Perch").
+  const standalone = [...query.matchAll(/(?<![\p{L}\p{N}_])\p{Lu}[\p{L}\p{N}]{2,}(?![\p{L}\p{N}_])/gu)].flatMap((match) => {
     const candidate = match[0];
     const index = match.index ?? 0;
     const prefix = query.slice(Math.max(0, index - 24), index);
     if (/\b(?:client|cliente|project|progetto|system|sistema)\s+$/i.test(prefix)) return [];
     // Avoid treating ordinary sentence-initial prose ("Checkout loads …") as
     // an entity while retaining leading proper nouns in noun-phrase queries.
-    const followingWord = query.slice(index + candidate.length).trimStart().match(/^[A-Za-z]+/)?.[0]?.toLowerCase();
+    const followingWord = query.slice(index + candidate.length).trimStart().match(/^\p{L}+/u)?.[0]?.toLowerCase();
     if (index === 0 && followingWord && LEADING_PROSE_VERBS.has(followingWord)) return [];
     return [candidate];
   });
-  const introduced = [...query.matchAll(/\b(?:il|lo|la|i|gli|le|un|una|the|a|an)\s+([A-Z][a-zA-Z]{2,})\b/g)]
+  const introduced = [...query.matchAll(/(?<![\p{L}\p{N}_])(?:il|lo|la|i|gli|le|un|una|the|a|an)\s+(\p{Lu}\p{L}{2,})(?![\p{L}\p{N}_])/gu)]
     .map((match) => match[1]!)
     .filter(Boolean);
   return uniqueStable([...subjects, ...technical, ...standalone, ...introduced].filter((candidate) => {
@@ -135,6 +172,9 @@ export function extractQueryEntities(query: string): string[] {
     const namedDomainConcept = candidate[0] === candidate[0]?.toUpperCase() &&
       NAMED_DOMAIN_STOP_WORDS.has(normalized);
     if (QUERY_STOP_WORDS.has(normalized) && !namedDomainConcept) return false;
+    // Function words drop only as ordinary words ("Can", "Quali"); an acronym such as
+    // CAN or IT, or any quoted spelling, is an explicit identifier.
+    if (FUNCTION_WORDS.has(normalized) && candidate !== candidate.toUpperCase() && !quotedIn(query, candidate)) return false;
     // Ordinary prose such as "automazioni/componenti" is not an identifier.
     // Keep paths and compounds that carry an actual technical signal.
     if (
@@ -153,7 +193,9 @@ export function inferCoverageRequirements(
     ...inferredRequiredTypes(query),
     ...(explicit.requiredPageTypes ?? []),
   ]);
-  const asksForMultipleSources = /\b(sources|fonti|multiple sources|piu fonti|più fonti)\b/i.test(query);
+  // "connect folders as sources" names an input role, not corroborating evidence.
+  const sourceQuestion = query.replace(/\b(?:as|come)\s+(?:data\s+)?(?:sources|fonti|sorgenti)\b/giu, "");
+  const asksForMultipleSources = /\b(sources|fonti|multiple sources|piu fonti|più fonti)\b/i.test(sourceQuestion);
   const asksForContradictions = /\b(contradict|contradiction|conflict|conflicting|contradd|conflitt)\w*/i.test(query);
   return {
     requiredPageTypes,
@@ -327,6 +369,19 @@ export function semanticCoverageQueries(
   return coverageConcepts(query, requirements).map(({ id, text }) => ({ id, text }));
 }
 
+/** Diagnostic: topic words must co-occur, not merely appear across unrelated pages. */
+export function measureEvidenceCoherence(query: string, hits: readonly RetrievalHit[]): { page: number; passage: number } {
+  const terms = relevantQueryTerms(query).filter((term) => !FUNCTION_WORDS.has(term));
+  let page = 0, passage = 0;
+  for (const hit of hits) {
+    page = Math.max(page, lexicalCoverage(`${hit.title} ${hit.record.body}`, terms));
+    for (const part of hit.record.passages) {
+      passage = Math.max(passage, lexicalCoverage(`${hit.title} ${part.heading} ${part.text}`, terms));
+    }
+  }
+  return { page, passage };
+}
+
 interface ConceptSemanticScores {
   pages: Map<string, number>;
   passages: Map<string, number>;
@@ -441,6 +496,8 @@ export function assessRetrievalCoverage(params: {
   /** Same-query, attempt-local signals shared with display selection. */
   evidenceSignals?: (hit: RetrievalHit) => ReadonlySet<string>;
   graphResult: SeededGraphQueryResult;
+  /** The graph traversal already used the request's maximum budget, so widening cannot explore further. */
+  maximumGraphBudget?: boolean;
   requirements?: RetrievalCoverageRequirements;
   coverageMode?: RetrievalCoverageMode;
   semanticScores?: readonly SemanticCoverageScore[];
@@ -534,16 +591,23 @@ export function assessRetrievalCoverage(params: {
     : snapshot(params.displayHits);
   const fullGaps = [...full.evidenceGaps];
   const displayedGaps = [...displayed.evidenceGaps];
-  if (params.graphResult.stats.truncatedFrontierCount > 0) {
+  // Frontier truncation asks for a larger graph budget. Once the maximum budget is spent it is
+  // a reported limit, not an evidence gap: in a linked wiki some pages always lie beyond it.
+  // Exhausted edge work means even nearby neighbors went unexamined and always remains a gap.
+  const graphStats = params.graphResult.stats;
+  const warnings = [...(params.warnings ?? [])];
+  if (graphStats.edgeBudgetExhausted || (graphStats.truncatedFrontierCount > 0 && !params.maximumGraphBudget)) {
     fullGaps.push("truncated_frontier");
     displayedGaps.push("truncated_frontier");
+  } else if (graphStats.truncatedFrontierCount > 0) {
+    warnings.push(`Graph exploration used its maximum budget; ${graphStats.truncatedFrontierCount} linked pages beyond it were not explored.`);
   }
   const stableGaps = uniqueStable(fullGaps);
   const missingSet = new Set(stableGaps);
   const budgetLimitedGaps = uniqueStable(displayedGaps.filter((gap) => !missingSet.has(gap)));
   return {
     coverageMode: mode,
-    warnings: uniqueStable(params.warnings ?? []),
+    warnings: uniqueStable(warnings),
     queryFacetCoverage: full.queryFacetCoverage,
     sourceDiversity: full.sourceDiversity,
     unresolvedEntities: full.unresolvedEntities,

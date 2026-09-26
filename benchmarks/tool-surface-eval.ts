@@ -379,8 +379,10 @@ export async function evaluateToolSurface(
     }
 
     const traces: boolean[] = [];
-    const initialized = await call("knowledge_admin", { action: "init" });
-    traces.push(nextOf(initialized)?.tool === "knowledge_context");
+    // The language contract: a workspace declares its knowledge language at init, then retrieval uses it.
+    const initialized = await call("knowledge_admin", { action: "init", options: { knowledge_language: "en" } });
+    traces.push(nextOf(initialized)?.tool === "knowledge_context" &&
+      (nextOf(initialized)?.suggestedArguments as { query_language?: string } | undefined)?.query_language === "en");
     await materializeContextFixture(projectRoot);
 
     const pageContent = [
@@ -398,7 +400,7 @@ export async function evaluateToolSurface(
       "The public surface guides agents through one deterministic next action.",
     ].join("\n");
     const page = await call("knowledge_page", {
-      action: "write", path: "analysis/AgentSurface.md", content: pageContent,
+      action: "write", path: "analysis/AgentSurface.md", content: pageContent, content_language: "en",
     });
     traces.push(nextOf(page)?.tool === "knowledge_admin" && nextOf(page)?.action === "lint");
 
@@ -412,6 +414,7 @@ export async function evaluateToolSurface(
     if (segmentId) {
       const applied = await call("knowledge_ingest", {
         action: "apply_claims",
+        content_language: "en",
         normalized_filename: "lease.md",
         segment_id: segmentId,
         claims: [{
@@ -456,8 +459,11 @@ export async function evaluateToolSurface(
       intent: "review",
       objective: "Review approval audit traceability",
       query: "user role timestamp motivation immutable audit",
+      query_language: "en",
       max_evidence: 4,
-      heuristic_token_budget: 1_500,
+      // Projection parity requires enough room for both representations. Tight
+      // budgets intentionally retain more evidence in compact mode (unit-tested).
+      heuristic_token_budget: 12_000,
     };
     const compact = await call("knowledge_context", contextArgs);
     const full = await call("knowledge_context", { ...contextArgs, response_detail: "full" });

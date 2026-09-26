@@ -1,0 +1,3129 @@
+{
+  "protocol": "2026-09-27 open issues; measurements before final documentation/routing/fallback-reranker corrections; same retrieval/coverage defaults",
+  "fixtures": {
+    "benchmarks/fixtures/semantic-rescoring-292.json": "8b9e3f5ed32ef95a87865a006a37baef447f697019cf396523f8b1e08fc14fc3",
+    "benchmarks/fixtures/retrieval-extension-292.json": "345a35dace5ac552170f823b46ceb07365426b81198cad764e156ed60f320518",
+    "benchmarks/fixtures/coverage-diagnostics-292.json": "bcf2803671c2c768ed434c7cffca30b6d2d0de9abfc31b9f7688ea84e2e6766d"
+  },
+  "rawReportSha256": {
+    "before": "e21c036d4e322ab770b9c3437c47648cda6d13eddaf8adb6901480f163efc919",
+    "coherence": "241c97ac30a05207877d522a6173ae0cb94041db7061cd8b936ed745286d323b",
+    "reranked": "43c47b8bae2b400650c0324db9f6a10f698200e9e30e9143fac4b4c725c24820"
+  },
+  "baseline": {
+    "all": {
+      "endToEnd": {
+        "positives": 90,
+        "negatives": 46,
+        "tp": 83,
+        "fn": 7,
+        "tn": 36,
+        "fp": 10,
+        "accuracy": 0.875,
+        "falseGapRate": 0.07777777777777778,
+        "falseSufficientRate": 0.21739130434782608,
+        "balancedAccuracy": 0.8524154589371981
+      },
+      "onRetrievedEvidence": {
+        "positives": 90,
+        "negatives": 46,
+        "tp": 83,
+        "fn": 7,
+        "tn": 36,
+        "fp": 10,
+        "accuracy": 0.875,
+        "falseGapRate": 0.07777777777777778,
+        "falseSufficientRate": 0.21739130434782608,
+        "balancedAccuracy": 0.8524154589371981
+      }
+    },
+    "development": {
+      "endToEnd": {
+        "positives": 18,
+        "negatives": 14,
+        "tp": 18,
+        "fn": 0,
+        "tn": 10,
+        "fp": 4,
+        "accuracy": 0.875,
+        "falseGapRate": 0,
+        "falseSufficientRate": 0.2857142857142857,
+        "balancedAccuracy": 0.8571428571428572
+      },
+      "onRetrievedEvidence": {
+        "positives": 18,
+        "negatives": 14,
+        "tp": 18,
+        "fn": 0,
+        "tn": 10,
+        "fp": 4,
+        "accuracy": 0.875,
+        "falseGapRate": 0,
+        "falseSufficientRate": 0.2857142857142857,
+        "balancedAccuracy": 0.8571428571428572
+      }
+    },
+    "inspected-regression": {
+      "endToEnd": {
+        "positives": 36,
+        "negatives": 4,
+        "tp": 34,
+        "fn": 2,
+        "tn": 4,
+        "fp": 0,
+        "accuracy": 0.95,
+        "falseGapRate": 0.05555555555555555,
+        "falseSufficientRate": 0,
+        "balancedAccuracy": 0.9722222222222222
+      },
+      "onRetrievedEvidence": {
+        "positives": 36,
+        "negatives": 4,
+        "tp": 34,
+        "fn": 2,
+        "tn": 4,
+        "fp": 0,
+        "accuracy": 0.95,
+        "falseGapRate": 0.05555555555555555,
+        "falseSufficientRate": 0,
+        "balancedAccuracy": 0.9722222222222222
+      }
+    },
+    "holdout": {
+      "endToEnd": {
+        "positives": 36,
+        "negatives": 28,
+        "tp": 31,
+        "fn": 5,
+        "tn": 22,
+        "fp": 6,
+        "accuracy": 0.828125,
+        "falseGapRate": 0.1388888888888889,
+        "falseSufficientRate": 0.21428571428571427,
+        "balancedAccuracy": 0.8234126984126984
+      },
+      "onRetrievedEvidence": {
+        "positives": 36,
+        "negatives": 28,
+        "tp": 31,
+        "fn": 5,
+        "tn": 22,
+        "fp": 6,
+        "accuracy": 0.828125,
+        "falseGapRate": 0.1388888888888889,
+        "falseSufficientRate": 0.21428571428571427,
+        "balancedAccuracy": 0.8234126984126984
+      }
+    },
+    "original-100": {
+      "endToEnd": {
+        "positives": 90,
+        "negatives": 10,
+        "tp": 83,
+        "fn": 7,
+        "tn": 10,
+        "fp": 0,
+        "accuracy": 0.93,
+        "falseGapRate": 0.07777777777777778,
+        "falseSufficientRate": 0,
+        "balancedAccuracy": 0.9611111111111111
+      },
+      "onRetrievedEvidence": {
+        "positives": 90,
+        "negatives": 10,
+        "tp": 83,
+        "fn": 7,
+        "tn": 10,
+        "fp": 0,
+        "accuracy": 0.93,
+        "falseGapRate": 0.07777777777777778,
+        "falseSufficientRate": 0,
+        "balancedAccuracy": 0.9611111111111111
+      }
+    },
+    "language-it": {
+      "endToEnd": {
+        "positives": 54,
+        "negatives": 24,
+        "tp": 48,
+        "fn": 6,
+        "tn": 19,
+        "fp": 5,
+        "accuracy": 0.8589743589743589,
+        "falseGapRate": 0.1111111111111111,
+        "falseSufficientRate": 0.20833333333333334,
+        "balancedAccuracy": 0.8402777777777778
+      },
+      "onRetrievedEvidence": {
+        "positives": 54,
+        "negatives": 24,
+        "tp": 48,
+        "fn": 6,
+        "tn": 19,
+        "fp": 5,
+        "accuracy": 0.8589743589743589,
+        "falseGapRate": 0.1111111111111111,
+        "falseSufficientRate": 0.20833333333333334,
+        "balancedAccuracy": 0.8402777777777778
+      }
+    },
+    "language-en": {
+      "endToEnd": {
+        "positives": 36,
+        "negatives": 22,
+        "tp": 35,
+        "fn": 1,
+        "tn": 17,
+        "fp": 5,
+        "accuracy": 0.896551724137931,
+        "falseGapRate": 0.027777777777777776,
+        "falseSufficientRate": 0.22727272727272727,
+        "balancedAccuracy": 0.8724747474747475
+      },
+      "onRetrievedEvidence": {
+        "positives": 36,
+        "negatives": 22,
+        "tp": 35,
+        "fn": 1,
+        "tn": 17,
+        "fp": 5,
+        "accuracy": 0.896551724137931,
+        "falseGapRate": 0.027777777777777776,
+        "falseSufficientRate": 0.22727272727272727,
+        "balancedAccuracy": 0.8724747474747475
+      }
+    }
+  },
+  "reranked": {
+    "all": {
+      "endToEnd": {
+        "positives": 90,
+        "negatives": 46,
+        "tp": 83,
+        "fn": 7,
+        "tn": 36,
+        "fp": 10,
+        "accuracy": 0.875,
+        "falseGapRate": 0.07777777777777778,
+        "falseSufficientRate": 0.21739130434782608,
+        "balancedAccuracy": 0.8524154589371981
+      },
+      "onRetrievedEvidence": {
+        "positives": 90,
+        "negatives": 46,
+        "tp": 83,
+        "fn": 7,
+        "tn": 36,
+        "fp": 10,
+        "accuracy": 0.875,
+        "falseGapRate": 0.07777777777777778,
+        "falseSufficientRate": 0.21739130434782608,
+        "balancedAccuracy": 0.8524154589371981
+      }
+    },
+    "development": {
+      "endToEnd": {
+        "positives": 18,
+        "negatives": 14,
+        "tp": 18,
+        "fn": 0,
+        "tn": 10,
+        "fp": 4,
+        "accuracy": 0.875,
+        "falseGapRate": 0,
+        "falseSufficientRate": 0.2857142857142857,
+        "balancedAccuracy": 0.8571428571428572
+      },
+      "onRetrievedEvidence": {
+        "positives": 18,
+        "negatives": 14,
+        "tp": 18,
+        "fn": 0,
+        "tn": 10,
+        "fp": 4,
+        "accuracy": 0.875,
+        "falseGapRate": 0,
+        "falseSufficientRate": 0.2857142857142857,
+        "balancedAccuracy": 0.8571428571428572
+      }
+    },
+    "inspected-regression": {
+      "endToEnd": {
+        "positives": 36,
+        "negatives": 4,
+        "tp": 34,
+        "fn": 2,
+        "tn": 4,
+        "fp": 0,
+        "accuracy": 0.95,
+        "falseGapRate": 0.05555555555555555,
+        "falseSufficientRate": 0,
+        "balancedAccuracy": 0.9722222222222222
+      },
+      "onRetrievedEvidence": {
+        "positives": 36,
+        "negatives": 4,
+        "tp": 34,
+        "fn": 2,
+        "tn": 4,
+        "fp": 0,
+        "accuracy": 0.95,
+        "falseGapRate": 0.05555555555555555,
+        "falseSufficientRate": 0,
+        "balancedAccuracy": 0.9722222222222222
+      }
+    },
+    "holdout": {
+      "endToEnd": {
+        "positives": 36,
+        "negatives": 28,
+        "tp": 31,
+        "fn": 5,
+        "tn": 22,
+        "fp": 6,
+        "accuracy": 0.828125,
+        "falseGapRate": 0.1388888888888889,
+        "falseSufficientRate": 0.21428571428571427,
+        "balancedAccuracy": 0.8234126984126984
+      },
+      "onRetrievedEvidence": {
+        "positives": 36,
+        "negatives": 28,
+        "tp": 31,
+        "fn": 5,
+        "tn": 22,
+        "fp": 6,
+        "accuracy": 0.828125,
+        "falseGapRate": 0.1388888888888889,
+        "falseSufficientRate": 0.21428571428571427,
+        "balancedAccuracy": 0.8234126984126984
+      }
+    },
+    "original-100": {
+      "endToEnd": {
+        "positives": 90,
+        "negatives": 10,
+        "tp": 83,
+        "fn": 7,
+        "tn": 10,
+        "fp": 0,
+        "accuracy": 0.93,
+        "falseGapRate": 0.07777777777777778,
+        "falseSufficientRate": 0,
+        "balancedAccuracy": 0.9611111111111111
+      },
+      "onRetrievedEvidence": {
+        "positives": 90,
+        "negatives": 10,
+        "tp": 83,
+        "fn": 7,
+        "tn": 10,
+        "fp": 0,
+        "accuracy": 0.93,
+        "falseGapRate": 0.07777777777777778,
+        "falseSufficientRate": 0,
+        "balancedAccuracy": 0.9611111111111111
+      }
+    },
+    "language-it": {
+      "endToEnd": {
+        "positives": 54,
+        "negatives": 24,
+        "tp": 48,
+        "fn": 6,
+        "tn": 19,
+        "fp": 5,
+        "accuracy": 0.8589743589743589,
+        "falseGapRate": 0.1111111111111111,
+        "falseSufficientRate": 0.20833333333333334,
+        "balancedAccuracy": 0.8402777777777778
+      },
+      "onRetrievedEvidence": {
+        "positives": 54,
+        "negatives": 24,
+        "tp": 48,
+        "fn": 6,
+        "tn": 19,
+        "fp": 5,
+        "accuracy": 0.8589743589743589,
+        "falseGapRate": 0.1111111111111111,
+        "falseSufficientRate": 0.20833333333333334,
+        "balancedAccuracy": 0.8402777777777778
+      }
+    },
+    "language-en": {
+      "endToEnd": {
+        "positives": 36,
+        "negatives": 22,
+        "tp": 35,
+        "fn": 1,
+        "tn": 17,
+        "fp": 5,
+        "accuracy": 0.896551724137931,
+        "falseGapRate": 0.027777777777777776,
+        "falseSufficientRate": 0.22727272727272727,
+        "balancedAccuracy": 0.8724747474747475
+      },
+      "onRetrievedEvidence": {
+        "positives": 36,
+        "negatives": 22,
+        "tp": 35,
+        "fn": 1,
+        "tn": 17,
+        "fp": 5,
+        "accuracy": 0.896551724137931,
+        "falseGapRate": 0.027777777777777776,
+        "falseSufficientRate": 0.22727272727272727,
+        "balancedAccuracy": 0.8724747474747475
+      }
+    }
+  },
+  "developmentAblations": [
+    {
+      "method": "max_rerank_score",
+      "threshold": -5,
+      "falseSufficient": 4,
+      "falseGaps": 0
+    },
+    {
+      "method": "max_rerank_score",
+      "threshold": -4,
+      "falseSufficient": 2,
+      "falseGaps": 1
+    },
+    {
+      "method": "max_rerank_score",
+      "threshold": -3,
+      "falseSufficient": 2,
+      "falseGaps": 3
+    },
+    {
+      "method": "max_rerank_score",
+      "threshold": -2,
+      "falseSufficient": 1,
+      "falseGaps": 4
+    },
+    {
+      "method": "max_rerank_score",
+      "threshold": -1,
+      "falseSufficient": 1,
+      "falseGaps": 5
+    },
+    {
+      "method": "max_rerank_score",
+      "threshold": 0,
+      "falseSufficient": 0,
+      "falseGaps": 7
+    },
+    {
+      "method": "page_content_coverage",
+      "threshold": 0.6,
+      "falseSufficient": 2,
+      "falseGaps": 5
+    },
+    {
+      "method": "page_content_coverage",
+      "threshold": 0.7,
+      "falseSufficient": 2,
+      "falseGaps": 8
+    },
+    {
+      "method": "page_content_coverage",
+      "threshold": 0.8,
+      "falseSufficient": 1,
+      "falseGaps": 12
+    },
+    {
+      "method": "page_content_coverage",
+      "threshold": 0.9,
+      "falseSufficient": 0,
+      "falseGaps": 14
+    },
+    {
+      "method": "page_content_coverage",
+      "threshold": 1,
+      "falseSufficient": 0,
+      "falseGaps": 14
+    },
+    {
+      "method": "passage_content_coverage",
+      "threshold": 0.6,
+      "falseSufficient": 1,
+      "falseGaps": 6
+    },
+    {
+      "method": "passage_content_coverage",
+      "threshold": 0.7,
+      "falseSufficient": 1,
+      "falseGaps": 10
+    },
+    {
+      "method": "passage_content_coverage",
+      "threshold": 0.8,
+      "falseSufficient": 1,
+      "falseGaps": 14
+    },
+    {
+      "method": "passage_content_coverage",
+      "threshold": 0.9,
+      "falseSufficient": 0,
+      "falseGaps": 17
+    },
+    {
+      "method": "passage_content_coverage",
+      "threshold": 1,
+      "falseSufficient": 0,
+      "falseGaps": 17
+    }
+  ],
+  "developmentScores": [
+    {
+      "id": "durability-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": 2.0361130237579346,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 1,
+        "passage": 0.6666666666666666
+      }
+    },
+    {
+      "id": "static-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": -4.969507217407227,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.5,
+        "passage": 0.5
+      }
+    },
+    {
+      "id": "usage-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": 2.6540253162384033,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.5,
+        "passage": 0.5
+      }
+    },
+    {
+      "id": "audit-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": -3.875808000564575,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.6666666666666666,
+        "passage": 0.5
+      }
+    },
+    {
+      "id": "claims-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": 2.134777307510376,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 1,
+        "passage": 1
+      }
+    },
+    {
+      "id": "measurements-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": -0.1999189257621765,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 1,
+        "passage": 0.8571428571428571
+      }
+    },
+    {
+      "id": "references-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": 2.6154537200927734,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 1,
+        "passage": 0.8571428571428571
+      }
+    },
+    {
+      "id": "fallback-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": 1.6463292837142944,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.75,
+        "passage": 0.75
+      }
+    },
+    {
+      "id": "impact-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": -3.774582862854004,
+        "scoredCandidates": 7
+      },
+      "coherence": {
+        "page": 0.5,
+        "passage": 0.3333333333333333
+      }
+    },
+    {
+      "id": "boundary-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": -2.231633186340332,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.8333333333333334,
+        "passage": 0.6666666666666666
+      }
+    },
+    {
+      "id": "state-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": 3.499053955078125,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.5,
+        "passage": 0.5
+      }
+    },
+    {
+      "id": "workspace-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": 4.14703369140625,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.75,
+        "passage": 0.75
+      }
+    },
+    {
+      "id": "drift-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": 0.7238548398017883,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.8333333333333334,
+        "passage": 0.8333333333333334
+      }
+    },
+    {
+      "id": "setup-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": 2.5660109519958496,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.7142857142857143,
+        "passage": 0.7142857142857143
+      }
+    },
+    {
+      "id": "trust-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": -0.5987030267715454,
+        "scoredCandidates": 10
+      },
+      "coherence": {
+        "page": 0.6,
+        "passage": 0.6
+      }
+    },
+    {
+      "id": "ocr-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": -1.3119275569915771,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.5,
+        "passage": 0.3333333333333333
+      }
+    },
+    {
+      "id": "security-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": 0.9517720937728882,
+        "scoredCandidates": 10
+      },
+      "coherence": {
+        "page": 0.6,
+        "passage": 0.6
+      }
+    },
+    {
+      "id": "remote-0",
+      "answerable": true,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": 0.9146006107330322,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.75,
+        "passage": 0.75
+      }
+    },
+    {
+      "id": "absent-medical-0",
+      "answerable": false,
+      "sufficient": false,
+      "rerank": {
+        "maxScore": -5.913451194763184,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0,
+        "passage": 0
+      }
+    },
+    {
+      "id": "absent-astronomy-0",
+      "answerable": false,
+      "sufficient": false,
+      "rerank": {
+        "maxScore": -7.419600963592529,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0,
+        "passage": 0
+      }
+    },
+    {
+      "id": "indomain-neo4j",
+      "answerable": false,
+      "sufficient": false,
+      "rerank": {
+        "maxScore": -6.285173416137695,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 1,
+        "passage": 0.5
+      }
+    },
+    {
+      "id": "indomain-prometheus",
+      "answerable": false,
+      "sufficient": false,
+      "rerank": {
+        "maxScore": -3.850693702697754,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.6666666666666666,
+        "passage": 0.6666666666666666
+      }
+    },
+    {
+      "id": "indomain-jetbrains",
+      "answerable": false,
+      "sufficient": false,
+      "rerank": {
+        "maxScore": -2.5358564853668213,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.25,
+        "passage": 0.25
+      }
+    },
+    {
+      "id": "indomain-slack",
+      "answerable": false,
+      "sufficient": false,
+      "rerank": {
+        "maxScore": -0.7660413980484009,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.6,
+        "passage": 0.6
+      }
+    },
+    {
+      "id": "indomain-confluence",
+      "answerable": false,
+      "sufficient": false,
+      "rerank": {
+        "maxScore": -5.485461235046387,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.25,
+        "passage": 0.25
+      }
+    },
+    {
+      "id": "indomain-cron",
+      "answerable": false,
+      "sufficient": false,
+      "rerank": {
+        "maxScore": -2.3686089515686035,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.4444444444444444,
+        "passage": 0.3333333333333333
+      }
+    },
+    {
+      "id": "indomain-rotation",
+      "answerable": false,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": -0.9106554388999939,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.8,
+        "passage": 0.8
+      }
+    },
+    {
+      "id": "indomain-encryption",
+      "answerable": false,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": -4.386805534362793,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.5,
+        "passage": 0.5
+      }
+    },
+    {
+      "id": "indomain-cuda",
+      "answerable": false,
+      "sufficient": false,
+      "rerank": {
+        "maxScore": -4.947402477264404,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 1,
+        "passage": 0.75
+      }
+    },
+    {
+      "id": "indomain-pdf-size",
+      "answerable": false,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": -4.091006278991699,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.75,
+        "passage": 0.5
+      }
+    },
+    {
+      "id": "indomain-pgvector",
+      "answerable": false,
+      "sufficient": true,
+      "rerank": {
+        "maxScore": -2.2161362171173096,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.5714285714285714,
+        "passage": 0.5714285714285714
+      }
+    },
+    {
+      "id": "indomain-helm",
+      "answerable": false,
+      "sufficient": false,
+      "rerank": {
+        "maxScore": -7.467714786529541,
+        "scoredCandidates": 32
+      },
+      "coherence": {
+        "page": 0.3333333333333333,
+        "passage": 0.3333333333333333
+      }
+    }
+  ],
+  "runtimeLive": {
+    "generatedAt": "2026-09-26T22:35:00.024Z",
+    "platform": "linux/x64",
+    "cpu": "AMD Ryzen 9 5950X 16-Core Processor",
+    "totalMemoryBytes": 32465682432,
+    "node": "v24.21.0",
+    "fixtureSha256": "8b9e3f5ed32ef95a87865a006a37baef447f697019cf396523f8b1e08fc14fc3",
+    "declaredSlots": 1,
+    "embeddingProvider": {
+      "id": "openai-compatible-873f5f224174",
+      "model": "qwen3-embedding:0.6b",
+      "version": "unversioned",
+      "dimensions": 1024
+    },
+    "reranker": {
+      "id": "http-rerank-7f6ade0e028a",
+      "model": "bge-reranker-v2-m3-q8_0",
+      "version": "unversioned"
+    },
+    "initialIndexingMs": 5151.418788999999,
+    "preparationMs": 74.9998400000004,
+    "preparationStatus": {
+      "provider": {
+        "id": "openai-compatible-873f5f224174",
+        "model": "qwen3-embedding:0.6b",
+        "version": "unversioned",
+        "dimensions": 1024
+      },
+      "engine": {
+        "id": "lsh-cosine",
+        "version": "1",
+        "dimensions": 1024,
+        "tables": 10,
+        "bitsPerTable": 10,
+        "probes": 4,
+        "minimumScore": 0.55,
+        "seed": "knowledge-rail-semantic-lsh-v1"
+      },
+      "passageCount": 124,
+      "pageCount": 59,
+      "totalPages": 59,
+      "pendingPages": 0,
+      "queryProviderState": "ready",
+      "state": "ready",
+      "dtype": "i8",
+      "candidatePolicy": "threshold",
+      "generatedAt": "2026-09-26T22:34:54.162Z"
+    },
+    "memoryBefore": {
+      "processRssBytes": 87363584,
+      "services": []
+    },
+    "memoryAfter": {
+      "processRssBytes": 192860160,
+      "services": []
+    },
+    "rows": [
+      {
+        "id": "durability-0",
+        "split": "development",
+        "pool": 24,
+        "wallMs": 341.10073699999975,
+        "recovered": 1,
+        "expected": 1,
+        "semantic": {
+          "enabled": true,
+          "available": true,
+          "candidateCount": 31,
+          "visitedBuckets": 40,
+          "vectorCount": 124,
+          "thresholdRejected": 30,
+          "poolTruncated": 0,
+          "candidatePolicy": "threshold",
+          "filteredPassages": 0,
+          "stalePassages": 0,
+          "deduplicatedPassages": 0,
+          "returnedPassages": 1,
+          "distinctPages": 1,
+          "descriptor": {
+            "provider": {
+              "id": "openai-compatible-873f5f224174",
+              "model": "qwen3-embedding:0.6b",
+              "version": "unversioned",
+              "dimensions": 1024
+            },
+            "engine": {
+              "id": "lsh-cosine",
+              "version": "1",
+              "dimensions": 1024,
+              "tables": 10,
+              "bitsPerTable": 10,
+              "probes": 4,
+              "minimumScore": 0.55,
+              "seed": "knowledge-rail-semantic-lsh-v1"
+            },
+            "passageCount": 124,
+            "pageCount": 59,
+            "totalPages": 59,
+            "pendingPages": 0,
+            "queryProviderState": "ready",
+            "state": "ready",
+            "dtype": "i8",
+            "candidatePolicy": "threshold",
+            "generatedAt": "2026-09-26T22:34:54.162Z"
+          },
+          "budgetMs": 1500,
+          "elapsedMs": 133.15330900000026
+        },
+        "rerank": {
+          "enabled": true,
+          "applied": true,
+          "candidateCount": 24,
+          "calls": 1,
+          "pairs": 24,
+          "cachedPairs": 0,
+          "budgetMs": 0,
+          "elapsedMs": 185.56724500000018,
+          "provider": {
+            "id": "http-rerank-7f6ade0e028a",
+            "model": "bge-reranker-v2-m3-q8_0",
+            "version": "unversioned"
+          }
+        },
+        "hitPaths": [
+          "memory/memory-00.md",
+          "hosting/hosting-09.md",
+          "memory/memory-05.md",
+          "code/code-01.md",
+          "readme/readme-21.md",
+          "code/code-06.md",
+          "readme/readme-14.md",
+          "memory/memory-04.md"
+        ],
+        "scores": [
+          {
+            "path": "memory/memory-00.md",
+            "score": 2.0361130237579346
+          },
+          {
+            "path": "hosting/hosting-09.md",
+            "score": 0.7853953242301941
+          },
+          {
+            "path": "memory/memory-05.md",
+            "score": -1.9271149635314941
+          },
+          {
+            "path": "code/code-01.md",
+            "score": -3.751743793487549
+          },
+          {
+            "path": "readme/readme-21.md",
+            "score": -4.392684459686279
+          },
+          {
+            "path": "code/code-06.md",
+            "score": -4.504014492034912
+          },
+          {
+            "path": "readme/readme-14.md",
+            "score": -5.765995502471924
+          },
+          {
+            "path": "memory/memory-04.md",
+            "score": -5.809979438781738
+          },
+          {
+            "path": "readme/readme-11.md",
+            "score": -5.96468448638916
+          },
+          {
+            "path": "readme/readme-15.md",
+            "score": -6.000053405761719
+          },
+          {
+            "path": "code/code-04.md",
+            "score": -6.116705894470215
+          },
+          {
+            "path": "readme/readme-13.md",
+            "score": -6.2153520584106445
+          },
+          {
+            "path": "hooks/hooks-04.md",
+            "score": -6.408061981201172
+          },
+          {
+            "path": "hosting/hosting-07.md",
+            "score": -6.802239894866943
+          },
+          {
+            "path": "hooks/hooks-02.md",
+            "score": -7.175426006317139
+          },
+          {
+            "path": "hosting/hosting-01.md",
+            "score": -7.248128890991211
+          },
+          {
+            "path": "code/code-00.md",
+            "score": -7.261038303375244
+          },
+          {
+            "path": "hosting/hosting-00.md",
+            "score": -7.33587121963501
+          },
+          {
+            "path": "readme/readme-10.md",
+            "score": -8.52318286895752
+          },
+          {
+            "path": "readme/readme-19.md",
+            "score": -8.888507843017578
+          },
+          {
+            "path": "readme/readme-02.md",
+            "score": -9.190171241760254
+          },
+          {
+            "path": "readme/readme-00.md",
+            "score": -9.432210922241211
+          },
+          {
+            "path": "readme/readme-16.md",
+            "score": -10.019545555114746
+          },
+          {
+            "path": "readme/readme-24.md",
+            "score": -10.590096473693848
+          },
+          {
+            "path": "memory/memory-03.md"
+          },
+          {
+            "path": "memory/memory-02.md"
+          },
+          {
+            "path": "memory/memory-01.md"
+          },
+          {
+            "path": "hosting/hosting-06.md"
+          },
+          {
+            "path": "code/code-02.md"
+          },
+          {
+            "path": "code/code-03.md"
+          },
+          {
+            "path": "hooks/hooks-00.md"
+          },
+          {
+            "path": "security/security-02.md"
+          }
+        ],
+        "memory": {
+          "processRssBytes": 172937216,
+          "services": []
+        }
+      },
+      {
+        "id": "durability-0",
+        "split": "development",
+        "pool": 32,
+        "wallMs": 293.207187,
+        "recovered": 1,
+        "expected": 1,
+        "semantic": {
+          "enabled": true,
+          "available": true,
+          "candidateCount": 31,
+          "visitedBuckets": 40,
+          "vectorCount": 124,
+          "thresholdRejected": 30,
+          "poolTruncated": 0,
+          "candidatePolicy": "threshold",
+          "filteredPassages": 0,
+          "stalePassages": 0,
+          "deduplicatedPassages": 0,
+          "returnedPassages": 1,
+          "distinctPages": 1,
+          "descriptor": {
+            "provider": {
+              "id": "openai-compatible-873f5f224174",
+              "model": "qwen3-embedding:0.6b",
+              "version": "unversioned",
+              "dimensions": 1024
+            },
+            "engine": {
+              "id": "lsh-cosine",
+              "version": "1",
+              "dimensions": 1024,
+              "tables": 10,
+              "bitsPerTable": 10,
+              "probes": 4,
+              "minimumScore": 0.55,
+              "seed": "knowledge-rail-semantic-lsh-v1"
+            },
+            "passageCount": 124,
+            "pageCount": 59,
+            "totalPages": 59,
+            "pendingPages": 0,
+            "queryProviderState": "ready",
+            "state": "ready",
+            "dtype": "i8",
+            "candidatePolicy": "threshold",
+            "generatedAt": "2026-09-26T22:34:54.162Z"
+          },
+          "budgetMs": 1500,
+          "elapsedMs": 50.09234600000036
+        },
+        "rerank": {
+          "enabled": true,
+          "applied": true,
+          "candidateCount": 32,
+          "calls": 1,
+          "pairs": 32,
+          "cachedPairs": 0,
+          "budgetMs": 0,
+          "elapsedMs": 240.85645299999942,
+          "provider": {
+            "id": "http-rerank-7f6ade0e028a",
+            "model": "bge-reranker-v2-m3-q8_0",
+            "version": "unversioned"
+          }
+        },
+        "hitPaths": [
+          "memory/memory-00.md",
+          "hosting/hosting-09.md",
+          "memory/memory-05.md",
+          "code/code-01.md",
+          "readme/readme-21.md",
+          "code/code-06.md",
+          "readme/readme-14.md",
+          "memory/memory-04.md"
+        ],
+        "scores": [
+          {
+            "path": "memory/memory-00.md",
+            "score": 2.0361130237579346
+          },
+          {
+            "path": "hosting/hosting-09.md",
+            "score": 0.7853953242301941
+          },
+          {
+            "path": "memory/memory-05.md",
+            "score": -1.9271149635314941
+          },
+          {
+            "path": "code/code-01.md",
+            "score": -3.751743793487549
+          },
+          {
+            "path": "readme/readme-21.md",
+            "score": -4.392684459686279
+          },
+          {
+            "path": "code/code-06.md",
+            "score": -4.504014492034912
+          },
+          {
+            "path": "memory/memory-01.md",
+            "score": -5.659339904785156
+          },
+          {
+            "path": "readme/readme-14.md",
+            "score": -5.765995502471924
+          },
+          {
+            "path": "memory/memory-04.md",
+            "score": -5.809979438781738
+          },
+          {
+            "path": "readme/readme-11.md",
+            "score": -5.96468448638916
+          },
+          {
+            "path": "readme/readme-15.md",
+            "score": -6.000053405761719
+          },
+          {
+            "path": "code/code-04.md",
+            "score": -6.116705894470215
+          },
+          {
+            "path": "readme/readme-13.md",
+            "score": -6.2153520584106445
+          },
+          {
+            "path": "memory/memory-03.md",
+            "score": -6.403243064880371
+          },
+          {
+            "path": "hooks/hooks-04.md",
+            "score": -6.408061981201172
+          },
+          {
+            "path": "hosting/hosting-07.md",
+            "score": -6.802239894866943
+          },
+          {
+            "path": "memory/memory-02.md",
+            "score": -6.905849933624268
+          },
+          {
+            "path": "code/code-02.md",
+            "score": -6.956958770751953
+          },
+          {
+            "path": "hooks/hooks-02.md",
+            "score": -7.175426006317139
+          },
+          {
+            "path": "hosting/hosting-01.md",
+            "score": -7.248128890991211
+          },
+          {
+            "path": "code/code-00.md",
+            "score": -7.261038303375244
+          },
+          {
+            "path": "hosting/hosting-00.md",
+            "score": -7.33587121963501
+          },
+          {
+            "path": "code/code-03.md",
+            "score": -7.8453874588012695
+          },
+          {
+            "path": "readme/readme-10.md",
+            "score": -8.52318286895752
+          },
+          {
+            "path": "readme/readme-19.md",
+            "score": -8.888507843017578
+          },
+          {
+            "path": "readme/readme-02.md",
+            "score": -9.190171241760254
+          },
+          {
+            "path": "hosting/hosting-06.md",
+            "score": -9.30877685546875
+          },
+          {
+            "path": "readme/readme-00.md",
+            "score": -9.432210922241211
+          },
+          {
+            "path": "security/security-02.md",
+            "score": -9.754068374633789
+          },
+          {
+            "path": "hooks/hooks-00.md",
+            "score": -9.89503288269043
+          },
+          {
+            "path": "readme/readme-16.md",
+            "score": -10.019545555114746
+          },
+          {
+            "path": "readme/readme-24.md",
+            "score": -10.590096473693848
+          }
+        ],
+        "memory": {
+          "processRssBytes": 177131520,
+          "services": []
+        }
+      },
+      {
+        "id": "durability-1",
+        "split": "evaluation",
+        "pool": 24,
+        "wallMs": 301.0873679999995,
+        "recovered": 1,
+        "expected": 1,
+        "semantic": {
+          "enabled": true,
+          "available": true,
+          "candidateCount": 14,
+          "visitedBuckets": 40,
+          "vectorCount": 124,
+          "thresholdRejected": 14,
+          "poolTruncated": 0,
+          "candidatePolicy": "threshold",
+          "filteredPassages": 0,
+          "stalePassages": 0,
+          "deduplicatedPassages": 0,
+          "returnedPassages": 0,
+          "distinctPages": 0,
+          "descriptor": {
+            "provider": {
+              "id": "openai-compatible-873f5f224174",
+              "model": "qwen3-embedding:0.6b",
+              "version": "unversioned",
+              "dimensions": 1024
+            },
+            "engine": {
+              "id": "lsh-cosine",
+              "version": "1",
+              "dimensions": 1024,
+              "tables": 10,
+              "bitsPerTable": 10,
+              "probes": 4,
+              "minimumScore": 0.55,
+              "seed": "knowledge-rail-semantic-lsh-v1"
+            },
+            "passageCount": 124,
+            "pageCount": 59,
+            "totalPages": 59,
+            "pendingPages": 0,
+            "queryProviderState": "ready",
+            "state": "ready",
+            "dtype": "i8",
+            "candidatePolicy": "threshold",
+            "generatedAt": "2026-09-26T22:34:54.162Z"
+          },
+          "budgetMs": 1500,
+          "elapsedMs": 108.6265599999997
+        },
+        "rerank": {
+          "enabled": true,
+          "applied": true,
+          "candidateCount": 24,
+          "calls": 1,
+          "pairs": 24,
+          "cachedPairs": 0,
+          "budgetMs": 0,
+          "elapsedMs": 190.79816500000015,
+          "provider": {
+            "id": "http-rerank-7f6ade0e028a",
+            "model": "bge-reranker-v2-m3-q8_0",
+            "version": "unversioned"
+          }
+        },
+        "hitPaths": [
+          "memory/memory-00.md",
+          "readme/readme-21.md",
+          "memory/memory-05.md",
+          "hosting/hosting-08.md",
+          "hosting/hosting-09.md",
+          "readme/readme-15.md",
+          "readme/readme-13.md",
+          "readme/readme-14.md"
+        ],
+        "scores": [
+          {
+            "path": "memory/memory-00.md",
+            "score": -2.315920352935791
+          },
+          {
+            "path": "readme/readme-21.md",
+            "score": -3.708620548248291
+          },
+          {
+            "path": "hosting/hosting-07.md",
+            "score": -4.081594467163086
+          },
+          {
+            "path": "memory/memory-05.md",
+            "score": -4.296116828918457
+          },
+          {
+            "path": "hosting/hosting-08.md",
+            "score": -4.677664756774902
+          },
+          {
+            "path": "hosting/hosting-09.md",
+            "score": -5.5557122230529785
+          },
+          {
+            "path": "readme/readme-15.md",
+            "score": -5.642566680908203
+          },
+          {
+            "path": "hosting/hosting-05.md",
+            "score": -6.416660785675049
+          },
+          {
+            "path": "readme/readme-13.md",
+            "score": -6.452633380889893
+          },
+          {
+            "path": "readme/readme-14.md",
+            "score": -6.471489906311035
+          },
+          {
+            "path": "hooks/hooks-02.md",
+            "score": -6.607641696929932
+          },
+          {
+            "path": "readme/readme-00.md",
+            "score": -6.614336013793945
+          },
+          {
+            "path": "code/code-03.md",
+            "score": -6.646485805511475
+          },
+          {
+            "path": "hosting/hosting-03.md",
+            "score": -6.723267555236816
+          },
+          {
+            "path": "code/code-00.md",
+            "score": -6.848687171936035
+          },
+          {
+            "path": "memory/memory-04.md",
+            "score": -7.0399980545043945
+          },
+          {
+            "path": "code/code-01.md",
+            "score": -8.173754692077637
+          },
+          {
+            "path": "readme/readme-20.md",
+            "score": -8.373374938964844
+          },
+          {
+            "path": "readme/readme-17.md",
+            "score": -8.78287124633789
+          },
+          {
+            "path": "hooks/hooks-03.md",
+            "score": -9.438346862792969
+          },
+          {
+            "path": "hooks/hooks-06.md",
+            "score": -10.373275756835938
+          },
+          {
+            "path": "hosting/hosting-00.md",
+            "score": -10.449949264526367
+          },
+          {
+            "path": "hosting/hosting-04.md",
+            "score": -10.631722450256348
+          },
+          {
+            "path": "security/security-02.md",
+            "score": -10.741724014282227
+          },
+          {
+            "path": "code/code-05.md"
+          },
+          {
+            "path": "readme/readme-16.md"
+          },
+          {
+            "path": "readme/readme-25.md"
+          },
+          {
+            "path": "readme/readme-12.md"
+          },
+          {
+            "path": "readme/readme-03.md"
+          },
+          {
+            "path": "readme/readme-09.md"
+          },
+          {
+            "path": "readme/readme-19.md"
+          },
+          {
+            "path": "readme/readme-02.md"
+          }
+        ],
+        "memory": {
+          "processRssBytes": 177655808,
+          "services": []
+        }
+      },
+      {
+        "id": "durability-1",
+        "split": "evaluation",
+        "pool": 32,
+        "wallMs": 276.5247279999994,
+        "recovered": 1,
+        "expected": 1,
+        "semantic": {
+          "enabled": true,
+          "available": true,
+          "candidateCount": 14,
+          "visitedBuckets": 40,
+          "vectorCount": 124,
+          "thresholdRejected": 14,
+          "poolTruncated": 0,
+          "candidatePolicy": "threshold",
+          "filteredPassages": 0,
+          "stalePassages": 0,
+          "deduplicatedPassages": 0,
+          "returnedPassages": 0,
+          "distinctPages": 0,
+          "descriptor": {
+            "provider": {
+              "id": "openai-compatible-873f5f224174",
+              "model": "qwen3-embedding:0.6b",
+              "version": "unversioned",
+              "dimensions": 1024
+            },
+            "engine": {
+              "id": "lsh-cosine",
+              "version": "1",
+              "dimensions": 1024,
+              "tables": 10,
+              "bitsPerTable": 10,
+              "probes": 4,
+              "minimumScore": 0.55,
+              "seed": "knowledge-rail-semantic-lsh-v1"
+            },
+            "passageCount": 124,
+            "pageCount": 59,
+            "totalPages": 59,
+            "pendingPages": 0,
+            "queryProviderState": "ready",
+            "state": "ready",
+            "dtype": "i8",
+            "candidatePolicy": "threshold",
+            "generatedAt": "2026-09-26T22:34:54.162Z"
+          },
+          "budgetMs": 1500,
+          "elapsedMs": 43.720948000000135
+        },
+        "rerank": {
+          "enabled": true,
+          "applied": true,
+          "candidateCount": 32,
+          "calls": 1,
+          "pairs": 32,
+          "cachedPairs": 0,
+          "budgetMs": 0,
+          "elapsedMs": 230.8602149999997,
+          "provider": {
+            "id": "http-rerank-7f6ade0e028a",
+            "model": "bge-reranker-v2-m3-q8_0",
+            "version": "unversioned"
+          }
+        },
+        "hitPaths": [
+          "memory/memory-00.md",
+          "readme/readme-21.md",
+          "memory/memory-05.md",
+          "hosting/hosting-08.md",
+          "code/code-05.md",
+          "hosting/hosting-09.md",
+          "readme/readme-15.md",
+          "readme/readme-13.md"
+        ],
+        "scores": [
+          {
+            "path": "memory/memory-00.md",
+            "score": -2.315920352935791
+          },
+          {
+            "path": "readme/readme-21.md",
+            "score": -3.708620548248291
+          },
+          {
+            "path": "hosting/hosting-07.md",
+            "score": -4.081594467163086
+          },
+          {
+            "path": "memory/memory-05.md",
+            "score": -4.296116828918457
+          },
+          {
+            "path": "hosting/hosting-08.md",
+            "score": -4.677664756774902
+          },
+          {
+            "path": "code/code-05.md",
+            "score": -5.235576629638672
+          },
+          {
+            "path": "hosting/hosting-09.md",
+            "score": -5.5557122230529785
+          },
+          {
+            "path": "readme/readme-15.md",
+            "score": -5.642566680908203
+          },
+          {
+            "path": "hosting/hosting-05.md",
+            "score": -6.416660785675049
+          },
+          {
+            "path": "readme/readme-13.md",
+            "score": -6.452633380889893
+          },
+          {
+            "path": "readme/readme-14.md",
+            "score": -6.471489906311035
+          },
+          {
+            "path": "readme/readme-19.md",
+            "score": -6.524138450622559
+          },
+          {
+            "path": "hooks/hooks-02.md",
+            "score": -6.607641696929932
+          },
+          {
+            "path": "readme/readme-00.md",
+            "score": -6.614336013793945
+          },
+          {
+            "path": "code/code-03.md",
+            "score": -6.646485805511475
+          },
+          {
+            "path": "hosting/hosting-03.md",
+            "score": -6.723267555236816
+          },
+          {
+            "path": "code/code-00.md",
+            "score": -6.848687171936035
+          },
+          {
+            "path": "memory/memory-04.md",
+            "score": -7.0399980545043945
+          },
+          {
+            "path": "code/code-01.md",
+            "score": -8.173754692077637
+          },
+          {
+            "path": "readme/readme-25.md",
+            "score": -8.2420654296875
+          },
+          {
+            "path": "readme/readme-20.md",
+            "score": -8.373374938964844
+          },
+          {
+            "path": "readme/readme-17.md",
+            "score": -8.78287124633789
+          },
+          {
+            "path": "readme/readme-12.md",
+            "score": -8.927541732788086
+          },
+          {
+            "path": "readme/readme-02.md",
+            "score": -9.083572387695312
+          },
+          {
+            "path": "hooks/hooks-03.md",
+            "score": -9.438346862792969
+          },
+          {
+            "path": "readme/readme-16.md",
+            "score": -9.505044937133789
+          },
+          {
+            "path": "readme/readme-03.md",
+            "score": -9.976032257080078
+          },
+          {
+            "path": "readme/readme-09.md",
+            "score": -10.150625228881836
+          },
+          {
+            "path": "hooks/hooks-06.md",
+            "score": -10.373275756835938
+          },
+          {
+            "path": "hosting/hosting-00.md",
+            "score": -10.449949264526367
+          },
+          {
+            "path": "hosting/hosting-04.md",
+            "score": -10.631722450256348
+          },
+          {
+            "path": "security/security-02.md",
+            "score": -10.741724014282227
+          }
+        ],
+        "memory": {
+          "processRssBytes": 177917952,
+          "services": []
+        }
+      },
+      {
+        "id": "durability-2",
+        "split": "evaluation",
+        "pool": 24,
+        "wallMs": 272.0356529999999,
+        "recovered": 1,
+        "expected": 1,
+        "semantic": {
+          "enabled": true,
+          "available": true,
+          "candidateCount": 22,
+          "visitedBuckets": 40,
+          "vectorCount": 124,
+          "thresholdRejected": 21,
+          "poolTruncated": 0,
+          "candidatePolicy": "threshold",
+          "filteredPassages": 0,
+          "stalePassages": 0,
+          "deduplicatedPassages": 0,
+          "returnedPassages": 1,
+          "distinctPages": 1,
+          "descriptor": {
+            "provider": {
+              "id": "openai-compatible-873f5f224174",
+              "model": "qwen3-embedding:0.6b",
+              "version": "unversioned",
+              "dimensions": 1024
+            },
+            "engine": {
+              "id": "lsh-cosine",
+              "version": "1",
+              "dimensions": 1024,
+              "tables": 10,
+              "bitsPerTable": 10,
+              "probes": 4,
+              "minimumScore": 0.55,
+              "seed": "knowledge-rail-semantic-lsh-v1"
+            },
+            "passageCount": 124,
+            "pageCount": 59,
+            "totalPages": 59,
+            "pendingPages": 0,
+            "queryProviderState": "ready",
+            "state": "ready",
+            "dtype": "i8",
+            "candidatePolicy": "threshold",
+            "generatedAt": "2026-09-26T22:34:54.162Z"
+          },
+          "budgetMs": 1500,
+          "elapsedMs": 84.43051300000025
+        },
+        "rerank": {
+          "enabled": true,
+          "applied": true,
+          "candidateCount": 24,
+          "calls": 1,
+          "pairs": 24,
+          "cachedPairs": 0,
+          "budgetMs": 0,
+          "elapsedMs": 186.03214899999966,
+          "provider": {
+            "id": "http-rerank-7f6ade0e028a",
+            "model": "bge-reranker-v2-m3-q8_0",
+            "version": "unversioned"
+          }
+        },
+        "hitPaths": [
+          "memory/memory-00.md",
+          "code/code-06.md",
+          "readme/readme-21.md",
+          "readme/readme-15.md",
+          "readme/readme-14.md",
+          "readme/readme-13.md",
+          "memory/memory-02.md",
+          "memory/memory-03.md"
+        ],
+        "scores": [
+          {
+            "path": "memory/memory-00.md",
+            "score": -0.7228847742080688
+          },
+          {
+            "path": "code/code-06.md",
+            "score": -0.9408318996429443
+          },
+          {
+            "path": "readme/readme-21.md",
+            "score": -3.1158607006073
+          },
+          {
+            "path": "readme/readme-15.md",
+            "score": -3.3419904708862305
+          },
+          {
+            "path": "readme/readme-14.md",
+            "score": -3.9083755016326904
+          },
+          {
+            "path": "readme/readme-13.md",
+            "score": -3.94307279586792
+          },
+          {
+            "path": "hosting/hosting-09.md",
+            "score": -3.9614028930664062
+          },
+          {
+            "path": "memory/memory-02.md",
+            "score": -4.667128562927246
+          },
+          {
+            "path": "memory/memory-03.md",
+            "score": -4.69437313079834
+          },
+          {
+            "path": "hosting/hosting-07.md",
+            "score": -4.700338363647461
+          },
+          {
+            "path": "code/code-04.md",
+            "score": -4.759934425354004
+          },
+          {
+            "path": "readme/readme-19.md",
+            "score": -5.398845195770264
+          },
+          {
+            "path": "security/security-02.md",
+            "score": -5.701637268066406
+          },
+          {
+            "path": "readme/readme-20.md",
+            "score": -5.965424060821533
+          },
+          {
+            "path": "memory/memory-04.md",
+            "score": -6.022843837738037
+          },
+          {
+            "path": "readme/readme-10.md",
+            "score": -6.108023166656494
+          },
+          {
+            "path": "code/code-00.md",
+            "score": -6.245749473571777
+          },
+          {
+            "path": "memory/memory-05.md",
+            "score": -6.520524024963379
+          },
+          {
+            "path": "readme/readme-17.md",
+            "score": -7.174548149108887
+          },
+          {
+            "path": "code/code-05.md",
+            "score": -7.187390327453613
+          },
+          {
+            "path": "hooks/hooks-03.md",
+            "score": -7.768874645233154
+          },
+          {
+            "path": "code/code-01.md",
+            "score": -7.982659816741943
+          },
+          {
+            "path": "hosting/hosting-00.md",
+            "score": -8.388193130493164
+          },
+          {
+            "path": "readme/readme-00.md",
+            "score": -8.666446685791016
+          },
+          {
+            "path": "security/security-01.md"
+          },
+          {
+            "path": "code/code-03.md"
+          },
+          {
+            "path": "memory/memory-01.md"
+          },
+          {
+            "path": "hosting/hosting-08.md"
+          },
+          {
+            "path": "readme/readme-02.md"
+          },
+          {
+            "path": "hosting/hosting-02.md"
+          },
+          {
+            "path": "hooks/hooks-06.md"
+          },
+          {
+            "path": "hosting/hosting-03.md"
+          }
+        ],
+        "memory": {
+          "processRssBytes": 177917952,
+          "services": []
+        }
+      },
+      {
+        "id": "durability-2",
+        "split": "evaluation",
+        "pool": 32,
+        "wallMs": 276.31023599999935,
+        "recovered": 1,
+        "expected": 1,
+        "semantic": {
+          "enabled": true,
+          "available": true,
+          "candidateCount": 22,
+          "visitedBuckets": 40,
+          "vectorCount": 124,
+          "thresholdRejected": 21,
+          "poolTruncated": 0,
+          "candidatePolicy": "threshold",
+          "filteredPassages": 0,
+          "stalePassages": 0,
+          "deduplicatedPassages": 0,
+          "returnedPassages": 1,
+          "distinctPages": 1,
+          "descriptor": {
+            "provider": {
+              "id": "openai-compatible-873f5f224174",
+              "model": "qwen3-embedding:0.6b",
+              "version": "unversioned",
+              "dimensions": 1024
+            },
+            "engine": {
+              "id": "lsh-cosine",
+              "version": "1",
+              "dimensions": 1024,
+              "tables": 10,
+              "bitsPerTable": 10,
+              "probes": 4,
+              "minimumScore": 0.55,
+              "seed": "knowledge-rail-semantic-lsh-v1"
+            },
+            "passageCount": 124,
+            "pageCount": 59,
+            "totalPages": 59,
+            "pendingPages": 0,
+            "queryProviderState": "ready",
+            "state": "ready",
+            "dtype": "i8",
+            "candidatePolicy": "threshold",
+            "generatedAt": "2026-09-26T22:34:54.162Z"
+          },
+          "budgetMs": 1500,
+          "elapsedMs": 41.68491199999971
+        },
+        "rerank": {
+          "enabled": true,
+          "applied": true,
+          "candidateCount": 32,
+          "calls": 1,
+          "pairs": 32,
+          "cachedPairs": 0,
+          "budgetMs": 0,
+          "elapsedMs": 233.02617199999986,
+          "provider": {
+            "id": "http-rerank-7f6ade0e028a",
+            "model": "bge-reranker-v2-m3-q8_0",
+            "version": "unversioned"
+          }
+        },
+        "hitPaths": [
+          "memory/memory-00.md",
+          "code/code-06.md",
+          "readme/readme-21.md",
+          "readme/readme-15.md",
+          "readme/readme-14.md",
+          "readme/readme-13.md",
+          "memory/memory-02.md",
+          "memory/memory-03.md"
+        ],
+        "scores": [
+          {
+            "path": "memory/memory-00.md",
+            "score": -0.7228847742080688
+          },
+          {
+            "path": "code/code-06.md",
+            "score": -0.9408318996429443
+          },
+          {
+            "path": "readme/readme-21.md",
+            "score": -3.1158607006073
+          },
+          {
+            "path": "readme/readme-15.md",
+            "score": -3.3419904708862305
+          },
+          {
+            "path": "readme/readme-14.md",
+            "score": -3.9083755016326904
+          },
+          {
+            "path": "readme/readme-13.md",
+            "score": -3.94307279586792
+          },
+          {
+            "path": "hosting/hosting-09.md",
+            "score": -3.9614028930664062
+          },
+          {
+            "path": "memory/memory-02.md",
+            "score": -4.667128562927246
+          },
+          {
+            "path": "memory/memory-03.md",
+            "score": -4.69437313079834
+          },
+          {
+            "path": "hosting/hosting-07.md",
+            "score": -4.700338363647461
+          },
+          {
+            "path": "code/code-04.md",
+            "score": -4.759934425354004
+          },
+          {
+            "path": "code/code-03.md",
+            "score": -5.164930820465088
+          },
+          {
+            "path": "readme/readme-19.md",
+            "score": -5.398845195770264
+          },
+          {
+            "path": "memory/memory-01.md",
+            "score": -5.425412178039551
+          },
+          {
+            "path": "security/security-02.md",
+            "score": -5.701637268066406
+          },
+          {
+            "path": "readme/readme-20.md",
+            "score": -5.965424060821533
+          },
+          {
+            "path": "memory/memory-04.md",
+            "score": -6.022843837738037
+          },
+          {
+            "path": "readme/readme-10.md",
+            "score": -6.108023166656494
+          },
+          {
+            "path": "code/code-00.md",
+            "score": -6.245749473571777
+          },
+          {
+            "path": "memory/memory-05.md",
+            "score": -6.520524024963379
+          },
+          {
+            "path": "hosting/hosting-03.md",
+            "score": -6.621109962463379
+          },
+          {
+            "path": "hosting/hosting-02.md",
+            "score": -6.797120094299316
+          },
+          {
+            "path": "readme/readme-17.md",
+            "score": -7.174548149108887
+          },
+          {
+            "path": "code/code-05.md",
+            "score": -7.187390327453613
+          },
+          {
+            "path": "hosting/hosting-08.md",
+            "score": -7.459805965423584
+          },
+          {
+            "path": "readme/readme-02.md",
+            "score": -7.690736293792725
+          },
+          {
+            "path": "hooks/hooks-03.md",
+            "score": -7.768874645233154
+          },
+          {
+            "path": "code/code-01.md",
+            "score": -7.982659816741943
+          },
+          {
+            "path": "hosting/hosting-00.md",
+            "score": -8.388193130493164
+          },
+          {
+            "path": "hooks/hooks-06.md",
+            "score": -8.5185546875
+          },
+          {
+            "path": "security/security-01.md",
+            "score": -8.553674697875977
+          },
+          {
+            "path": "readme/readme-00.md",
+            "score": -8.666446685791016
+          }
+        ],
+        "memory": {
+          "processRssBytes": 181325824,
+          "services": []
+        }
+      },
+      {
+        "id": "static-0",
+        "split": "development",
+        "pool": 24,
+        "wallMs": 278.1554609999994,
+        "recovered": 1,
+        "expected": 1,
+        "semantic": {
+          "enabled": true,
+          "available": true,
+          "candidateCount": 39,
+          "visitedBuckets": 40,
+          "vectorCount": 124,
+          "thresholdRejected": 34,
+          "poolTruncated": 0,
+          "candidatePolicy": "threshold",
+          "filteredPassages": 0,
+          "stalePassages": 0,
+          "deduplicatedPassages": 0,
+          "returnedPassages": 5,
+          "distinctPages": 5,
+          "descriptor": {
+            "provider": {
+              "id": "openai-compatible-873f5f224174",
+              "model": "qwen3-embedding:0.6b",
+              "version": "unversioned",
+              "dimensions": 1024
+            },
+            "engine": {
+              "id": "lsh-cosine",
+              "version": "1",
+              "dimensions": 1024,
+              "tables": 10,
+              "bitsPerTable": 10,
+              "probes": 4,
+              "minimumScore": 0.55,
+              "seed": "knowledge-rail-semantic-lsh-v1"
+            },
+            "passageCount": 124,
+            "pageCount": 59,
+            "totalPages": 59,
+            "pendingPages": 0,
+            "queryProviderState": "ready",
+            "state": "ready",
+            "dtype": "i8",
+            "candidatePolicy": "threshold",
+            "generatedAt": "2026-09-26T22:34:54.162Z"
+          },
+          "budgetMs": 1500,
+          "elapsedMs": 81.88133300000027
+        },
+        "rerank": {
+          "enabled": true,
+          "applied": true,
+          "candidateCount": 24,
+          "calls": 1,
+          "pairs": 24,
+          "cachedPairs": 0,
+          "budgetMs": 0,
+          "elapsedMs": 194.91821700000037,
+          "provider": {
+            "id": "http-rerank-7f6ade0e028a",
+            "model": "bge-reranker-v2-m3-q8_0",
+            "version": "unversioned"
+          }
+        },
+        "hitPaths": [
+          "memory/memory-01.md",
+          "memory/memory-02.md",
+          "memory/memory-03.md",
+          "readme/readme-21.md",
+          "readme/readme-14.md",
+          "code/code-02.md",
+          "memory/memory-00.md",
+          "readme/readme-15.md"
+        ],
+        "scores": [
+          {
+            "path": "memory/memory-01.md",
+            "score": -4.969507217407227
+          },
+          {
+            "path": "memory/memory-02.md",
+            "score": -5.330316543579102
+          },
+          {
+            "path": "memory/memory-03.md",
+            "score": -5.680415630340576
+          },
+          {
+            "path": "readme/readme-21.md",
+            "score": -6.018404960632324
+          },
+          {
+            "path": "readme/readme-14.md",
+            "score": -6.189433574676514
+          },
+          {
+            "path": "readme/readme-17.md",
+            "score": -6.598246097564697
+          },
+          {
+            "path": "code/code-02.md",
+            "score": -6.767850399017334
+          },
+          {
+            "path": "memory/memory-00.md",
+            "score": -7.081004619598389
+          },
+          {
+            "path": "readme/readme-15.md",
+            "score": -7.284250736236572
+          },
+          {
+            "path": "code/code-01.md",
+            "score": -7.458561897277832
+          },
+          {
+            "path": "readme/readme-13.md",
+            "score": -7.617062568664551
+          },
+          {
+            "path": "readme/readme-07.md",
+            "score": -7.683985710144043
+          },
+          {
+            "path": "code/code-05.md",
+            "score": -7.866678237915039
+          },
+          {
+            "path": "readme/readme-10.md",
+            "score": -7.9728288650512695
+          },
+          {
+            "path": "code/code-00.md",
+            "score": -8.054229736328125
+          },
+          {
+            "path": "code/code-04.md",
+            "score": -8.75179672241211
+          },
+          {
+            "path": "security/security-02.md",
+            "score": -8.930307388305664
+          },
+          {
+            "path": "readme/readme-00.md",
+            "score": -9.02146053314209
+          },
+          {
+            "path": "readme/readme-11.md",
+            "score": -9.100244522094727
+          },
+          {
+            "path": "readme/readme-02.md",
+            "score": -9.370500564575195
+          },
+          {
+            "path": "memory/memory-05.md",
+            "score": -9.727031707763672
+          },
+          {
+            "path": "hosting/hosting-08.md",
+            "score": -9.762855529785156
+          },
+          {
+            "path": "hosting/hosting-04.md",
+            "score": -10.081954956054688
+          },
+          {
+            "path": "hooks/hooks-00.md",
+            "score": -10.784823417663574
+          },
+          {
+            "path": "hosting/hosting-06.md"
+          },
+          {
+            "path": "hosting/hosting-09.md"
+          },
+          {
+            "path": "memory/memory-04.md"
+          },
+          {
+            "path": "code/code-03.md"
+          },
+          {
+            "path": "readme/readme-09.md"
+          },
+          {
+            "path": "hosting/hosting-00.md"
+          },
+          {
+            "path": "hosting/hosting-05.md"
+          },
+          {
+            "path": "hosting/hosting-03.md"
+          }
+        ],
+        "memory": {
+          "processRssBytes": 181325824,
+          "services": []
+        }
+      },
+      {
+        "id": "static-0",
+        "split": "development",
+        "pool": 32,
+        "wallMs": 293.64608099999987,
+        "recovered": 1,
+        "expected": 1,
+        "semantic": {
+          "enabled": true,
+          "available": true,
+          "candidateCount": 39,
+          "visitedBuckets": 40,
+          "vectorCount": 124,
+          "thresholdRejected": 34,
+          "poolTruncated": 0,
+          "candidatePolicy": "threshold",
+          "filteredPassages": 0,
+          "stalePassages": 0,
+          "deduplicatedPassages": 0,
+          "returnedPassages": 5,
+          "distinctPages": 5,
+          "descriptor": {
+            "provider": {
+              "id": "openai-compatible-873f5f224174",
+              "model": "qwen3-embedding:0.6b",
+              "version": "unversioned",
+              "dimensions": 1024
+            },
+            "engine": {
+              "id": "lsh-cosine",
+              "version": "1",
+              "dimensions": 1024,
+              "tables": 10,
+              "bitsPerTable": 10,
+              "probes": 4,
+              "minimumScore": 0.55,
+              "seed": "knowledge-rail-semantic-lsh-v1"
+            },
+            "passageCount": 124,
+            "pageCount": 59,
+            "totalPages": 59,
+            "pendingPages": 0,
+            "queryProviderState": "ready",
+            "state": "ready",
+            "dtype": "i8",
+            "candidatePolicy": "threshold",
+            "generatedAt": "2026-09-26T22:34:54.162Z"
+          },
+          "budgetMs": 1500,
+          "elapsedMs": 43.15434300000106
+        },
+        "rerank": {
+          "enabled": true,
+          "applied": true,
+          "candidateCount": 32,
+          "calls": 1,
+          "pairs": 32,
+          "cachedPairs": 0,
+          "budgetMs": 0,
+          "elapsedMs": 249.14949699999943,
+          "provider": {
+            "id": "http-rerank-7f6ade0e028a",
+            "model": "bge-reranker-v2-m3-q8_0",
+            "version": "unversioned"
+          }
+        },
+        "hitPaths": [
+          "memory/memory-01.md",
+          "memory/memory-02.md",
+          "memory/memory-03.md",
+          "readme/readme-21.md",
+          "readme/readme-14.md",
+          "code/code-02.md",
+          "memory/memory-00.md",
+          "readme/readme-15.md"
+        ],
+        "scores": [
+          {
+            "path": "memory/memory-01.md",
+            "score": -4.969507217407227
+          },
+          {
+            "path": "memory/memory-02.md",
+            "score": -5.330316543579102
+          },
+          {
+            "path": "memory/memory-03.md",
+            "score": -5.680415630340576
+          },
+          {
+            "path": "readme/readme-21.md",
+            "score": -6.018404960632324
+          },
+          {
+            "path": "readme/readme-14.md",
+            "score": -6.189433574676514
+          },
+          {
+            "path": "readme/readme-17.md",
+            "score": -6.598246097564697
+          },
+          {
+            "path": "code/code-02.md",
+            "score": -6.767850399017334
+          },
+          {
+            "path": "memory/memory-00.md",
+            "score": -7.081004619598389
+          },
+          {
+            "path": "readme/readme-15.md",
+            "score": -7.284250736236572
+          },
+          {
+            "path": "code/code-01.md",
+            "score": -7.458561897277832
+          },
+          {
+            "path": "readme/readme-13.md",
+            "score": -7.617062568664551
+          },
+          {
+            "path": "readme/readme-07.md",
+            "score": -7.683985710144043
+          },
+          {
+            "path": "code/code-05.md",
+            "score": -7.866678237915039
+          },
+          {
+            "path": "readme/readme-10.md",
+            "score": -7.9728288650512695
+          },
+          {
+            "path": "code/code-00.md",
+            "score": -8.054229736328125
+          },
+          {
+            "path": "hosting/hosting-09.md",
+            "score": -8.425329208374023
+          },
+          {
+            "path": "memory/memory-04.md",
+            "score": -8.57903003692627
+          },
+          {
+            "path": "code/code-04.md",
+            "score": -8.75179672241211
+          },
+          {
+            "path": "security/security-02.md",
+            "score": -8.930307388305664
+          },
+          {
+            "path": "code/code-03.md",
+            "score": -8.991917610168457
+          },
+          {
+            "path": "readme/readme-00.md",
+            "score": -9.02146053314209
+          },
+          {
+            "path": "readme/readme-11.md",
+            "score": -9.100244522094727
+          },
+          {
+            "path": "hosting/hosting-06.md",
+            "score": -9.33645248413086
+          },
+          {
+            "path": "readme/readme-02.md",
+            "score": -9.370500564575195
+          },
+          {
+            "path": "hosting/hosting-03.md",
+            "score": -9.435555458068848
+          },
+          {
+            "path": "memory/memory-05.md",
+            "score": -9.727031707763672
+          },
+          {
+            "path": "hosting/hosting-08.md",
+            "score": -9.762855529785156
+          },
+          {
+            "path": "hosting/hosting-05.md",
+            "score": -9.862783432006836
+          },
+          {
+            "path": "readme/readme-09.md",
+            "score": -9.93682861328125
+          },
+          {
+            "path": "hosting/hosting-04.md",
+            "score": -10.081954956054688
+          },
+          {
+            "path": "hosting/hosting-00.md",
+            "score": -10.731826782226562
+          },
+          {
+            "path": "hooks/hooks-00.md",
+            "score": -10.784823417663574
+          }
+        ],
+        "memory": {
+          "processRssBytes": 181587968,
+          "services": []
+        }
+      },
+      {
+        "id": "static-1",
+        "split": "evaluation",
+        "pool": 24,
+        "wallMs": 282.74524699999984,
+        "recovered": 0,
+        "expected": 1,
+        "semantic": {
+          "enabled": true,
+          "available": true,
+          "candidateCount": 15,
+          "visitedBuckets": 40,
+          "vectorCount": 124,
+          "thresholdRejected": 14,
+          "poolTruncated": 0,
+          "candidatePolicy": "threshold",
+          "filteredPassages": 0,
+          "stalePassages": 0,
+          "deduplicatedPassages": 0,
+          "returnedPassages": 1,
+          "distinctPages": 1,
+          "descriptor": {
+            "provider": {
+              "id": "openai-compatible-873f5f224174",
+              "model": "qwen3-embedding:0.6b",
+              "version": "unversioned",
+              "dimensions": 1024
+            },
+            "engine": {
+              "id": "lsh-cosine",
+              "version": "1",
+              "dimensions": 1024,
+              "tables": 10,
+              "bitsPerTable": 10,
+              "probes": 4,
+              "minimumScore": 0.55,
+              "seed": "knowledge-rail-semantic-lsh-v1"
+            },
+            "passageCount": 124,
+            "pageCount": 59,
+            "totalPages": 59,
+            "pendingPages": 0,
+            "queryProviderState": "ready",
+            "state": "ready",
+            "dtype": "i8",
+            "candidatePolicy": "threshold",
+            "generatedAt": "2026-09-26T22:34:54.162Z"
+          },
+          "budgetMs": 1500,
+          "elapsedMs": 93.66515400000026
+        },
+        "rerank": {
+          "enabled": true,
+          "applied": true,
+          "candidateCount": 24,
+          "calls": 1,
+          "pairs": 24,
+          "cachedPairs": 0,
+          "budgetMs": 0,
+          "elapsedMs": 187.65773999999965,
+          "provider": {
+            "id": "http-rerank-7f6ade0e028a",
+            "model": "bge-reranker-v2-m3-q8_0",
+            "version": "unversioned"
+          }
+        },
+        "hitPaths": [
+          "readme/readme-10.md",
+          "memory/memory-05.md",
+          "code/code-01.md",
+          "security/security-02.md",
+          "readme/readme-15.md",
+          "memory/memory-00.md",
+          "readme/readme-13.md",
+          "readme/readme-00.md"
+        ],
+        "scores": [
+          {
+            "path": "readme/readme-10.md",
+            "score": -7.679452896118164
+          },
+          {
+            "path": "memory/memory-05.md",
+            "score": -8.56243896484375
+          },
+          {
+            "path": "code/code-01.md",
+            "score": -8.606547355651855
+          },
+          {
+            "path": "hosting/hosting-05.md",
+            "score": -8.678914070129395
+          },
+          {
+            "path": "memory/memory-03.md",
+            "score": -8.754446029663086
+          },
+          {
+            "path": "security/security-02.md",
+            "score": -8.883291244506836
+          },
+          {
+            "path": "readme/readme-15.md",
+            "score": -8.932557106018066
+          },
+          {
+            "path": "hosting/hosting-08.md",
+            "score": -8.991310119628906
+          },
+          {
+            "path": "memory/memory-00.md",
+            "score": -9.106821060180664
+          },
+          {
+            "path": "readme/readme-13.md",
+            "score": -9.133466720581055
+          },
+          {
+            "path": "readme/readme-17.md",
+            "score": -9.193618774414062
+          },
+          {
+            "path": "readme/readme-02.md",
+            "score": -9.654590606689453
+          },
+          {
+            "path": "hosting/hosting-03.md",
+            "score": -9.710926055908203
+          },
+          {
+            "path": "memory/memory-04.md",
+            "score": -9.715950012207031
+          },
+          {
+            "path": "hosting/hosting-00.md",
+            "score": -9.756890296936035
+          },
+          {
+            "path": "readme/readme-00.md",
+            "score": -9.782150268554688
+          },
+          {
+            "path": "readme/readme-19.md",
+            "score": -9.793266296386719
+          },
+          {
+            "path": "readme/readme-20.md",
+            "score": -9.836114883422852
+          },
+          {
+            "path": "code/code-05.md",
+            "score": -9.933736801147461
+          },
+          {
+            "path": "memory/memory-02.md",
+            "score": -9.934587478637695
+          },
+          {
+            "path": "code/code-03.md",
+            "score": -10.040933609008789
+          },
+          {
+            "path": "code/code-00.md",
+            "score": -10.341670036315918
+          },
+          {
+            "path": "code/code-04.md",
+            "score": -10.412614822387695
+          },
+          {
+            "path": "readme/readme-14.md",
+            "score": -10.435930252075195
+          },
+          {
+            "path": "readme/readme-04.md"
+          },
+          {
+            "path": "memory/memory-01.md"
+          },
+          {
+            "path": "readme/readme-01.md"
+          },
+          {
+            "path": "readme/readme-07.md"
+          },
+          {
+            "path": "hosting/hosting-01.md"
+          },
+          {
+            "path": "hooks/hooks-04.md"
+          },
+          {
+            "path": "hosting/hosting-07.md"
+          },
+          {
+            "path": "readme/readme-11.md"
+          }
+        ],
+        "memory": {
+          "processRssBytes": 183422976,
+          "services": []
+        }
+      },
+      {
+        "id": "static-1",
+        "split": "evaluation",
+        "pool": 32,
+        "wallMs": 292.05138799999895,
+        "recovered": 0,
+        "expected": 1,
+        "semantic": {
+          "enabled": true,
+          "available": true,
+          "candidateCount": 15,
+          "visitedBuckets": 40,
+          "vectorCount": 124,
+          "thresholdRejected": 14,
+          "poolTruncated": 0,
+          "candidatePolicy": "threshold",
+          "filteredPassages": 0,
+          "stalePassages": 0,
+          "deduplicatedPassages": 0,
+          "returnedPassages": 1,
+          "distinctPages": 1,
+          "descriptor": {
+            "provider": {
+              "id": "openai-compatible-873f5f224174",
+              "model": "qwen3-embedding:0.6b",
+              "version": "unversioned",
+              "dimensions": 1024
+            },
+            "engine": {
+              "id": "lsh-cosine",
+              "version": "1",
+              "dimensions": 1024,
+              "tables": 10,
+              "bitsPerTable": 10,
+              "probes": 4,
+              "minimumScore": 0.55,
+              "seed": "knowledge-rail-semantic-lsh-v1"
+            },
+            "passageCount": 124,
+            "pageCount": 59,
+            "totalPages": 59,
+            "pendingPages": 0,
+            "queryProviderState": "ready",
+            "state": "ready",
+            "dtype": "i8",
+            "candidatePolicy": "threshold",
+            "generatedAt": "2026-09-26T22:34:54.162Z"
+          },
+          "budgetMs": 1500,
+          "elapsedMs": 44.568263999998635
+        },
+        "rerank": {
+          "enabled": true,
+          "applied": true,
+          "candidateCount": 32,
+          "calls": 1,
+          "pairs": 32,
+          "cachedPairs": 0,
+          "budgetMs": 0,
+          "elapsedMs": 245.77346099999886,
+          "provider": {
+            "id": "http-rerank-7f6ade0e028a",
+            "model": "bge-reranker-v2-m3-q8_0",
+            "version": "unversioned"
+          }
+        },
+        "hitPaths": [
+          "readme/readme-01.md",
+          "readme/readme-10.md",
+          "memory/memory-05.md",
+          "code/code-01.md",
+          "security/security-02.md",
+          "readme/readme-15.md",
+          "memory/memory-00.md",
+          "readme/readme-13.md"
+        ],
+        "scores": [
+          {
+            "path": "readme/readme-01.md",
+            "score": -7.627242088317871
+          },
+          {
+            "path": "readme/readme-10.md",
+            "score": -7.679452896118164
+          },
+          {
+            "path": "readme/readme-11.md",
+            "score": -8.305910110473633
+          },
+          {
+            "path": "memory/memory-05.md",
+            "score": -8.56243896484375
+          },
+          {
+            "path": "code/code-01.md",
+            "score": -8.606547355651855
+          },
+          {
+            "path": "hosting/hosting-05.md",
+            "score": -8.678914070129395
+          },
+          {
+            "path": "memory/memory-03.md",
+            "score": -8.754446029663086
+          },
+          {
+            "path": "readme/readme-04.md",
+            "score": -8.77033805847168
+          },
+          {
+            "path": "security/security-02.md",
+            "score": -8.883291244506836
+          },
+          {
+            "path": "readme/readme-15.md",
+            "score": -8.932557106018066
+          },
+          {
+            "path": "hosting/hosting-01.md",
+            "score": -8.93757438659668
+          },
+          {
+            "path": "memory/memory-01.md",
+            "score": -8.9589204788208
+          },
+          {
+            "path": "hosting/hosting-08.md",
+            "score": -8.991310119628906
+          },
+          {
+            "path": "memory/memory-00.md",
+            "score": -9.106821060180664
+          },
+          {
+            "path": "readme/readme-13.md",
+            "score": -9.133466720581055
+          },
+          {
+            "path": "readme/readme-17.md",
+            "score": -9.193618774414062
+          },
+          {
+            "path": "hosting/hosting-07.md",
+            "score": -9.449621200561523
+          },
+          {
+            "path": "readme/readme-07.md",
+            "score": -9.54365348815918
+          },
+          {
+            "path": "hooks/hooks-04.md",
+            "score": -9.611604690551758
+          },
+          {
+            "path": "readme/readme-02.md",
+            "score": -9.654590606689453
+          },
+          {
+            "path": "hosting/hosting-03.md",
+            "score": -9.710926055908203
+          },
+          {
+            "path": "memory/memory-04.md",
+            "score": -9.715950012207031
+          },
+          {
+            "path": "hosting/hosting-00.md",
+            "score": -9.756890296936035
+          },
+          {
+            "path": "readme/readme-00.md",
+            "score": -9.782150268554688
+          },
+          {
+            "path": "readme/readme-19.md",
+            "score": -9.793266296386719
+          },
+          {
+            "path": "readme/readme-20.md",
+            "score": -9.836114883422852
+          },
+          {
+            "path": "code/code-05.md",
+            "score": -9.933736801147461
+          },
+          {
+            "path": "memory/memory-02.md",
+            "score": -9.934587478637695
+          },
+          {
+            "path": "code/code-03.md",
+            "score": -10.040933609008789
+          },
+          {
+            "path": "code/code-00.md",
+            "score": -10.341670036315918
+          },
+          {
+            "path": "code/code-04.md",
+            "score": -10.412614822387695
+          },
+          {
+            "path": "readme/readme-14.md",
+            "score": -10.435930252075195
+          }
+        ],
+        "memory": {
+          "processRssBytes": 184209408,
+          "services": []
+        }
+      }
+    ],
+    "display": [
+      {
+        "id": "durability-0",
+        "responseDetail": "full",
+        "selected": 4,
+        "tokens": 1922,
+        "recovered": 1,
+        "remaining": 4,
+        "withinBudget": true
+      },
+      {
+        "id": "durability-0",
+        "responseDetail": "compact",
+        "selected": 8,
+        "tokens": 1124,
+        "recovered": 1,
+        "remaining": 0,
+        "withinBudget": true
+      },
+      {
+        "id": "durability-1",
+        "responseDetail": "full",
+        "selected": 4,
+        "tokens": 1993,
+        "recovered": 1,
+        "remaining": 4,
+        "withinBudget": true
+      },
+      {
+        "id": "durability-1",
+        "responseDetail": "compact",
+        "selected": 8,
+        "tokens": 1136,
+        "recovered": 1,
+        "remaining": 0,
+        "withinBudget": true
+      },
+      {
+        "id": "durability-2",
+        "responseDetail": "full",
+        "selected": 3,
+        "tokens": 1606,
+        "recovered": 1,
+        "remaining": 5,
+        "withinBudget": true
+      },
+      {
+        "id": "durability-2",
+        "responseDetail": "compact",
+        "selected": 8,
+        "tokens": 1111,
+        "recovered": 1,
+        "remaining": 0,
+        "withinBudget": true
+      },
+      {
+        "id": "static-0",
+        "responseDetail": "full",
+        "selected": 4,
+        "tokens": 1858,
+        "recovered": 1,
+        "remaining": 4,
+        "withinBudget": true
+      },
+      {
+        "id": "static-0",
+        "responseDetail": "compact",
+        "selected": 8,
+        "tokens": 1095,
+        "recovered": 1,
+        "remaining": 0,
+        "withinBudget": true
+      },
+      {
+        "id": "static-1",
+        "responseDetail": "full",
+        "selected": 3,
+        "tokens": 1736,
+        "recovered": 0,
+        "remaining": 5,
+        "withinBudget": true
+      },
+      {
+        "id": "static-1",
+        "responseDetail": "compact",
+        "selected": 8,
+        "tokens": 1159,
+        "recovered": 0,
+        "remaining": 0,
+        "withinBudget": true
+      }
+    ],
+    "limitations": [
+      "Slots are declared, not changed or verified by this script. Record the server command alongside the report.",
+      "Fresh temporary corpus indexing and subsequent persisted-index restoration are timed separately. OS caches and external models may already be warm.",
+      "Process RSS samples do not measure GPU allocations or unique unified-memory usage. Do not sum shared RSS as physical memory.",
+      "This sample does not validate new defaults. Run the complete development/holdout protocol and missing-service scenarios before acceptance."
+    ]
+  },
+  "limitations": [
+    "Small inspected regression corpus; not independent human validation.",
+    "Scalar relevance and lexical coherence were rejected as answerability gates.",
+    "Runtime live sample uses five queries and already resident external models; not a physical cold-model or Mac measurement."
+  ]
+}

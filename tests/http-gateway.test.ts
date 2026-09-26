@@ -178,7 +178,10 @@ test("HTTP gateway serves nine-tool catalog and isolates two concurrent workspac
 
     const [initializedA, initializedB] = await Promise.all([
       client.callTool({ name: "knowledge_admin", arguments: { action: "init", workspace_binding: bindingA } }),
-      client.callTool({ name: "knowledge_admin", arguments: { action: "init", workspace_binding: bindingB } }),
+      client.callTool({
+        name: "knowledge_admin",
+        arguments: { action: "init", options: { knowledge_language: "it" }, workspace_binding: bindingB },
+      }),
     ]);
     assert.notEqual(initializedA.isError, true);
     assert.notEqual(initializedB.isError, true);
@@ -202,6 +205,7 @@ test("HTTP gateway serves nine-tool catalog and isolates two concurrent workspac
         arguments: {
           action: "write",
           path: "requirements/B.md",
+          content_language: "it",
           content: "---\ntitle: B\ntype: requirement\ntags: [isolation]\ncreated: 2026-08-15\nupdated: 2026-08-15\nsources: []\n---\n\n# Project B\n",
           workspace_binding: bindingB,
         },
@@ -213,6 +217,37 @@ test("HTTP gateway serves nine-tool catalog and isolates two concurrent workspac
     await assert.rejects(() => fs.access(path.join(rootA, "wiki", "requirements", "B.md")));
     assert.equal(await fs.readFile(path.join(rootB, "wiki", "requirements", "B.md"), "utf8").then(() => true), true);
     await assert.rejects(() => fs.access(path.join(rootB, "wiki", "requirements", "A.md")));
+
+    // The knowledge language is a per-workspace property, reported at selection and locked by the first page.
+    const [selectedA, selectedB] = await Promise.all([workspaceA.id, workspaceB.id].map((id) => client.callTool({
+      name: "knowledge_workspace",
+      arguments: { action: "select", workspace_id: id, scope: "read", confirmed: true },
+    })));
+    assert.equal(structured(selectedA!).knowledgeLanguage, null);
+    assert.equal(structured(selectedB!).knowledgeLanguage, "it");
+    assert.match(await fs.readFile(path.join(rootB, "wiki", "SCHEMA.md"), "utf8"), /^knowledge_language_locked_at: /m);
+    const unlabelledQuery = await client.callTool({
+      name: "knowledge_context",
+      arguments: { mode: "task", objective: "Explain project B", query: "project B", workspace_binding: bindingB },
+    });
+    assert.equal(structured(unlabelledQuery).state, "query_language_required");
+    const labelledQuery = await client.callTool({
+      name: "knowledge_context",
+      arguments: { mode: "task", objective: "Explain project B", query: "progetto B", query_language: "it", workspace_binding: bindingB },
+    });
+    assert.notEqual(structured(labelledQuery).state, "query_language_required");
+    assert.deepEqual(structured(labelledQuery).languageContract, { knowledgeLanguage: "it", queryLanguage: "it" });
+    const lockedChange = await client.callTool({
+      name: "knowledge_admin",
+      arguments: { action: "language", setup_mode: "apply", options: { knowledge_language: "en" }, workspace_binding: bindingB },
+    });
+    assert.equal(structured(lockedChange).declaration, "locked");
+    assert.equal(structured(lockedChange).knowledgeLanguage, "it");
+    const readOnlyLanguage = await client.callTool({
+      name: "knowledge_admin",
+      arguments: { action: "language", setup_mode: "apply", options: { knowledge_language: "en" }, workspace_binding: readOnlyBinding },
+    });
+    assert.equal(readOnlyLanguage.isError, true);
 
     const document = await client.callTool({
       name: "knowledge_document",

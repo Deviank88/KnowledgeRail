@@ -62,6 +62,54 @@ test("the retired rescoring environment variable cannot invalidate a configured 
   }
 });
 
+test("query warmup loads a cold provider without recomputing persisted documents and survives caller cancellation", async () => {
+  const { root, records } = await fixture(2);
+  const original = new PersistentSemanticIndex(root, provider().instance);
+  await original.synchronize(records); original.dispose();
+  const p = provider();
+  let finish!: () => void;
+  const loaded = new Promise<void>((resolve) => { finish = resolve; });
+  const embed = p.instance.embedQuery;
+  p.instance.embedQuery = async (text, signal) => {
+    if (text.includes("model warmup")) await loaded;
+    return embed(text, signal);
+  };
+  const index = new PersistentSemanticIndex(root, p.instance);
+  try {
+    await index.startBackground(records);
+    const warming = index.warmQueryProvider();
+    assert.equal(index.warmQueryProvider(), warming, "concurrent warmups share one request");
+    assert.equal(index.descriptor.queryProviderState, "warming");
+    const caller = new AbortController();
+    const waiting = index.search("durable semantic evidence", 2, { signal: caller.signal });
+    caller.abort(new Error("caller left"));
+    await assert.rejects(waiting, /caller left/);
+    finish(); await warming;
+    assert.equal(index.descriptor.queryProviderState, "ready");
+    assert.equal(p.counts.queries, 1);
+    await index.search("durable semantic evidence", 2);
+    assert.equal(p.counts.queries, 2);
+    assert.equal(p.counts.documents, 0);
+  } finally { finish(); index.dispose(); await fs.rm(root, { recursive: true, force: true }); }
+});
+
+test("failed model warmup can be retried and an empty corpus does not warm a provider", async () => {
+  const { root, records } = await fixture(1), p = provider();
+  const index = new PersistentSemanticIndex(root, p.instance);
+  try {
+    await index.warmQueryProvider();
+    assert.equal(p.counts.queries, 0);
+    await index.synchronize(records);
+    const embed = p.instance.embedQuery;
+    p.instance.embedQuery = async () => { throw new Error("offline"); };
+    await assert.rejects(index.warmQueryProvider(), /offline/);
+    assert.equal(index.descriptor.queryProviderState, "failed");
+    p.instance.embedQuery = embed;
+    await index.warmQueryProvider();
+    assert.equal(index.descriptor.queryProviderState, "ready");
+  } finally { index.dispose(); await fs.rm(root, { recursive: true, force: true }); }
+});
+
 test("retired sidecars do not affect retrieval; compatible vectors and HNSW survive cleanup without embedding", async () => {
   for (const engine of ["lsh", "hnsw"] as const) for (const sidecar of ["missing", "corrupt", "symlink"] as const) {
     const { root, records } = await fixture(2), p = provider();
@@ -153,9 +201,12 @@ test("foreground deadline covers search and coverage and returns the exact base 
       async assessCoverage(_queries, _paths, signal) { return block(signal); },
     };
     const started = performance.now();
-    const result = await retrieveWikiHybrid({ wikiRoot: root, query: "Durable semantic", maxResults: 8, semanticIndex: index, semanticBudgetMs: 30 });
+    const result = await retrieveWikiHybrid({ wikiRoot: root, query: "Durable semantic", maxResults: 8, semanticIndex: index, semanticBudgetMs: 30,
+      reranker: { descriptor: { id: "fallback-reranker", model: "fixture", version: "1" },
+        async rerank(_query, documents) { return documents.map(() => 1); } } });
     assert.ok(performance.now() - started < 500);
     assert.equal(result.semantic.budgetExceeded, true);
+    assert.equal(result.rerank?.applied, true, "an embedding timeout must preserve the independent reranker");
     assert.deepEqual(result.hits.map((h) => h.path), baseline.hits.map((h) => h.path));
     assert.equal(result.coverage.coverageMode, "lexical");
     if (phase !== "priority") assert.equal(cancelled, true);

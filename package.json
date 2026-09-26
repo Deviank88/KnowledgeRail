@@ -3,7 +3,7 @@
   "version": "2.9.1",
   "mcpName": "io.github.Deviank88/knowledge-rail",
   "description": "Local-first MCP 2.0 server for persistent, evidence-backed project knowledge and task context",
-  "license": "Apache-2.0",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Deviank88/KnowledgeRail.git"
@@ -20,6 +20,10 @@
     "ai-agents"
   ],
   "files": [
+    "LICENSE",
+    "NOTICE",
+    "LICENSING.md",
+    "licenses/Apache-2.0-legacy.txt",
     "ACKNOWLEDGEMENTS.md",
     "CHANGELOG.md",
     "docs/guides/claude-code-hooks.md",
@@ -52,6 +56,9 @@
     "bench:mcp": "tsx benchmarks/mcp-protocol-bench.ts",
     "bench:context": "tsx benchmarks/context-disclosure-bench.ts",
     "bench:graph-runtime": "tsx benchmarks/graph-runtime-bench.ts",
+    "eval:graph-hubs": "node --import tsx benchmarks/graph-hub-quality-eval.ts",
+    "eval:relational-reranking": "node --import tsx benchmarks/relational-reranking-eval.ts",
+    "bench:runtime-validation": "node --import tsx benchmarks/runtime-validation-294.ts",
     "bench:code-query": "node --expose-gc --import tsx benchmarks/code-query-bench.ts",
     "bench:code-efficiency": "node --expose-gc --import tsx benchmarks/code-efficiency-bench.ts",
     "bench:project-structure": "node --expose-gc --import tsx benchmarks/project-structure-bench.ts",

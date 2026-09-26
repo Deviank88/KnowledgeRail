@@ -6,6 +6,7 @@ import {
   WIKI_PAGE_TYPES,
 } from "../core/document-workflow.js";
 import { buildDevReportPlan } from "../core/report-workflow.js";
+import { resolveKnowledgePageLanguage } from "../core/knowledge-language.js";
 import { wikiDir } from "../core/paths.js";
 import type { ProtocolEra } from "../mcp/tool-names.js";
 
@@ -44,7 +45,7 @@ const KnowledgeUpdatePromptSchema = z.object({
   knowledge_context: z.string().optional(),
   code_context: z.string().optional(),
   sources: z.string().optional().describe("Comma-separated sources"),
-  language: z.string().optional().describe("Wiki output language; defaults to the user's current request language."),
+  language: z.string().optional().describe("Wiki page language; defaults to the workspace knowledge language."),
 });
 
 export function registerWikiPrompts(
@@ -119,7 +120,8 @@ export function registerWikiPrompts(
       description: "Generate a valid wiki draft from a gap and the available evidence.",
       argsSchema: schemas.update,
     },
-    ({ finding, target_page_path, page_type, title, knowledge_context, code_context, sources, language }) => {
+    async ({ finding, target_page_path, page_type, title, knowledge_context, code_context, sources, language }) => {
+      const knowledgeLanguage = await resolveKnowledgePageLanguage(wikiDir(), language);
       const draft = prepareKnowledgeUpdateDraft({
         finding,
         targetPagePath: target_page_path,
@@ -139,7 +141,9 @@ export function registerWikiPrompts(
         "Apply the completed draft with knowledge_page action=write and record the update with action=append_log.",
       ];
       return promptText([
-        `Output language: ${language?.trim() || "the user's current request language"}. Translate all human-readable headings and prose in the draft before writing; keep technical frontmatter values stable.`,
+        `Page language: ${knowledgeLanguage || "undeclared; preserve the existing page language and ask the user if it cannot be inferred"}. ` +
+          "Canonical pages use the workspace knowledge language even when the user writes in another one. Translate all human-readable headings and prose in the draft before writing; keep technical frontmatter values stable.",
+        ...(knowledgeLanguage ? [`Pass content_language="${knowledgeLanguage}" to knowledge_page when writing or editing the translated content.`] : []),
         `Suggested path: ${draft.path}`,
         ...applicationGuidance,
         "```markdown",

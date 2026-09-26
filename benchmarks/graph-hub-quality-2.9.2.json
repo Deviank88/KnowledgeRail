@@ -1,0 +1,1881 @@
+{
+  "benchmark": "graph-hub-quality",
+  "generatedAt": "2026-09-26T21:44:03.671Z",
+  "fixture": "graph-hub-quality.json",
+  "fixtureVersion": 1,
+  "fixtureSha256": "cf54f460a61e35ac4503276e639fea791300b897a99c1576f0ad0a5636137fbf",
+  "scope": "Synthetic stress cases for graph evidence recall. Targets, topology and budgets are fixed before measurement; this is not a representative query distribution or an end-to-end answer-quality evaluation.",
+  "iterations": 5,
+  "nodeVersion": "v24.21.0",
+  "platform": "linux/x64",
+  "cpu": "AMD Ryzen 9 5950X 16-Core Processor",
+  "comparison": "Only maxEdgeWork changes within each pair. Reference retains the same seed scores, beam, depth, visited-node and emitted-node limits. No LLM, embedding, lexical retrieval or final answer is evaluated.",
+  "summaries": [
+    {
+      "stage": "initial",
+      "group": "all",
+      "cases": 14,
+      "expected": 14,
+      "boundedRecovered": 5,
+      "referenceRecovered": 11,
+      "lostToEdgeBudget": 6,
+      "boundedRecall": 0.35714285714285715,
+      "referenceRecall": 0.7857142857142857,
+      "lossAmongReferenceRecovered": 0.5454545454545454,
+      "affectedCases": 6,
+      "missedByBoth": 3,
+      "exhaustedCases": 11
+    },
+    {
+      "stage": "initial",
+      "group": "control",
+      "cases": 7,
+      "expected": 7,
+      "boundedRecovered": 5,
+      "referenceRecovered": 5,
+      "lostToEdgeBudget": 0,
+      "boundedRecall": 0.7142857142857143,
+      "referenceRecall": 0.7142857142857143,
+      "lossAmongReferenceRecovered": 0,
+      "affectedCases": 0,
+      "missedByBoth": 2,
+      "exhaustedCases": 4
+    },
+    {
+      "stage": "initial",
+      "group": "stress",
+      "cases": 7,
+      "expected": 7,
+      "boundedRecovered": 0,
+      "referenceRecovered": 6,
+      "lostToEdgeBudget": 6,
+      "boundedRecall": 0,
+      "referenceRecall": 0.8571428571428571,
+      "lossAmongReferenceRecovered": 1,
+      "affectedCases": 6,
+      "missedByBoth": 1,
+      "exhaustedCases": 7
+    },
+    {
+      "stage": "wide",
+      "group": "all",
+      "cases": 14,
+      "expected": 14,
+      "boundedRecovered": 6,
+      "referenceRecovered": 12,
+      "lostToEdgeBudget": 6,
+      "boundedRecall": 0.42857142857142855,
+      "referenceRecall": 0.8571428571428571,
+      "lossAmongReferenceRecovered": 0.5,
+      "affectedCases": 6,
+      "missedByBoth": 2,
+      "exhaustedCases": 10
+    },
+    {
+      "stage": "wide",
+      "group": "control",
+      "cases": 7,
+      "expected": 7,
+      "boundedRecovered": 5,
+      "referenceRecovered": 5,
+      "lostToEdgeBudget": 0,
+      "boundedRecall": 0.7142857142857143,
+      "referenceRecall": 0.7142857142857143,
+      "lossAmongReferenceRecovered": 0,
+      "affectedCases": 0,
+      "missedByBoth": 2,
+      "exhaustedCases": 4
+    },
+    {
+      "stage": "wide",
+      "group": "stress",
+      "cases": 7,
+      "expected": 7,
+      "boundedRecovered": 1,
+      "referenceRecovered": 7,
+      "lostToEdgeBudget": 6,
+      "boundedRecall": 0.14285714285714285,
+      "referenceRecall": 1,
+      "lossAmongReferenceRecovered": 0.8571428571428571,
+      "affectedCases": 6,
+      "missedByBoth": 0,
+      "exhaustedCases": 6
+    }
+  ],
+  "results": [
+    {
+      "stage": "initial",
+      "id": "small-early",
+      "group": "control",
+      "topology": "outgoing",
+      "distractors": 1000,
+      "relevant": [
+        "page:AAnswer.md"
+      ],
+      "nodeCount": 1004,
+      "edgeCount": 3001,
+      "budget": {
+        "maxNodes": 24,
+        "maxDepth": 1,
+        "beamWidth": 16,
+        "maxVisitedNodes": 48
+      },
+      "edgeBudget": 3072,
+      "bounded": {
+        "recovered": [
+          "page:AAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 1001,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 985,
+          "edgeWork": 1047,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 0.903
+      },
+      "reference": {
+        "recovered": [
+          "page:AAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 1001,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 985,
+          "edgeWork": 1047,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 0.871
+      },
+      "lostToEdgeBudget": [],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": true,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "initial",
+      "id": "small-late",
+      "group": "control",
+      "topology": "outgoing",
+      "distractors": 1000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 1004,
+      "edgeCount": 3001,
+      "budget": {
+        "maxNodes": 24,
+        "maxDepth": 1,
+        "beamWidth": 16,
+        "maxVisitedNodes": 48
+      },
+      "edgeBudget": 3072,
+      "bounded": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 1001,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 985,
+          "edgeWork": 1047,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 0.472
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 1001,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 985,
+          "edgeWork": 1047,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 0.475
+      },
+      "lostToEdgeBudget": [],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": true,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "initial",
+      "id": "medium-late-widening",
+      "group": "stress",
+      "topology": "outgoing",
+      "distractors": 6000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 6004,
+      "edgeCount": 18001,
+      "budget": {
+        "maxNodes": 24,
+        "maxDepth": 1,
+        "beamWidth": 16,
+        "maxVisitedNodes": 48
+      },
+      "edgeBudget": 3072,
+      "bounded": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 3072,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 3056,
+          "edgeWork": 3072,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 2.1
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 6001,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 5985,
+          "edgeWork": 6047,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 3.841
+      },
+      "lostToEdgeBudget": [
+        "page:ZAnswer.md"
+      ],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": false,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "initial",
+      "id": "large-early",
+      "group": "control",
+      "topology": "outgoing",
+      "distractors": 16000,
+      "relevant": [
+        "page:AAnswer.md"
+      ],
+      "nodeCount": 16004,
+      "edgeCount": 48001,
+      "budget": {
+        "maxNodes": 24,
+        "maxDepth": 1,
+        "beamWidth": 16,
+        "maxVisitedNodes": 48
+      },
+      "edgeBudget": 3072,
+      "bounded": {
+        "recovered": [
+          "page:AAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 3072,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 3056,
+          "edgeWork": 3072,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 1.425
+      },
+      "reference": {
+        "recovered": [
+          "page:AAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 16001,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 15985,
+          "edgeWork": 16047,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 10.285
+      },
+      "lostToEdgeBudget": [],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": true,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "initial",
+      "id": "large-late",
+      "group": "stress",
+      "topology": "outgoing",
+      "distractors": 16000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 16004,
+      "edgeCount": 48001,
+      "budget": {
+        "maxNodes": 24,
+        "maxDepth": 1,
+        "beamWidth": 16,
+        "maxVisitedNodes": 48
+      },
+      "edgeBudget": 3072,
+      "bounded": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 3072,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 3056,
+          "edgeWork": 3072,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 1.517
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 16001,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 15985,
+          "edgeWork": 16047,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 7.49
+      },
+      "lostToEdgeBudget": [
+        "page:ZAnswer.md"
+      ],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": false,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "initial",
+      "id": "large-incoming-late",
+      "group": "stress",
+      "topology": "incoming",
+      "distractors": 16000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 16004,
+      "edgeCount": 48001,
+      "budget": {
+        "maxNodes": 24,
+        "maxDepth": 1,
+        "beamWidth": 16,
+        "maxVisitedNodes": 48
+      },
+      "edgeBudget": 3072,
+      "bounded": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 3072,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 3056,
+          "edgeWork": 3072,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 1.477
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 16001,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 15985,
+          "edgeWork": 16047,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 8.06
+      },
+      "lostToEdgeBudget": [
+        "page:ZAnswer.md"
+      ],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": false,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "initial",
+      "id": "request-sibling-late",
+      "group": "stress",
+      "topology": "request",
+      "distractors": 16000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 16005,
+      "edgeCount": 48002,
+      "budget": {
+        "maxNodes": 24,
+        "maxDepth": 1,
+        "beamWidth": 16,
+        "maxVisitedNodes": 48
+      },
+      "edgeBudget": 3072,
+      "bounded": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 3072,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 3055,
+          "edgeWork": 3072,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 1.718
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 16003,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 15986,
+          "edgeWork": 32048,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 10.88
+      },
+      "lostToEdgeBudget": [
+        "page:ZAnswer.md"
+      ],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": false,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "initial",
+      "id": "second-seed-starvation",
+      "group": "stress",
+      "topology": "starved_seed",
+      "distractors": 16000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 16005,
+      "edgeCount": 48001,
+      "budget": {
+        "maxNodes": 24,
+        "maxDepth": 1,
+        "beamWidth": 16,
+        "maxVisitedNodes": 48
+      },
+      "edgeBudget": 3072,
+      "bounded": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 2,
+          "visitedNodes": 18,
+          "visitedEdges": 3072,
+          "emittedNodes": 18,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 3056,
+          "edgeWork": 3072,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 1.401
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 2,
+          "visitedNodes": 18,
+          "visitedEdges": 16001,
+          "emittedNodes": 18,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 15985,
+          "edgeWork": 16047,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 7.845
+      },
+      "lostToEdgeBudget": [
+        "page:ZAnswer.md"
+      ],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": false,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "initial",
+      "id": "late-two-hop",
+      "group": "stress",
+      "topology": "two_hop",
+      "distractors": 16000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 16005,
+      "edgeCount": 48002,
+      "budget": {
+        "maxNodes": 24,
+        "maxDepth": 1,
+        "beamWidth": 16,
+        "maxVisitedNodes": 48
+      },
+      "edgeBudget": 3072,
+      "bounded": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 3072,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 3056,
+          "edgeWork": 3072,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 1.565
+      },
+      "reference": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 16001,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 15986,
+          "edgeWork": 16048,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 7.981
+      },
+      "lostToEdgeBudget": [],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [
+        "page:ZAnswer.md"
+      ],
+      "identicalNodeSet": false,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "initial",
+      "id": "very-large-late",
+      "group": "stress",
+      "topology": "outgoing",
+      "distractors": 100000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 100004,
+      "edgeCount": 300001,
+      "budget": {
+        "maxNodes": 24,
+        "maxDepth": 1,
+        "beamWidth": 16,
+        "maxVisitedNodes": 48
+      },
+      "edgeBudget": 3072,
+      "bounded": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 3072,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 3056,
+          "edgeWork": 3072,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 2.889
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 100001,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 99985,
+          "edgeWork": 100047,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 110.927
+      },
+      "lostToEdgeBudget": [
+        "page:ZAnswer.md"
+      ],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": false,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "initial",
+      "id": "high-priority-edge-late",
+      "group": "control",
+      "topology": "outgoing",
+      "distractors": 16000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 16004,
+      "edgeCount": 48001,
+      "budget": {
+        "maxNodes": 24,
+        "maxDepth": 1,
+        "beamWidth": 16,
+        "maxVisitedNodes": 48
+      },
+      "edgeBudget": 3072,
+      "bounded": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 3072,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 3056,
+          "edgeWork": 3072,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 1.433
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 16001,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 15985,
+          "edgeWork": 16047,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 7.849
+      },
+      "lostToEdgeBudget": [],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": true,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "initial",
+      "id": "direct-target-seed",
+      "group": "control",
+      "topology": "outgoing",
+      "distractors": 16000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 16004,
+      "edgeCount": 48001,
+      "budget": {
+        "maxNodes": 24,
+        "maxDepth": 1,
+        "beamWidth": 16,
+        "maxVisitedNodes": 48
+      },
+      "edgeBudget": 3072,
+      "bounded": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 2,
+          "visitedNodes": 18,
+          "visitedEdges": 3072,
+          "emittedNodes": 18,
+          "emittedEdges": 17,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 3056,
+          "edgeWork": 3072,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 1.442
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 2,
+          "visitedNodes": 18,
+          "visitedEdges": 16002,
+          "emittedNodes": 18,
+          "emittedEdges": 17,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 15984,
+          "edgeWork": 16050,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 7.201
+      },
+      "lostToEdgeBudget": [],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": true,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "initial",
+      "id": "beam-loss-control",
+      "group": "control",
+      "topology": "outgoing",
+      "distractors": 16000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 16002,
+      "edgeCount": 16001,
+      "budget": {
+        "maxNodes": 24,
+        "maxDepth": 1,
+        "beamWidth": 16,
+        "maxVisitedNodes": 48
+      },
+      "edgeBudget": 3072,
+      "bounded": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 3072,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 3056,
+          "edgeWork": 3072,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 1.386
+      },
+      "reference": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 16001,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 15985,
+          "edgeWork": 16017,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 8.314
+      },
+      "lostToEdgeBudget": [],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [
+        "page:ZAnswer.md"
+      ],
+      "identicalNodeSet": true,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "initial",
+      "id": "disconnected-control",
+      "group": "control",
+      "topology": "disconnected",
+      "distractors": 1000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 1004,
+      "edgeCount": 3000,
+      "budget": {
+        "maxNodes": 24,
+        "maxDepth": 1,
+        "beamWidth": 16,
+        "maxVisitedNodes": 48
+      },
+      "edgeBudget": 3072,
+      "bounded": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 1000,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 984,
+          "edgeWork": 1048,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 0.367
+      },
+      "reference": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 17,
+          "visitedEdges": 1000,
+          "emittedNodes": 17,
+          "emittedEdges": 16,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 984,
+          "edgeWork": 1048,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 0.378
+      },
+      "lostToEdgeBudget": [],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [
+        "page:ZAnswer.md"
+      ],
+      "identicalNodeSet": true,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "wide",
+      "id": "small-early",
+      "group": "control",
+      "topology": "outgoing",
+      "distractors": 1000,
+      "relevant": [
+        "page:AAnswer.md"
+      ],
+      "nodeCount": 1004,
+      "edgeCount": 3001,
+      "budget": {
+        "maxNodes": 96,
+        "maxDepth": 3,
+        "beamWidth": 64,
+        "maxVisitedNodes": 192
+      },
+      "edgeBudget": 12288,
+      "bounded": {
+        "recovered": [
+          "page:AAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 67,
+          "visitedEdges": 1191,
+          "emittedNodes": 67,
+          "emittedEdges": 190,
+          "maxDepthReached": 2,
+          "truncatedFrontierCount": 937,
+          "edgeWork": 1191,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 0.591
+      },
+      "reference": {
+        "recovered": [
+          "page:AAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 67,
+          "visitedEdges": 1191,
+          "emittedNodes": 67,
+          "emittedEdges": 190,
+          "maxDepthReached": 2,
+          "truncatedFrontierCount": 937,
+          "edgeWork": 1191,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 0.585
+      },
+      "lostToEdgeBudget": [],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": true,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "wide",
+      "id": "small-late",
+      "group": "control",
+      "topology": "outgoing",
+      "distractors": 1000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 1004,
+      "edgeCount": 3001,
+      "budget": {
+        "maxNodes": 96,
+        "maxDepth": 3,
+        "beamWidth": 64,
+        "maxVisitedNodes": 192
+      },
+      "edgeBudget": 12288,
+      "bounded": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 67,
+          "visitedEdges": 1191,
+          "emittedNodes": 67,
+          "emittedEdges": 190,
+          "maxDepthReached": 2,
+          "truncatedFrontierCount": 937,
+          "edgeWork": 1191,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 0.562
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 67,
+          "visitedEdges": 1191,
+          "emittedNodes": 67,
+          "emittedEdges": 190,
+          "maxDepthReached": 2,
+          "truncatedFrontierCount": 937,
+          "edgeWork": 1191,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 0.571
+      },
+      "lostToEdgeBudget": [],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": true,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "wide",
+      "id": "medium-late-widening",
+      "group": "stress",
+      "topology": "outgoing",
+      "distractors": 6000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 6004,
+      "edgeCount": 18001,
+      "budget": {
+        "maxNodes": 96,
+        "maxDepth": 3,
+        "beamWidth": 64,
+        "maxVisitedNodes": 192
+      },
+      "edgeBudget": 12288,
+      "bounded": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 67,
+          "visitedEdges": 6191,
+          "emittedNodes": 67,
+          "emittedEdges": 190,
+          "maxDepthReached": 2,
+          "truncatedFrontierCount": 5937,
+          "edgeWork": 6191,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 3.019
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 67,
+          "visitedEdges": 6191,
+          "emittedNodes": 67,
+          "emittedEdges": 190,
+          "maxDepthReached": 2,
+          "truncatedFrontierCount": 5937,
+          "edgeWork": 6191,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 3.005
+      },
+      "lostToEdgeBudget": [],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": true,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "wide",
+      "id": "large-early",
+      "group": "control",
+      "topology": "outgoing",
+      "distractors": 16000,
+      "relevant": [
+        "page:AAnswer.md"
+      ],
+      "nodeCount": 16004,
+      "edgeCount": 48001,
+      "budget": {
+        "maxNodes": 96,
+        "maxDepth": 3,
+        "beamWidth": 64,
+        "maxVisitedNodes": 192
+      },
+      "edgeBudget": 12288,
+      "bounded": {
+        "recovered": [
+          "page:AAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 65,
+          "visitedEdges": 12288,
+          "emittedNodes": 65,
+          "emittedEdges": 64,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 12224,
+          "edgeWork": 12288,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 6.299
+      },
+      "reference": {
+        "recovered": [
+          "page:AAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 67,
+          "visitedEdges": 16191,
+          "emittedNodes": 67,
+          "emittedEdges": 190,
+          "maxDepthReached": 2,
+          "truncatedFrontierCount": 15937,
+          "edgeWork": 16191,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 7.831
+      },
+      "lostToEdgeBudget": [],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": false,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "wide",
+      "id": "large-late",
+      "group": "stress",
+      "topology": "outgoing",
+      "distractors": 16000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 16004,
+      "edgeCount": 48001,
+      "budget": {
+        "maxNodes": 96,
+        "maxDepth": 3,
+        "beamWidth": 64,
+        "maxVisitedNodes": 192
+      },
+      "edgeBudget": 12288,
+      "bounded": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 65,
+          "visitedEdges": 12288,
+          "emittedNodes": 65,
+          "emittedEdges": 64,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 12224,
+          "edgeWork": 12288,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 6.866
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 67,
+          "visitedEdges": 16191,
+          "emittedNodes": 67,
+          "emittedEdges": 190,
+          "maxDepthReached": 2,
+          "truncatedFrontierCount": 15937,
+          "edgeWork": 16191,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 7.816
+      },
+      "lostToEdgeBudget": [
+        "page:ZAnswer.md"
+      ],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": false,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "wide",
+      "id": "large-incoming-late",
+      "group": "stress",
+      "topology": "incoming",
+      "distractors": 16000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 16004,
+      "edgeCount": 48001,
+      "budget": {
+        "maxNodes": 96,
+        "maxDepth": 3,
+        "beamWidth": 64,
+        "maxVisitedNodes": 192
+      },
+      "edgeBudget": 12288,
+      "bounded": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 65,
+          "visitedEdges": 12288,
+          "emittedNodes": 65,
+          "emittedEdges": 64,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 12224,
+          "edgeWork": 12288,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 5.978
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 67,
+          "visitedEdges": 16191,
+          "emittedNodes": 67,
+          "emittedEdges": 190,
+          "maxDepthReached": 2,
+          "truncatedFrontierCount": 15937,
+          "edgeWork": 16191,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 7.369
+      },
+      "lostToEdgeBudget": [
+        "page:ZAnswer.md"
+      ],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": false,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "wide",
+      "id": "request-sibling-late",
+      "group": "stress",
+      "topology": "request",
+      "distractors": 16000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 16005,
+      "edgeCount": 48002,
+      "budget": {
+        "maxNodes": 96,
+        "maxDepth": 3,
+        "beamWidth": 64,
+        "maxVisitedNodes": 192
+      },
+      "edgeBudget": 12288,
+      "bounded": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 65,
+          "visitedEdges": 12288,
+          "emittedNodes": 65,
+          "emittedEdges": 64,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 12223,
+          "edgeWork": 12288,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 5.327
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 67,
+          "visitedEdges": 32192,
+          "emittedNodes": 67,
+          "emittedEdges": 188,
+          "maxDepthReached": 2,
+          "truncatedFrontierCount": 15938,
+          "edgeWork": 32192,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 8.16
+      },
+      "lostToEdgeBudget": [
+        "page:ZAnswer.md"
+      ],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": false,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "wide",
+      "id": "second-seed-starvation",
+      "group": "stress",
+      "topology": "starved_seed",
+      "distractors": 16000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 16005,
+      "edgeCount": 48001,
+      "budget": {
+        "maxNodes": 96,
+        "maxDepth": 3,
+        "beamWidth": 64,
+        "maxVisitedNodes": 192
+      },
+      "edgeBudget": 12288,
+      "bounded": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 2,
+          "visitedNodes": 66,
+          "visitedEdges": 12288,
+          "emittedNodes": 66,
+          "emittedEdges": 64,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 12224,
+          "edgeWork": 12288,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 6.39
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 2,
+          "visitedNodes": 68,
+          "visitedEdges": 16191,
+          "emittedNodes": 68,
+          "emittedEdges": 190,
+          "maxDepthReached": 2,
+          "truncatedFrontierCount": 15937,
+          "edgeWork": 16191,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 7.599
+      },
+      "lostToEdgeBudget": [
+        "page:ZAnswer.md"
+      ],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": false,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "wide",
+      "id": "late-two-hop",
+      "group": "stress",
+      "topology": "two_hop",
+      "distractors": 16000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 16005,
+      "edgeCount": 48002,
+      "budget": {
+        "maxNodes": 96,
+        "maxDepth": 3,
+        "beamWidth": 64,
+        "maxVisitedNodes": 192
+      },
+      "edgeBudget": 12288,
+      "bounded": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 65,
+          "visitedEdges": 12288,
+          "emittedNodes": 65,
+          "emittedEdges": 64,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 12224,
+          "edgeWork": 12288,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 6.39
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 68,
+          "visitedEdges": 16193,
+          "emittedNodes": 68,
+          "emittedEdges": 191,
+          "maxDepthReached": 2,
+          "truncatedFrontierCount": 15937,
+          "edgeWork": 16193,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 8.166
+      },
+      "lostToEdgeBudget": [
+        "page:ZAnswer.md"
+      ],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": false,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "wide",
+      "id": "very-large-late",
+      "group": "stress",
+      "topology": "outgoing",
+      "distractors": 100000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 100004,
+      "edgeCount": 300001,
+      "budget": {
+        "maxNodes": 96,
+        "maxDepth": 3,
+        "beamWidth": 64,
+        "maxVisitedNodes": 192
+      },
+      "edgeBudget": 12288,
+      "bounded": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 65,
+          "visitedEdges": 12288,
+          "emittedNodes": 65,
+          "emittedEdges": 64,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 12224,
+          "edgeWork": 12288,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 9.265
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 67,
+          "visitedEdges": 100191,
+          "emittedNodes": 67,
+          "emittedEdges": 190,
+          "maxDepthReached": 2,
+          "truncatedFrontierCount": 99937,
+          "edgeWork": 100191,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 86.942
+      },
+      "lostToEdgeBudget": [
+        "page:ZAnswer.md"
+      ],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": false,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "wide",
+      "id": "high-priority-edge-late",
+      "group": "control",
+      "topology": "outgoing",
+      "distractors": 16000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 16004,
+      "edgeCount": 48001,
+      "budget": {
+        "maxNodes": 96,
+        "maxDepth": 3,
+        "beamWidth": 64,
+        "maxVisitedNodes": 192
+      },
+      "edgeBudget": 12288,
+      "bounded": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 65,
+          "visitedEdges": 12288,
+          "emittedNodes": 65,
+          "emittedEdges": 64,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 12224,
+          "edgeWork": 12288,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 6.846
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 67,
+          "visitedEdges": 16191,
+          "emittedNodes": 67,
+          "emittedEdges": 190,
+          "maxDepthReached": 2,
+          "truncatedFrontierCount": 15937,
+          "edgeWork": 16191,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 7.786
+      },
+      "lostToEdgeBudget": [],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": false,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "wide",
+      "id": "direct-target-seed",
+      "group": "control",
+      "topology": "outgoing",
+      "distractors": 16000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 16004,
+      "edgeCount": 48001,
+      "budget": {
+        "maxNodes": 96,
+        "maxDepth": 3,
+        "beamWidth": 64,
+        "maxVisitedNodes": 192
+      },
+      "edgeBudget": 12288,
+      "bounded": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 2,
+          "visitedNodes": 66,
+          "visitedEdges": 12288,
+          "emittedNodes": 66,
+          "emittedEdges": 65,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 12224,
+          "edgeWork": 12288,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 6.346
+      },
+      "reference": {
+        "recovered": [
+          "page:ZAnswer.md"
+        ],
+        "missing": [],
+        "recall": 1,
+        "stats": {
+          "seedCount": 2,
+          "visitedNodes": 68,
+          "visitedEdges": 16194,
+          "emittedNodes": 68,
+          "emittedEdges": 193,
+          "maxDepthReached": 2,
+          "truncatedFrontierCount": 15936,
+          "edgeWork": 16194,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 8.105
+      },
+      "lostToEdgeBudget": [],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [],
+      "identicalNodeSet": false,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "wide",
+      "id": "beam-loss-control",
+      "group": "control",
+      "topology": "outgoing",
+      "distractors": 16000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 16002,
+      "edgeCount": 16001,
+      "budget": {
+        "maxNodes": 96,
+        "maxDepth": 3,
+        "beamWidth": 64,
+        "maxVisitedNodes": 192
+      },
+      "edgeBudget": 12288,
+      "bounded": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 65,
+          "visitedEdges": 12288,
+          "emittedNodes": 65,
+          "emittedEdges": 64,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 12224,
+          "edgeWork": 12288,
+          "edgeBudgetExhausted": true
+        },
+        "p50Ms": 6.163
+      },
+      "reference": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 65,
+          "visitedEdges": 16065,
+          "emittedNodes": 65,
+          "emittedEdges": 64,
+          "maxDepthReached": 1,
+          "truncatedFrontierCount": 15937,
+          "edgeWork": 16065,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 7.554
+      },
+      "lostToEdgeBudget": [],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [
+        "page:ZAnswer.md"
+      ],
+      "identicalNodeSet": true,
+      "exactEdgesPreserved": true
+    },
+    {
+      "stage": "wide",
+      "id": "disconnected-control",
+      "group": "control",
+      "topology": "disconnected",
+      "distractors": 1000,
+      "relevant": [
+        "page:ZAnswer.md"
+      ],
+      "nodeCount": 1004,
+      "edgeCount": 3000,
+      "budget": {
+        "maxNodes": 96,
+        "maxDepth": 3,
+        "beamWidth": 64,
+        "maxVisitedNodes": 192
+      },
+      "edgeBudget": 12288,
+      "bounded": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 67,
+          "visitedEdges": 1192,
+          "emittedNodes": 67,
+          "emittedEdges": 192,
+          "maxDepthReached": 2,
+          "truncatedFrontierCount": 936,
+          "edgeWork": 1192,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 0.486
+      },
+      "reference": {
+        "recovered": [],
+        "missing": [
+          "page:ZAnswer.md"
+        ],
+        "recall": 0,
+        "stats": {
+          "seedCount": 1,
+          "visitedNodes": 67,
+          "visitedEdges": 1192,
+          "emittedNodes": 67,
+          "emittedEdges": 192,
+          "maxDepthReached": 2,
+          "truncatedFrontierCount": 936,
+          "edgeWork": 1192,
+          "edgeBudgetExhausted": false
+        },
+        "p50Ms": 0.481
+      },
+      "lostToEdgeBudget": [],
+      "gainedWithEdgeBudget": [],
+      "missedByBoth": [
+        "page:ZAnswer.md"
+      ],
+      "identicalNodeSet": true,
+      "exactEdgesPreserved": true
+    }
+  ],
+  "runtimeSources": {
+    "src/core/graph-runtime.ts": "d2d86fd71c7d6017f16cbfd75fd74a302c0d953f4a406278edde3521c93600a0",
+    "src/core/graph-runtime-mutation.ts": "e3262c98c34d54f86449212db62dad4839bf0c4214c005d8c5f21a0201c7040b"
+  }
+}

@@ -20,15 +20,17 @@ Every successful domain operation returns `structuredContent.state` and `structu
 
 Workspace setup, maintenance and diagnostics.
 
+`action="init"` or `action="language"` with `options.knowledge_language` (a BCP 47 tag) declares the knowledge language in `wiki/SCHEMA.md`; `language` previews by default and records with `setup_mode="apply"`. It is locked by the first canonical page. `action="status"` reports it.
+
 For `action="lint"`, `force=true` enables nested-wiki recovery. Omit `dry_run` or set it to `true` to preview; set `dry_run=false` to apply. Recovery removes nested `wiki` path segments, updates relative links, and blocks the complete operation if any destination collides.
 
-Actions/modes: `init`, `status`, `checkpoint`, `usage`, `semantic_setup`, `consolidate`, `client_setup`, `lint`, `drift`, `migrate`.
+Actions/modes: `init`, `status`, `checkpoint`, `usage`, `semantic_setup`, `consolidate`, `client_setup`, `lint`, `drift`, `migrate`, `language`.
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
 |---|---|---:|---|---|---|
-| `action` | `init` &#124; `status` &#124; `checkpoint` &#124; `usage` &#124; `semantic_setup` &#124; `consolidate` &#124; `client_setup` &#124; `lint` &#124; `drift` &#124; `migrate` | yes | — | — | init=bootstrap;checkpoint=rebuild;usage=stats/audit/reset;semantic_setup=models;consolidate=review;client_setup=hooks;lint=broken links/orphan pages;migrate=upgrade. |
+| `action` | `init` &#124; `status` &#124; `checkpoint` &#124; `usage` &#124; `semantic_setup` &#124; `consolidate` &#124; `client_setup` &#124; `lint` &#124; `drift` &#124; `migrate` &#124; `language` | yes | — | — | init=bootstrap;checkpoint=rebuild;usage=stats/audit/reset;semantic_setup=models;consolidate=review;client_setup=hooks;lint=broken links/orphan pages;migrate=upgrade;language=canonical page language. |
 | `force` | boolean | no | `false` | — | lint: repair nested wiki. |
-| `options` | object | no | — | — | usage: action=status&#124;audit&#124;reset&#124;outcome; audit accepts days(1..30), max_turns(1..100), client(codex&#124;claude); outcome requires outcome=succeeded&#124;failed. semantic_setup:{model};consolidate:{days,proposals}. |
+| `options` | object | no | — | — | usage: action=status&#124;audit&#124;reset&#124;outcome; audit accepts days(1..30), max_turns(1..100), client(codex&#124;claude); outcome requires outcome=succeeded&#124;failed. semantic_setup:{model};consolidate:{days,proposals};init&#124;language:{knowledge_language}. |
 | `integrity_mode` | `metadata` &#124; `content` | no | `"metadata"` | — | — |
 | `include_orphans` | boolean | no | `true` | — | — |
 | `include_missing` | boolean | no | `true` | — | — |
@@ -73,14 +75,17 @@ Evidence/gaps, pages, search, and graph.
 
 Task responses report `retrieval.coverageMode` (`lexical` or `semantic`) and `coverageWarnings`. Coverage uses the full fused candidate set while returned evidence remains bounded; relevant evidence excluded from display is `budget_limited`, not `missing_evidence`. Configured embedding provider failures degrade to lexical mode without failing the tool call.
 
+Once the workspace declares a knowledge language, every retrieval query (task, search, graph with a query, and document section evidence) must set `query_language` to it: keep `objective` in the user's language and pass `query` translated into the knowledge language. Otherwise no retrieval runs and the result is `state="query_language_required"` with a `nextAction`. Results carry `languageContract`.
+
 Actions/modes: `task`, `list`, `search`, `graph`.
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
 |---|---|---:|---|---|---|
-| `mode` | `task` &#124; `list` &#124; `search` &#124; `graph` | no | `"task"` | — | task=context;list=pages;search=passages;graph=relations. |
+| `mode` | `task` &#124; `list` &#124; `search` &#124; `graph` | no | `"task"` | — | task=context;list=pages;search=passages;graph=dependencies/relations. |
 | `intent` | `understand` &#124; `implement` &#124; `modify` &#124; `debug` &#124; `review` &#124; `document` | no | `"understand"` | — | — |
 | `objective` | string | no | — | length ≥ 1; length ≤ 4096 | — |
 | `query` | string | no | — | length ≥ 1; length ≤ 4096 | — |
+| `query_language` | string | no | — | — | — |
 | `changed_paths` | array<string> | no | — | items ≤ 20 | — |
 | `page_types` | array<string> | no | — | items ≤ 20 | — |
 | `retrieval_profile` | `precision` &#124; `balanced` &#124; `coverage` | no | `"balanced"` | — | — |
@@ -121,6 +126,8 @@ Actions/modes: `write`, `review`.
 
 Document plans and section evidence.
 
+Once the workspace declares a knowledge language, every retrieval query (task, search, graph with a query, and document section evidence) must set `query_language` to it: keep `objective` in the user's language and pass `query` translated into the knowledge language. Otherwise no retrieval runs and the result is `state="query_language_required"` with a `nextAction`. Results carry `languageContract`.
+
 Actions/modes: `plan`, `section`.
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
@@ -135,6 +142,7 @@ Actions/modes: `plan`, `section`.
 | `max_sections` | integer | no | — | ≥ 1; ≤ 30 | — |
 | `section_title` | string | no | — | — | — |
 | `query` | string | no | — | length ≤ 4096 | — |
+| `query_language` | string | no | — | — | — |
 | `language` | string | no | — | — | — |
 | `required_evidence` | array<requirement &#124; implementation &#124; decision &#124; source &#124; constraint &#124; invariant &#124; test &#124; risk &#124; current_state &#124; dependency &#124; contradiction> | no | — | — | — |
 | `preferred_evidence` | array<requirement &#124; implementation &#124; decision &#124; source &#124; constraint &#124; invariant &#124; test &#124; risk &#124; current_state &#124; dependency &#124; contradiction> | no | — | — | — |
@@ -166,6 +174,8 @@ Actions/modes: `list`, `read`, `normalize`.
 
 Source ingestion, claims, coverage, recovery.
 
+For `knowledge_page write/edit` and `knowledge_ingest apply_claims`, translate human-readable content and titles into the workspace knowledge language live and declare it with `content_language`. Missing or incompatible declarations are rejected before mutation when a language is configured. Answers to the user stay in the user's language; source references and identifiers are preserved.
+
 Each claim contains `text`, `kind`, `origin`, and `confidence`, plus optional `target` and `relations`. A target supports `page_path`, `page_title`, `page_type`, and `code_resource_uri`: use an indexed knowledge_code resource when the claim explains code, so synthesis can show a verified code link and line range; omit it for claims without code evidence. Stakeholders additionally support `entity_key`, `role`, `organization`, `email_domain`, and `affiliation`. `email_domain` is domain-only; `client`/`internal` may be source-declared when comparison is unavailable, while `partner` must be explicit.
 
 Actions/modes: `start`, `next`, `apply_claims`, `record_segment`, `source_status`, `evidence_status`, `finalize`, `report`, `record_recovery`, `resolve_recovery`.
@@ -178,6 +188,7 @@ Actions/modes: `start`, `next`, `apply_claims`, `record_segment`, `source_status
 | `segment_max_chars` | integer | no | — | ≥ 256; ≤ 50000 | — |
 | `segment_id` | string | no | — | — | — |
 | `claims` | array<object> | no | — | items ≥ 1 | target:page_path,page_title,page_type,code_resource_uri. Stakeholders:entity_key,role,organization,email_domain,affiliation. |
+| `content_language` | string | no | — | — | BCP 47 language of translated claims for apply_claims. |
 | `segment_status` | `irrelevant` &#124; `unresolved` &#124; `legacy_unverified` | no | — | — | — |
 | `evidence_refs` | array<string> | no | — | — | — |
 | `page_refs` | array<string> | no | — | — | — |
@@ -196,6 +207,8 @@ Actions/modes: `start`, `next`, `apply_claims`, `record_segment`, `source_status
 
 Page CRUD and durable log.
 
+For `knowledge_page write/edit` and `knowledge_ingest apply_claims`, translate human-readable content and titles into the workspace knowledge language live and declare it with `content_language`. Missing or incompatible declarations are rejected before mutation when a language is configured. Answers to the user stay in the user's language; source references and identifiers are preserved.
+
 Actions/modes: `read`, `write`, `edit`, `move`, `delete`, `append_log`.
 
 | Parameter | Type / values | Required | Default | Constraints | Description |
@@ -205,6 +218,7 @@ Actions/modes: `read`, `write`, `edit`, `move`, `delete`, `append_log`.
 | `resource_uri` | string | no | — | pattern "^knowledge-rail:\\/\\/page\\/.*" | — |
 | `max_chars` | integer | no | `6000` | ≥ 1; ≤ 50000 | — |
 | `content` | string | no | — | — | — |
+| `content_language` | string | no | — | — | BCP 47 page language for write/edit; match the workspace knowledge language. |
 | `old_string` | string | no | — | — | — |
 | `new_string` | string | no | — | — | — |
 | `replace_all` | boolean | no | `false` | — | — |

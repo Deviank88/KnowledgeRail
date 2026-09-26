@@ -44,6 +44,17 @@ function normalizedRoot(value: string | null | undefined): string | null {
 }
 
 /**
+ * The process-level explicit root (`--root`). Later re-resolution, such as the
+ * legacy Roots refresh after `initialized`, must not replace it with a client
+ * Root or the client's cwd.
+ */
+let pinnedExplicitRoot: string | null = null;
+
+export function pinExplicitWorkspaceRoot(root: string | null | undefined): void {
+  pinnedExplicitRoot = normalizedRoot(root);
+}
+
+/**
  * Resolve a project workspace without mutating global application state.
  *
  * Precedence is deliberately backward-compatible with v3 when a legacy Roots
@@ -53,7 +64,7 @@ function normalizedRoot(value: string | null | undefined): string | null {
 export async function resolveWorkspace(
   options: WorkspaceResolverOptions = {}
 ): Promise<WorkspaceResolution> {
-  const explicit = normalizedRoot(options.explicitRoot);
+  const explicit = normalizedRoot(options.explicitRoot) ?? pinnedExplicitRoot;
   if (explicit) return { root: explicit, source: "explicit" };
 
   if (options.legacyRootProvider) {

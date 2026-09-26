@@ -253,7 +253,7 @@ test("public context widening preserves source scope and stops at fixed code exp
   } } as unknown as McpServer, "modern");
   const args = { mode: "task", intent: "modify", objective: "Modifica regola", query: "Verifica dipendenze",
     changed_paths: ["odd/ledger.ts"], page_types: ["implementation"], max_evidence: 8,
-    heuristic_token_budget: 2_000, retrieval_profile: "balanced", response_detail: "compact" };
+    heuristic_token_budget: 1_000, retrieval_profile: "balanced", response_detail: "compact" };
   const limited = await handler!(args, {});
   assert.equal(limited.isError, undefined);
   const suggestion = limited.structuredContent.nextAction.suggestedArguments;

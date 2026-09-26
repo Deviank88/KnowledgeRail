@@ -9,7 +9,7 @@ import { DEFAULT_SCHEMA_MD } from "../src/config/templates.js";
 import {
   DECISION_MEMORY_POLICY,
   MCP_AGENT_INSTRUCTIONS,
-  USER_OUTPUT_LANGUAGE_POLICY,
+  LANGUAGE_CONTRACT_POLICY,
 } from "../src/mcp/server.js";
 import { AGENT_TOOL_NAMES } from "../src/mcp/tool-names.js";
 import { registerAgentTools } from "../src/tools/agent-tools.js";
@@ -45,14 +45,25 @@ test("public catalog exposes exactly eight domain tools and no menu or operation
   assert.equal([...tools.keys()].some((name) => name.startsWith("wiki_")), false);
 });
 
-test("English MCP metadata does not force English wiki output", () => {
-  for (const policy of [DEFAULT_SCHEMA_MD, USER_OUTPUT_LANGUAGE_POLICY, MCP_AGENT_INSTRUCTIONS]) {
-    assert.match(policy, /language of the user(?:'s current request|'s request)/i);
-    assert.match(policy, /preserve (?:its|the existing page) language/i);
+test("language contract separates the knowledge language from the user's language", () => {
+  for (const policy of [DEFAULT_SCHEMA_MD, LANGUAGE_CONTRACT_POLICY, MCP_AGENT_INSTRUCTIONS]) {
+    assert.match(policy, /knowledge language/i);
+    assert.match(policy, /query_language/);
+    assert.match(policy, /identifiers, paths, codes, numbers, negations and constraints/i);
+    assert.match(policy, /ask the user which language the knowledge is written in/i);
+    assert.match(policy, /preserve an existing page's language/i);
     assert.match(policy, /ask before writing/i);
   }
+  assert.match(LANGUAGE_CONTRACT_POLICY, /answers and deliverables follow the user's language/i);
+  assert.match(LANGUAGE_CONTRACT_POLICY, /never changes the knowledge language/i);
+  assert.match(LANGUAGE_CONTRACT_POLICY, /label any translated quotation as a translation/i);
+  assert.match(DEFAULT_SCHEMA_MD, /Write canonical wiki pages in the workspace knowledge language/);
+  assert.match(DEFAULT_SCHEMA_MD, /not recalculated from the language of the latest conversation/i);
+  assert.match(DEFAULT_SCHEMA_MD, /does not translate them/i);
   assert.doesNotMatch(DEFAULT_SCHEMA_MD, /Write all wiki pages in English by default/i);
-  assert.match(USER_OUTPUT_LANGUAGE_POLICY, /tool names, schemas, control files, and operational messages in English/i);
+  assert.doesNotMatch(DEFAULT_SCHEMA_MD, /Write new wiki content in the language of the user's current request/i);
+  assert.match(MCP_AGENT_INSTRUCTIONS, /Sufficient coverage is not proof of an answer/);
+  assert.match(LANGUAGE_CONTRACT_POLICY, /tool names, schemas, control files, and operational messages in English/i);
 });
 
 test("agent contract closes durable decisions without turning discussion into an audit ledger", () => {
@@ -127,10 +138,12 @@ test("tool results provide one machine-readable next action without a menu round
       emptyContext
     );
     assert.equal(initialized.isError, undefined);
+    assert.equal(initialized.structuredContent?.knowledgeLanguage, null);
     assert.deepEqual(initialized.structuredContent?.nextAction, {
-      tool: "knowledge_context",
-      requiredArguments: ["mode", "objective"],
-      suggestedArguments: { mode: "task" },
+      tool: "knowledge_admin",
+      action: "language",
+      requiredArguments: ["action", "options", "setup_mode"],
+      suggestedArguments: { action: "language", setup_mode: "preview" },
     });
     const fallback = await tools.get("knowledge_code")!.handler({
       action: "record_fallback",
@@ -204,6 +217,20 @@ test("tool results provide one machine-readable next action without a menu round
     );
     assert.equal(read.isError, undefined);
     assert.match(String(read.structuredContent?.resultText), /deterministic next action/);
+
+    const ready = await tools.get("knowledge_context")!.handler({
+      mode: "task", intent: "understand", objective: "deterministic next action", query: "deterministic next action",
+      heuristic_token_budget: 12_000, response_detail: "compact",
+    }, emptyContext);
+    const readyRetrieval = ready.structuredContent?.retrieval as Record<string, unknown>;
+    assert.equal(readyRetrieval.coverageSufficient, true);
+    assert.equal(readyRetrieval.answerability, "unverified");
+    const verifyNext = ready.structuredContent?.nextAction as { tool: string; action: string; suggestedArguments: Record<string, unknown> };
+    assert.equal(verifyNext.tool, "knowledge_page");
+    assert.equal(verifyNext.action, "read");
+    const verified = await tools.get("knowledge_page")!.handler(verifyNext.suggestedArguments, emptyContext);
+    assert.equal(verified.isError, undefined);
+    assert.match(String(verified.structuredContent?.resultText), /deterministic next action/);
 
     const incomplete = await tools.get("knowledge_context")!.handler(
       {

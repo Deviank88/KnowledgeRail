@@ -1,0 +1,55 @@
+import type { TaskContext } from "./task-context-compiler.js";
+
+export function compactStructuredContext(manifest: Omit<TaskContext, "size">) {
+  return {
+    version: manifest.version,
+    decisions: manifest.decisions,
+    evidence: manifest.evidence.map((evidence) => ({
+      uri: evidence.uri,
+      path: evidence.path,
+      title: evidence.title,
+      type: evidence.type,
+      heading: evidence.heading,
+      reason: evidence.reason,
+      stale: evidence.stale,
+      staleReason: evidence.staleReason,
+      driftClaimIds: evidence.driftClaimIds,
+    })),
+    ...(manifest.repositoryMap ? { repositoryMap: manifest.repositoryMap } : {}),
+    ...(manifest.temporal ? { temporal: manifest.temporal } : {}),
+    ...(manifest.history ? { history: manifest.history } : {}),
+    changeImpact: {
+      mode: manifest.changeImpact.mode,
+      decisions: manifest.changeImpact.decisions,
+      ...(manifest.changeImpact.codeRoots ? {
+        codeRoots: manifest.changeImpact.codeRoots,
+        codeRelations: manifest.changeImpact.codeRelations,
+        codeWikiPages: manifest.changeImpact.codeWikiPages,
+        codeSnapshot: manifest.changeImpact.codeSnapshot,
+        codeWarnings: manifest.changeImpact.codeWarnings,
+        codeTruncated: manifest.changeImpact.codeTruncated,
+      } : {}),
+    },
+    gaps: manifest.unknowns,
+    retrieval: {
+      answerability: manifest.retrieval.answerability,
+      evidenceOffset: manifest.retrieval.evidenceOffset,
+      evidenceRevision: manifest.retrieval.evidenceRevision,
+      nextEvidenceOffset: manifest.retrieval.nextEvidenceOffset,
+      remainingEvidenceCount: manifest.retrieval.remainingEvidenceCount,
+      candidateSearchLimited: manifest.retrieval.candidateSearchLimited,
+      profile: manifest.retrieval.profile,
+      coverageMode: manifest.retrieval.coverageMode,
+      coverageWarnings: manifest.retrieval.coverageWarnings,
+      wideningLevel: manifest.retrieval.wideningLevel,
+      coverageSufficient: manifest.retrieval.coverageSufficient,
+      evidenceGaps: manifest.retrieval.evidenceGaps,
+      estimatedContextTokens: manifest.retrieval.estimatedContextTokens,
+      coverageCandidateCount: manifest.retrieval.coverageCandidateCount,
+      selectedEvidenceCount: manifest.retrieval.selectedEvidenceCount,
+      fallbackUsed: manifest.retrieval.fallbackUsed,
+    },
+    budget: manifest.budget,
+    task: manifest.task,
+  };
+}

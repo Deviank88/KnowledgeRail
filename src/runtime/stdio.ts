@@ -1,6 +1,6 @@
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { buildServer } from "../mcp/server.js";
-import { activateWorkspace, resolveWorkspace } from "../mcp/workspace.js";
+import { activateWorkspace, pinExplicitWorkspaceRoot, resolveWorkspace } from "../mcp/workspace.js";
 import { canonicalizeProjectRoot } from "../mcp/workspace-discovery.js";
 import { WorkspaceRegistry } from "../workspaces/registry.js";
 import { logger } from "../core/logger.js";
@@ -12,6 +12,7 @@ export interface StdioRuntimeHandle {
 
 export async function runStdio(options: { root?: string } = {}): Promise<StdioRuntimeHandle> {
   startupMark("stdio_workspace_resolution_started");
+  pinExplicitWorkspaceRoot(options.root);
   const resolved = await resolveWorkspace({
     explicitRoot: options.root,
     automaticDiscovery: true,

@@ -105,6 +105,7 @@ export interface SemanticIndexDescriptor {
   state?: "absent" | "building" | "ready" | "degraded";
   totalPages?: number;
   pendingPages?: number;
+  queryProviderState?: "idle" | "warming" | "ready" | "failed";
   reason?: string;
   dtype?: "f32" | "i8";
   candidatePolicy?: "threshold" | "top-k";

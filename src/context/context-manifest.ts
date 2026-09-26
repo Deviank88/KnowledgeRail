@@ -85,14 +85,14 @@ function compactPreview(text: string, maxCharacters = 180): string {
   return `${chars.slice(0, Math.max(0, maxCharacters - 1)).join("")}…`;
 }
 
-function resolveHitPassage(hit: RetrievalHit): WikiPassage | undefined {
+export function resolveHitPassage(hit: RetrievalHit): WikiPassage | undefined {
   const exactHeading = hit.record.passages.filter((passage) => passage.heading === hit.heading);
-  if (exactHeading.length === 1) return exactHeading[0];
-  if (exactHeading.length > 1) {
-    const excerptStart = compactPreview(hit.excerpt, 80);
-    return exactHeading.find((passage) => compactPreview(passage.text, 80).startsWith(excerptStart)) ?? exactHeading[0];
-  }
-  return undefined;
+  const excerpt = hit.excerpt.replace(/\s+/g, " ").trim();
+  if (!excerpt) return undefined;
+  const matches = exactHeading.filter((passage) => passage.text.replace(/\s+/g, " ").trim().startsWith(excerpt));
+  // Repeated headings and shared introductions are not unique passage identities.
+  // Fall back to the page resource rather than linking a different claim.
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 export function evidenceFromRetrievalHit(

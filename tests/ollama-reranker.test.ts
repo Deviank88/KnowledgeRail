@@ -5,8 +5,8 @@ import { once } from "node:events";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { OllamaRerankProvider, OLLAMA_BGE_RANK_SHA256 } from "../src/core/ollama-reranker.js";
-import { configuredReranker } from "../src/core/reranker.js";
+import { OllamaRerankProvider, OLLAMA_BGE_CALIBRATION, OLLAMA_BGE_RANK_SHA256 } from "../src/core/ollama-reranker.js";
+import { configuredReranker, RerankRuntimeUnsupportedError, RerankSession } from "../src/core/reranker.js";
 import { retrieveWikiHybrid } from "../src/core/hybrid-retrieval.js";
 import { SemanticBudget } from "../src/core/semantic/budget.js";
 
@@ -14,6 +14,7 @@ const metadata = () => ({ modelfile: `FROM /models/blobs/sha256-${OLLAMA_BGE_RAN
   "general.architecture": "bert", "bert.pooling_type": 4, "bert.embedding_length": 1024,
   "tokenizer.ggml.add_bos_token": true, "tokenizer.ggml.add_eos_token": true,
 } });
+const calibrationScore = (prompt: string) => OLLAMA_BGE_CALIBRATION.find((pair) => prompt === `${pair.query}</s>${pair.document}`)?.score;
 
 test("Ollama validates the measured model and uses raw classifier scores, without normalisation or document dropping", async (t) => {
   const requests: Array<{ route: string; body?: Record<string, unknown> }> = [];
@@ -29,6 +30,8 @@ test("Ollama validates the measured model and uses raw classifier scores, withou
       payload = metadata();
       if (mode === "model") (payload as ReturnType<typeof metadata>).modelfile = "FROM embedding-model";
       if (mode === "pooling") (payload as ReturnType<typeof metadata>).model_info["bert.pooling_type"] = 1;
+    } else if (calibrationScore(body.prompt) !== undefined) {
+      payload = { embedding: [calibrationScore(body.prompt)] };
     } else {
       assert.equal(url.pathname, "/api/embeddings"); scoreCalls++;
       assert.deepEqual(body.options, { num_ctx: 2048, num_batch: 2048 });
@@ -59,6 +62,38 @@ test("Ollama validates the measured model and uses raw classifier scores, withou
   }
 });
 
+test("new Ollama versions are accepted only after reproducing the calibration scores, with an explicit reason", async (t) => {
+  let version = "0.34.4", output = "raw", calibrationCalls = 0;
+  t.mock.method(globalThis, "fetch", async (url: URL, init: RequestInit) => {
+    const body = init.body ? JSON.parse(String(init.body)) : undefined;
+    if (url.pathname === "/api/version") return Response.json({ version });
+    if (url.pathname === "/api/show") return Response.json(metadata());
+    const calibration = calibrationScore(body.prompt);
+    if (calibration !== undefined) calibrationCalls++;
+    const raw = calibration ?? 3;
+    return Response.json({ embedding: [output === "normalised" ? Math.sign(raw) : output === "drift" ? raw + 0.3 : raw] });
+  });
+  const provider = new OllamaRerankProvider({ baseUrl: "http://localhost:11434", model: "small-bge" });
+  assert.deepEqual(await provider.rerank("question", ["doc"], AbortSignal.timeout(1000)), [3]);
+  assert.deepEqual(await provider.rerank("question", ["doc"], AbortSignal.timeout(1000)), [3]);
+  assert.equal(calibrationCalls, OLLAMA_BGE_CALIBRATION.length, "calibrate once per version");
+  version = "0.35.0"; output = "drift";
+  assert.deepEqual(await provider.rerank("question", ["doc"], AbortSignal.timeout(1000)), [3.3], "backend drift within tolerance");
+  version = "0.36.0"; output = "normalised";
+  await assert.rejects(provider.rerank("question", ["doc"], AbortSignal.timeout(1000)), (error: Error) =>
+    error instanceof RerankRuntimeUnsupportedError && /0\.36\.0/.test(error.message));
+  const before = calibrationCalls;
+  await assert.rejects(provider.rerank("question", ["doc"], AbortSignal.timeout(1000)), RerankRuntimeUnsupportedError);
+  assert.equal(calibrationCalls, before, "a refused version is not probed again");
+  const session = new RerankSession(provider);
+  try {
+    assert.equal(await session.score("question", ["doc"]), null);
+    assert.equal(session.diagnostics.reason, "unsupported_runtime"); assert.match(session.diagnostics.detail ?? "", /0\.36\.0/);
+  } finally { session.close(); }
+  version = "unknown";
+  await assert.rejects(new OllamaRerankProvider({ baseUrl: "http://localhost:11434", model: "small-bge" }).rerank("question", ["doc"], AbortSignal.timeout(1000)), RerankRuntimeUnsupportedError);
+});
+
 test("configured Ollama activates hybrid reranking automatically and failures preserve base evidence", async () => {
   const keys = ["BASE_URL", "PROVIDER", "ENDPOINT", "MODEL", "VERSION", "API_KEY", "BUDGET_MS"].map((k) => `KNOWLEDGE_RAIL_RERANK_${k}`);
   const saved = keys.map((k) => process.env[k]);
@@ -69,6 +104,8 @@ test("configured Ollama activates hybrid reranking automatically and failures pr
     if (mode === "offline") { response.writeHead(503); response.end(); return; }
     if (request.url === "/api/version") { response.end(JSON.stringify({ version: "0.34.3" })); return; }
     if (request.url === "/api/show") { response.end(JSON.stringify(metadata())); return; }
+    const calibration = calibrationScore(JSON.parse(data).prompt);
+    if (calibration !== undefined) { response.end(JSON.stringify({ embedding: [calibration] })); return; }
     inferenceCalls++;
     if (mode === "slow") return;
     response.end(JSON.stringify({ embedding: mode === "invalid" ? [null] : [JSON.parse(data).prompt.includes("preferred") ? 8 : -2] }));
@@ -91,7 +128,9 @@ test("configured Ollama activates hybrid reranking automatically and failures pr
     for (mode of ["offline", "invalid", "slow"]) {
       const callsBefore = inferenceCalls;
       const fallback = await retrieveWikiHybrid({ ...request, rerankBudgetMs: 80 });
-      assert.deepEqual(fallback.hits, baseline.hits); assert.deepEqual(fallback.coverage, baseline.coverage);
+      assert.deepEqual(fallback.hits, baseline.hits);
+      assert.deepEqual({ ...fallback.coverage, warnings: baseline.coverage.warnings }, baseline.coverage);
+      assert.match(fallback.coverage.warnings.join(" "), /Reranker unavailable/);
       assert.equal(fallback.rerank?.applied, false);
       assert.ok(inferenceCalls - callsBefore <= 1, "stop after the failing/cancelled document");
     }

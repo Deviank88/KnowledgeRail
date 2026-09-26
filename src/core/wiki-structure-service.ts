@@ -10,11 +10,17 @@ import {
 import { atomicWriteText } from "./fs-service.js";
 import { ensureDir, readFileSafe } from "./utils.js";
 import { initializeWikiState } from "./migration-service.js";
+import { parseKnowledgeLanguage, withKnowledgeLanguage } from "./knowledge-language.js";
+import { withWikiFileLock } from "./lock-service.js";
 
 export async function ensureWikiStructure(force = false): Promise<void> {
   const projectRoot = getWikiRoot();
   const safeWikiDir = await resolveRealWithin(projectRoot, "wiki");
   const safeDocsDir = await resolveRealWithin(projectRoot, "docs");
+  await withWikiFileLock(safeWikiDir, `${safeWikiDir}:wiki-mutation`, () => initializeStructure(safeWikiDir, safeDocsDir, force));
+}
+
+async function initializeStructure(safeWikiDir: string, safeDocsDir: string, force: boolean): Promise<void> {
   const safeIndex = await resolveRealWithin(safeWikiDir, "index.md");
   const safeLog = await resolveRealWithin(safeWikiDir, "log.md");
   const safeSchema = await resolveRealWithin(safeWikiDir, "SCHEMA.md");
@@ -34,7 +40,8 @@ export async function ensureWikiStructure(force = false): Promise<void> {
     await atomicWriteText(safeLog, "# Wiki Log\n\n");
   }
   if (force || !existingSchema) {
-    await atomicWriteText(safeSchema, DEFAULT_SCHEMA_MD);
+    // Reinitialization refreshes conventions but never resets the knowledge language or its lock.
+    await atomicWriteText(safeSchema, withKnowledgeLanguage(DEFAULT_SCHEMA_MD, parseKnowledgeLanguage(existingSchema)));
   }
   if (!existingSchema) await initializeWikiState(safeWikiDir);
 }

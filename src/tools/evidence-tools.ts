@@ -20,6 +20,8 @@ import {
 import { docsCategoryFilePath, getWikiRoot, wikiDir } from "../core/paths.js";
 import { currentWorkspaceUserIdentity } from "../core/user-identity.js";
 import { readFileSafe } from "../core/utils.js";
+import { resolveKnowledgePageLanguage } from "../core/knowledge-language.js";
+import { withWikiFileLock } from "../core/lock-service.js";
 import { errorResult, finalizePageMutation, structuredTextResult, textResult } from "./helpers.js";
 import { toolName, type ProtocolEra } from "../mcp/tool-names.js";
 import {
@@ -60,6 +62,7 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
       segment_id: z.string().optional(),
       claim_ids: z.array(z.string()).optional(),
       claims: z.array(EvidenceClaimInputSchema).optional(),
+      content_language: z.string().optional(),
       total_evidence_used: z.number().int().min(0).max(1_000_000).optional(),
       recovery_events: z.array(RecoveryEventInputSchema).max(100).optional(),
       recovery_event_id: z.string().optional(),
@@ -74,6 +77,7 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
     segment_id,
     claim_ids,
     claims,
+    content_language,
     total_evidence_used,
     recovery_events,
     recovery_event_id,
@@ -244,17 +248,21 @@ export function registerEvidenceTools(server: McpServer, era: ProtocolEra = "mod
       }
 
       if (action === "synthesize") {
-        const drafts = await applyEvidenceSynthesis({ wikiRoot: wikiDir(), claimIds: claim_ids });
-        const indexLine = drafts.length > 0
-          ? await finalizePageMutation(drafts.map((draft) => draft.pagePath))
-          : "No pages to update.";
-        const coverage = await reconcileEvidenceCoverage(wikiDir());
-        return textResult([
-          `Synthesis completed: ${drafts.length} page(s).`,
-          ...drafts.map((draft) => `- ${draft.mode}: ${draft.pagePath} (${draft.claimIds.length} claim)`),
-          `Coverage updated: ${coverage.segmentsRecorded} segments; pending: ${coverage.segmentsPending}.`,
-          indexLine,
-        ].join("\n"));
+        const root = wikiDir();
+        return await withWikiFileLock(root, `${root}:wiki-mutation`, async () => {
+          await resolveKnowledgePageLanguage(root, content_language, true);
+          const drafts = await applyEvidenceSynthesis({ wikiRoot: wikiDir(), claimIds: claim_ids });
+          const indexLine = drafts.length > 0
+            ? await finalizePageMutation(drafts.map((draft) => draft.pagePath))
+            : "No pages to update.";
+          const coverage = await reconcileEvidenceCoverage(wikiDir());
+          return textResult([
+            `Synthesis completed: ${drafts.length} page(s).`,
+            ...drafts.map((draft) => `- ${draft.mode}: ${draft.pagePath} (${draft.claimIds.length} claim)`),
+            `Coverage updated: ${coverage.segmentsRecorded} segments; pending: ${coverage.segmentsPending}.`,
+            indexLine,
+          ].join("\n"));
+        });
       }
 
       const [status, store] = await Promise.all([

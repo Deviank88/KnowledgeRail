@@ -23,6 +23,16 @@ import { normalizedSourceCategory } from "../core/source-normalization-service.j
 import { currentWorkspaceUserIdentity } from "../core/user-identity.js";
 import { readFileSafe } from "../core/utils.js";
 import {
+  canonicalLanguageTag,
+  declareKnowledgeLanguage,
+  readKnowledgeLanguage,
+  resolveKnowledgePageLanguage,
+  sameLanguage,
+  surveyKnowledgeLanguage,
+  type KnowledgeLanguage,
+} from "../core/knowledge-language.js";
+import { withWikiFileLock } from "../core/lock-service.js";
+import {
   AGENT_TOOL_NAMES,
   type AgentToolName,
   type ProtocolEra,
@@ -57,10 +67,11 @@ const RECOVERY_RESOLUTIONS = KNOWLEDGE_RECOVERY_RESOLUTIONS.filter(
 
 const ContextSchema = z.object({
   mode: z.enum(["task", "list", "search", "graph"]).default("task")
-    .describe("task=context;list=pages;search=passages;graph=relations."),
+    .describe("task=context;list=pages;search=passages;graph=dependencies/relations."),
   intent: z.enum(["understand", "implement", "modify", "debug", "review", "document"]).default("understand"),
   objective: z.string().min(1).max(4_096).optional(),
   query: z.string().min(1).max(4_096).optional(),
+  query_language: z.string().optional(),
   changed_paths: z.array(z.string().min(1).max(1_024)).max(20).optional(),
   page_types: z.array(z.string().min(1).max(128)).max(20).optional(),
   retrieval_profile: z.enum(["precision", "balanced", "coverage"]).default("balanced"),
@@ -94,6 +105,7 @@ const PageSchema = z.object({
   resource_uri: z.string().startsWith("knowledge-rail://page/").optional(),
   max_chars: z.number().int().min(1).max(50_000).default(6_000),
   content: z.string().optional(),
+  content_language: z.string().optional().describe("BCP 47 page language for write/edit; match the workspace knowledge language."),
   old_string: z.string().optional(),
   new_string: z.string().optional(),
   replace_all: z.boolean().default(false),
@@ -157,6 +169,7 @@ const IngestSchema = z.object({
   segment_id: z.string().optional(),
   claims: z.array(z.record(z.string(), z.unknown())).min(1).optional()
     .describe("target:page_path,page_title,page_type,code_resource_uri. Stakeholders:entity_key,role,organization,email_domain,affiliation."),
+  content_language: z.string().optional().describe("BCP 47 language of translated claims for apply_claims."),
   segment_status: z.enum(["irrelevant", "unresolved", "legacy_unverified"]).optional(),
   evidence_refs: z.array(z.string()).optional(),
   page_refs: z.array(z.string()).optional(),
@@ -240,6 +253,7 @@ const DocumentContextSchema = z.object({
   max_sections: z.number().int().min(1).max(30).optional(),
   section_title: z.string().optional(),
   query: z.string().max(4_096).optional(),
+  query_language: z.string().optional(),
   language: z.string().optional(),
   required_evidence: z.array(z.enum(EDITORIAL_EVIDENCE_KINDS)).optional(),
   preferred_evidence: z.array(z.enum(EDITORIAL_EVIDENCE_KINDS)).optional(),
@@ -280,11 +294,11 @@ const DocumentSchema = z.object({
 });
 
 const AdminSchema = z.object({
-  action: z.enum(["init", "status", "checkpoint", "usage", "semantic_setup", "consolidate", "client_setup", "lint", "drift", "migrate"])
-    .describe("init=bootstrap;checkpoint=rebuild;usage=stats/audit/reset;semantic_setup=models;consolidate=review;client_setup=hooks;lint=broken links/orphan pages;migrate=upgrade."),
+  action: z.enum(["init", "status", "checkpoint", "usage", "semantic_setup", "consolidate", "client_setup", "lint", "drift", "migrate", "language"])
+    .describe("init=bootstrap;checkpoint=rebuild;usage=stats/audit/reset;semantic_setup=models;consolidate=review;client_setup=hooks;lint=broken links/orphan pages;migrate=upgrade;language=canonical page language."),
   force: z.boolean().default(false).describe("lint: repair nested wiki."),
   options: z.record(z.string(), z.unknown()).optional()
-    .describe("usage: action=status|audit|reset|outcome; audit accepts days(1..30), max_turns(1..100), client(codex|claude); outcome requires outcome=succeeded|failed. semantic_setup:{model};consolidate:{days,proposals}."),
+    .describe("usage: action=status|audit|reset|outcome; audit accepts days(1..30), max_turns(1..100), client(codex|claude); outcome requires outcome=succeeded|failed. semantic_setup:{model};consolidate:{days,proposals};init|language:{knowledge_language}."),
   integrity_mode: z.enum(["metadata", "content"]).default("metadata"),
   include_orphans: z.boolean().default(true),
   include_missing: z.boolean().default(true),
@@ -364,6 +378,8 @@ export const AGENT_STATES = [
   "migration_plan_complete",
   "migration_apply_complete",
   "migration_rollback_complete",
+  "query_language_required",
+  "knowledge_language_reported",
 ] as const;
 
 type AgentState = (typeof AGENT_STATES)[number];
@@ -474,6 +490,67 @@ function sourceUri(normalizedFilename: string): string {
   return `docs/normalized/${normalizedFilename.replace(/\\/g, "/")}`;
 }
 
+interface QueryLanguageCheck {
+  contract: { knowledgeLanguage: string | null; queryLanguage: string | null };
+  /** A structured request to retry with a query in the knowledge language; no retrieval ran. */
+  blocked?: OperationResult;
+}
+
+/**
+ * Once a workspace declares its knowledge language, every retrieval query must be
+ * declared in that language. The objective stays in the user's language; the
+ * agent translates only the retrieval query. This verifies the declared contract,
+ * not the fidelity of the translation.
+ */
+async function checkQueryLanguage(
+  args: Record<string, unknown>,
+  next: { tool: AgentToolName; action?: string; requiredArguments: string[]; keep: string[] }
+): Promise<QueryLanguageCheck> {
+  const knowledgeLanguage = (await readKnowledgeLanguage(wikiDir())).tag;
+  const declared = typeof args.query_language === "string" ? args.query_language : undefined;
+  let queryLanguage: string | null = null;
+  try { queryLanguage = declared === undefined ? null : canonicalLanguageTag(declared); } catch { queryLanguage = null; }
+  const contract = { knowledgeLanguage, queryLanguage };
+  if (!knowledgeLanguage || (queryLanguage && sameLanguage(queryLanguage, knowledgeLanguage))) return { contract };
+  const problem = declared === undefined
+    ? `This workspace's knowledge is written in "${knowledgeLanguage}", and the query language was not declared.`
+    : `query_language="${declared}" does not match this workspace's knowledge language "${knowledgeLanguage}".`;
+  const suggested = Object.fromEntries(next.keep.flatMap((key) => args[key] === undefined ? [] : [[key, args[key]]]));
+  return {
+    contract,
+    blocked: withGuidance({
+      content: [{
+        type: "text",
+        text: `${problem} No retrieval was performed. Keep objective in the user's language and pass query translated into ` +
+          `"${knowledgeLanguage}" with query_language="${knowledgeLanguage}". Translate the intent only: preserve identifiers, ` +
+          "paths, codes, numbers, negations and constraints, and add no assumptions.",
+      }],
+      structuredContent: { languageContract: { ...contract, status: declared === undefined ? "undeclared" : "mismatch" } },
+    }, "query_language_required", {
+      tool: next.tool,
+      ...(next.action ? { action: next.action } : {}),
+      requiredArguments: next.requiredArguments,
+      suggestedArguments: { ...suggested, query_language: knowledgeLanguage },
+    }),
+  };
+}
+
+function withLanguageContract(result: OperationResult, contract: QueryLanguageCheck["contract"]): OperationResult {
+  if (!isCallToolResult(result) || result.isError) return result;
+  const previous = result.structuredContent && typeof result.structuredContent === "object" && !Array.isArray(result.structuredContent)
+    ? result.structuredContent as Record<string, unknown> : {};
+  return { ...result, structuredContent: { ...previous, languageContract: contract } };
+}
+
+function languageSummary(language: KnowledgeLanguage): Record<string, unknown> {
+  return {
+    knowledgeLanguage: language.tag,
+    locked: Boolean(language.tag && language.lockedAt),
+    ...(language.lockedAt ? { lockedAt: language.lockedAt } : {}),
+    ...(language.invalidValue ? { invalidValue: language.invalidValue } : {}),
+  };
+}
+
 async function checkpointStatus(): Promise<Record<string, unknown>> {
   const [
     { lstat },
@@ -530,6 +607,14 @@ async function checkpointStatus(): Promise<Record<string, unknown>> {
 }
 
 async function applyEvidenceSegment(args: z.output<typeof IngestSchema>): Promise<CallToolResult> {
+  const root = wikiDir();
+  return withWikiFileLock(root, `${root}:wiki-mutation`, async () => {
+    await resolveKnowledgePageLanguage(root, args.content_language, true);
+    return applyTranslatedEvidenceSegment(args);
+  });
+}
+
+async function applyTranslatedEvidenceSegment(args: z.output<typeof IngestSchema>): Promise<CallToolResult> {
   const [
     { resolveEvidenceClaims },
     { reconcileEvidenceCoverage, recordEvidenceClaims },
@@ -705,24 +790,41 @@ export function registerAgentTools(
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (args, context) => {
     try {
+      // Every mode except list sends a retrieval query (graph traceability without one does not).
+      const retrieves = args.mode === "task" || args.mode === "search" || (args.mode === "graph" && args.query !== undefined);
+      const language = retrieves
+        ? await checkQueryLanguage(args, {
+            tool: "knowledge_context",
+            requiredArguments: args.mode === "task" ? ["mode", "objective", "query", "query_language"] : ["mode", "query", "query_language"],
+            // Suggest only the arguments that mode uses, so the retry stays minimal.
+            keep: args.mode === "task"
+              ? ["mode", "intent", "objective", "changed_paths", "page_types", "retrieval_profile", "max_evidence",
+                  "heuristic_token_budget", "as_of"]
+              : args.mode === "search"
+                ? ["mode", "page_types", "retrieval_profile", "max_results"]
+                : ["mode", "page_types", "view", "max_nodes", "max_depth"],
+          })
+        : { contract: { knowledgeLanguage: (await readKnowledgeLanguage(wikiDir())).tag, queryLanguage: null } };
+      if (language.blocked) return language.blocked;
       if (args.mode === "list" || args.mode === "search") {
-        return withGuidance(await call("search", {
+        return withGuidance(withLanguageContract(await call("search", {
           query: args.mode === "list" ? undefined : args.query,
           max_results: args.max_results,
           page_types: args.page_types,
           retrieval_profile: args.retrieval_profile,
-        }, context), args.mode === "list" ? "pages_listed" : "search_complete", null);
+        }, context), language.contract), args.mode === "list" ? "pages_listed" : "search_complete", null);
       }
       if (args.mode === "graph") {
-        return withGuidance(await call("graphQuery", {
+        return withGuidance(withLanguageContract(await call("graphQuery", {
           query: args.query,
           max_nodes: args.max_nodes,
           max_depth: args.max_depth,
           page_types: args.page_types,
           view: args.view,
-        }, context), "graph_complete", null);
+        }, context), language.contract), "graph_complete", null);
       }
-      const result = await call("context", omit(args, ["mode", "max_results", "max_nodes", "max_depth", "view"]), context);
+      const result = withLanguageContract(await call("context",
+        omit(args, ["mode", "max_results", "max_nodes", "max_depth", "view", "query_language"]), context), language.contract);
       const structured = isCallToolResult(result) && result.structuredContent && typeof result.structuredContent === "object"
         ? result.structuredContent as Record<string, unknown>
         : {};
@@ -749,6 +851,9 @@ export function registerAgentTools(
       }, "Additional evidence remains available. Follow the cursor for complementary evidence; the display budget is not a relevance cutoff.");
       const retrievalSufficient = retrieval.coverageSufficient === true;
       const sufficient = retrievalSufficient && !hasGaps;
+      const evidence = Array.isArray(structured.evidence) ? structured.evidence : [];
+      const firstResource = evidence.find((item) => item && typeof item === "object" &&
+        typeof (item as { uri?: unknown }).uri === "string") as { uri: string } | undefined;
       const canWiden = hasBudgetGap && (args.heuristic_token_budget < 12_000 || !args.evidence_cursor);
       return withGuidance(
         result,
@@ -760,6 +865,7 @@ export function registerAgentTools(
             mode: "task",
             objective: args.objective,
             ...(args.query ? { query: args.query } : {}),
+            ...(args.query_language ? { query_language: args.query_language } : {}),
             ...(args.changed_paths ? { changed_paths: args.changed_paths } : {}),
             ...(args.page_types ? { page_types: args.page_types } : {}),
             intent: args.intent,
@@ -768,9 +874,13 @@ export function registerAgentTools(
             max_evidence: Math.min(args.max_evidence * 2, 20),
             heuristic_token_budget: Math.min(args.heuristic_token_budget * 2, 12_000),
           },
+        } : sufficient && firstResource ? {
+          tool: "knowledge_page", action: "read", requiredArguments: ["action", "resource_uri"],
+          suggestedArguments: { action: "read", resource_uri: firstResource.uri },
         } : null,
         sufficient
-          ? "Materialize only the returned resource links needed for the task; use resources/read when available, otherwise knowledge_page action=read with the exact knowledge-rail:// URI."
+          ? "Materialize only the returned resource links needed for the task; use resources/read when available, otherwise knowledge_page action=read with the exact knowledge-rail:// URI. " +
+            "Sufficient coverage is not proof of an answer: state only what the materialized passages support and report the rest as unknown."
           : canWiden
             ? "Continue with the suggested candidate expansion and bounded batches; never infer missing evidence."
             : "No bounded widening can close the remaining gaps: materialize relevant evidence and report those gaps as unknowns."
@@ -845,13 +955,15 @@ export function registerAgentTools(
   }, async (args, context) => {
     try {
       if (args.action === "report") {
+        const language = (await readKnowledgeLanguage(wikiDir())).tag;
         return withGuidance(await call("prepareRequestIngestion", {
           report_filename: args.report_filename,
         }, context), "report_prepared", {
           tool: "knowledge_page",
           action: "write",
-          requiredArguments: ["action", "path", "content"],
-        }, "Apply every validated draft, append the log, then run knowledge_admin action=lint.");
+          requiredArguments: ["action", "path", "content", ...(language ? ["content_language"] : [])],
+          ...(language ? { suggestedArguments: { content_language: language } } : {}),
+        }, "Translate each draft into the workspace knowledge language before writing, append the log, then run knowledge_admin action=lint.");
       }
       if (args.action === "record_recovery" || args.action === "resolve_recovery") {
         const evidenceAction = args.action === "record_recovery" ? "recovery_record" : "recovery_resolve";
@@ -922,19 +1034,24 @@ export function registerAgentTools(
       }
       if (args.action === "next") {
         const empty = structured.queueEmpty === true;
+        const language = (await readKnowledgeLanguage(wikiDir())).tag;
         return withGuidance(result, empty ? "source_queue_empty" : "segment_ready", {
           tool: "knowledge_ingest",
           action: empty ? "source_status" : "apply_claims",
           requiredArguments: empty
             ? ["action", "normalized_filename"]
-            : ["action", "normalized_filename", "segment_id", "claims"],
+            : ["action", "normalized_filename", "segment_id", "claims", ...(language ? ["content_language"] : [])],
           suggestedArguments: {
             action: empty ? "source_status" : "apply_claims",
             normalized_filename: args.normalized_filename,
+            ...(!empty && language ? { content_language: language } : {}),
           },
-        }, structured.stakeholderSyncEnabled === true && !empty
-          ? `Stakeholder extraction is ${String(structured.stakeholderSyncMode)}. Use only explicit evidence and compare participant domains with ${String(structured.userEmailDomain ?? "unknown")}; persist no complete email address.`
-          : undefined);
+        }, [
+          ...(!empty && language ? [`Translate claim text and human-readable page titles into "${language}" live before apply_claims; preserve source references, identifiers and evidence meaning. Leave the original source unchanged.`] : []),
+          ...(structured.stakeholderSyncEnabled === true && !empty
+            ? [`Stakeholder extraction is ${String(structured.stakeholderSyncMode)}. Use only explicit evidence and compare participant domains with ${String(structured.userEmailDomain ?? "unknown")}; persist no complete email address.`]
+            : []),
+        ].join(" ") || undefined);
       }
       if (args.action === "source_status") {
         const ready = structured.readyForFinalization === true;
@@ -1000,8 +1117,20 @@ export function registerAgentTools(
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (args, context) => {
     try {
+      // Section evidence is retrieved with query (or the section title): it follows the knowledge language.
+      const language = args.action === "section"
+        ? await checkQueryLanguage(args, {
+            tool: "knowledge_document_context",
+            action: "section",
+            requiredArguments: ["action", "document_type", "section_title", "query", "query_language"],
+            keep: ["action", "document_type", "section_title", "language", "diagram_mode", "required_evidence",
+              "preferred_evidence", "page_paths", "page_types", "retrieval_profile"],
+          })
+        : undefined;
+      if (language?.blocked) return language.blocked;
       const key = args.action === "plan" ? "documentPlan" : "sectionContext";
-      const result = await call(key, omit(args, ["action"]), context);
+      const called = await call(key, omit(args, ["action", "query_language"]), context);
+      const result = language ? withLanguageContract(called, language.contract) : called;
       return withGuidance(result, args.action === "plan" ? "document_planned" : "section_context_ready",
         args.action === "plan" ? {
           tool: "knowledge_document_context",
@@ -1086,11 +1215,59 @@ export function registerAgentTools(
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, async (args, context) => {
     try {
-      if (args.action === "init") {
-        return withGuidance(await call("init", { force: args.force }, context), "workspace_initialized", {
-          tool: "knowledge_context", requiredArguments: ["mode", "objective"],
-          suggestedArguments: { mode: "task" },
-        });
+      if (args.action === "init" || args.action === "language") {
+        const options = z.object({ knowledge_language: z.string().min(1).max(35).optional() }).strict().parse(args.options ?? {});
+        const initialized = args.action === "init" ? await call("init", { force: args.force }, context) : undefined;
+        if (initialized && (!isCallToolResult(initialized) || initialized.isError)) return initialized;
+        const root = wikiDir();
+        // Declaration and page writes share the wiki mutation lock, so the first page cannot race a change.
+        const declaration = options.knowledge_language && (args.action === "init" || args.setup_mode !== "status")
+          ? await withWikiFileLock(root, `${root}:wiki-mutation`, () => declareKnowledgeLanguage(root, options.knowledge_language!, {
+              apply: args.action === "init" || args.setup_mode === "apply",
+            }))
+          : undefined;
+        // A preview reports the language in force; the would-be state is exposed separately.
+        const preview = declaration?.state === "would_declare";
+        const language = (preview ? declaration.previous : declaration?.current) ?? await readKnowledgeLanguage(root);
+        const survey = declaration?.survey ?? (args.action === "language" ? await surveyKnowledgeLanguage(root, language.tag ?? undefined) : undefined);
+        const lines = [
+          ...(initialized ? initialized.content.flatMap((item) => item.type === "text" ? [item.text] : []) : []),
+          language.tag
+            ? `Knowledge language: ${language.tag}${language.lockedAt ? " (locked)" : " (not locked until the first canonical page)"}.`
+            : "Knowledge language: not declared. Declare it with knowledge_admin action=language options.knowledge_language=<BCP 47 tag>.",
+          ...(declaration?.state === "locked"
+            ? [`Refused: the knowledge language is locked to ${declaration.previous.tag}; ordinary operations cannot change it.`] : []),
+          ...(declaration?.state === "would_declare" ? [`Preview: setup_mode=apply would record ${declaration.requested}.`] : []),
+          ...(survey && survey.pageCount > 0
+            ? [`Page language estimates (${survey.surveyedPages}/${survey.pageCount} pages): ` +
+                Object.entries(survey.estimates).map(([key, count]) => `${key}=${count}`).join(", ") +
+                ". Estimates are heuristic; declaring a language does not convert existing pages."]
+            : []),
+        ];
+        const structuredContent = {
+          ...(initialized?.structuredContent && typeof initialized.structuredContent === "object" ? initialized.structuredContent as Record<string, unknown> : {}),
+          action: args.action,
+          ...languageSummary(language),
+          ...(declaration ? { declaration: declaration.state, requested: declaration.requested } : {}),
+          ...(preview ? { proposed: languageSummary(declaration.current) } : {}),
+          ...(survey ? { pageLanguageSurvey: survey } : {}),
+        };
+        const next: NextAction = preview
+          ? { tool: "knowledge_admin", action: "language", requiredArguments: ["action", "options", "setup_mode"],
+              suggestedArguments: { action: "language", setup_mode: "apply", options: { knowledge_language: declaration.requested } } }
+          : !language.tag
+          ? { tool: "knowledge_admin", action: "language", requiredArguments: ["action", "options", "setup_mode"],
+              suggestedArguments: { action: "language", setup_mode: "preview" } }
+          : { tool: "knowledge_context", requiredArguments: ["mode", "objective", "query", "query_language"],
+              suggestedArguments: { mode: "task", query_language: language.tag } };
+        return withGuidance({ content: [{ type: "text", text: lines.join("\n") }], structuredContent },
+          args.action === "init" ? "workspace_initialized" : declaration?.state === "locked" ? "blocked" : "knowledge_language_reported",
+          next,
+          preview
+            ? `Nothing was recorded. Confirm ${declaration.requested} with the user, then apply.`
+            : language.tag
+            ? `Retrieval queries use ${language.tag}; answers and deliverables follow the user's language.`
+            : "Ask the user which language the canonical knowledge is written in before declaring it.");
       }
       if (args.action === "usage") {
         const options = z.object({
@@ -1142,17 +1319,22 @@ export function registerAgentTools(
         await refreshRetrievalIndex(wikiDir(), { persist: false, verificationMode: args.integrity_mode });
         const knowledgeRuntime = await checkpointStatus();
         if (!isCallToolResult(codeStatus)) return codeStatus;
+        const language = await readKnowledgeLanguage(wikiDir());
         return withGuidance({
           ...codeStatus,
           content: [
             ...codeStatus.content,
             { type: "text", text: `Knowledge checkpoint status: verification=${args.integrity_mode}; project paths are not exposed.` },
+            { type: "text", text: language.tag
+              ? `Knowledge language: ${language.tag}. Pass retrieval queries in it with query_language; answer in the user's language.`
+              : "Knowledge language: not declared (knowledge_admin action=language)." },
           ],
           structuredContent: {
             ...(codeStatus.structuredContent && typeof codeStatus.structuredContent === "object"
               ? codeStatus.structuredContent as Record<string, unknown>
               : {}),
             knowledgeRuntime,
+            knowledgeLanguage: languageSummary(language),
           },
         }, "code_status_complete", null);
       }

@@ -4,6 +4,7 @@ import type { GraphEdge, GraphNode, WikiGraph } from "../src/core/graph-index.js
 import {
   buildRuntimeGraph,
   expandRuntimeGraphFromSeeds,
+  type GraphNeighbor,
 } from "../src/core/graph-runtime.js";
 
 function page(id: string, requestId?: string): GraphNode {
@@ -44,6 +45,35 @@ test("runtime graph indexes nodes, adjacency, degree and page paths once", () =>
   assert.equal(runtime.outgoing.get(a.id)?.length, 2);
   assert.equal(runtime.incoming.get(b.id)?.[0]?.id, a.id);
   assert.equal(runtime.degree.get(a.id), 2);
+});
+
+test("emitting edges does bounded work even when a selected node has thousands of outgoing links", () => {
+  const hub = page("Hub");
+  const near = page("Near");
+  const leaves = Array.from({ length: 10_000 }, (_, i) => page(`Leaf${i}`));
+  const selectedEdges: GraphEdge[] = [
+    { from: hub.id, to: near.id, kind: "links_to" },
+    { from: hub.id, to: near.id, kind: "implements" },
+    { from: near.id, to: hub.id, kind: "tests" },
+  ];
+  const runtime = buildRuntimeGraph(graph([hub, near, ...leaves], [
+    ...selectedEdges, ...leaves.map((leaf) => ({ from: hub.id, to: leaf.id, kind: "links_to" as const })),
+  ]));
+  let adjacencyReads = 0;
+  const outgoing = runtime.outgoing as Map<string, readonly GraphNeighbor[]>;
+  outgoing.set(hub.id, new Proxy(outgoing.get(hub.id)!, {
+    get(target, property, receiver) {
+      if (typeof property === "string" && /^\d+$/.test(property)) adjacencyReads++;
+      return Reflect.get(target, property, receiver);
+    },
+  }));
+  const result = expandRuntimeGraphFromSeeds(runtime, {
+    seedNodeIds: [hub.id, near.id], maxNodes: 2, maxDepth: 0, maxEdgeWork: 1,
+  });
+  assert.ok(adjacencyReads < 20, `read ${adjacencyReads} adjacency entries for two selected nodes`);
+  const sorted = (edges: GraphEdge[]) => edges.map((edge) => `${edge.from}|${edge.kind}|${edge.to}`).sort();
+  assert.deepEqual(sorted(result.edges), sorted(selectedEdges));
+  assert.ok(result.stats.edgeWork <= 1);
 });
 
 test("seeded expansion visits the same local neighborhood when unrelated graph size grows", () => {
@@ -189,4 +219,25 @@ test("metadata hubs do not turn same-project pages into graph evidence", () => {
   assert.equal(result.nodes.some((node) => node.id === project.id), true);
   assert.equal(result.nodes.some((node) => node.id === unrelated.id), false);
   assert.equal(result.stats.truncatedFrontierCount, 0);
+});
+
+test("an explicit diagnostic edge cap still visits discovered nodes", () => {
+  const seed = page("Seed");
+  const hub = page("Hub");
+  const leaves = Array.from({ length: 500 }, (_, index) => page(`Leaf${String(index).padStart(3, "0")}`));
+  const runtime = buildRuntimeGraph(graph(
+    [seed, hub, ...leaves],
+    [{ from: seed.id, to: hub.id, kind: "links_to" }, ...leaves.map((leaf) => ({ from: leaf.id, to: hub.id, kind: "links_to" as const }))]
+  ));
+  const params = { seedNodeIds: [seed.id], maxNodes: 12, maxDepth: 3, beamWidth: 10, maxVisitedNodes: 24, hubPenalty: false } as const;
+  const unbounded = expandRuntimeGraphFromSeeds(runtime, { ...params, maxEdgeWork: Number.POSITIVE_INFINITY });
+  const bounded = expandRuntimeGraphFromSeeds(runtime, { ...params, maxEdgeWork: 100 });
+  assert.equal(unbounded.stats.edgeWork > 500, true);
+  assert.equal(unbounded.stats.edgeBudgetExhausted, false);
+  assert.equal(bounded.stats.edgeWork, 100);
+  assert.equal(bounded.stats.edgeBudgetExhausted, true);
+  assert.equal(bounded.stats.visitedNodes > 2, true, "discovered leaves are visited without expansion");
+  assert.deepEqual(bounded.nodes.map((node) => node.id), unbounded.nodes.map((node) => node.id));
+  // Production does not impose an edge-work cap.
+  assert.deepEqual(expandRuntimeGraphFromSeeds(runtime, params).stats, unbounded.stats);
 });

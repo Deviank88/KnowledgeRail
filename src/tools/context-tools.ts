@@ -8,6 +8,8 @@ import {
 import { wikiDir } from "../core/paths.js";
 import { errorResult } from "./helpers.js";
 import { toolName } from "../mcp/tool-names.js";
+import { compactStructuredContext } from "../context/compact-task-context.js";
+export { compactStructuredContext } from "../context/compact-task-context.js";
 
 const CONTEXT_SECTION_LABELS: Readonly<Record<
   (typeof TASK_CONTEXT_EVIDENCE_FIELDS)[number],
@@ -44,6 +46,7 @@ function compactManifestText(manifest: TaskContext): string {
       `fallback=${manifest.retrieval.fallbackUsed}.`,
   ];
   const lines = ["KnowledgeRail task context"];
+  lines.push("Answerability is unverified. Read the relevant passages and check that they support the requested facts, conditions and relations; shared vocabulary and ranking alone do not establish an answer.");
 
   if (decisionCandidateCount > 0) {
     lines.push(
@@ -127,59 +130,6 @@ function evidenceLinks(manifest: TaskContext): ResourceLink[] {
   return [...new Map(links.map((link) => [link.uri, link])).values()];
 }
 
-export function compactStructuredContext(manifest: TaskContext) {
-  return {
-    version: manifest.version,
-    decisions: manifest.decisions,
-    evidence: manifest.evidence.map((evidence) => ({
-      uri: evidence.uri,
-      path: evidence.path,
-      title: evidence.title,
-      type: evidence.type,
-      heading: evidence.heading,
-      reason: evidence.reason,
-      stale: evidence.stale,
-      staleReason: evidence.staleReason,
-      driftClaimIds: evidence.driftClaimIds,
-    })),
-    ...(manifest.repositoryMap ? { repositoryMap: manifest.repositoryMap } : {}),
-    ...(manifest.temporal ? { temporal: manifest.temporal } : {}),
-    ...(manifest.history ? { history: manifest.history } : {}),
-    changeImpact: {
-      mode: manifest.changeImpact.mode,
-      decisions: manifest.changeImpact.decisions,
-      ...(manifest.changeImpact.codeRoots ? {
-        codeRoots: manifest.changeImpact.codeRoots,
-        codeRelations: manifest.changeImpact.codeRelations,
-        codeWikiPages: manifest.changeImpact.codeWikiPages,
-        codeSnapshot: manifest.changeImpact.codeSnapshot,
-        codeWarnings: manifest.changeImpact.codeWarnings,
-        codeTruncated: manifest.changeImpact.codeTruncated,
-      } : {}),
-    },
-    gaps: manifest.unknowns,
-    retrieval: {
-      evidenceOffset: manifest.retrieval.evidenceOffset,
-      evidenceRevision: manifest.retrieval.evidenceRevision,
-      nextEvidenceOffset: manifest.retrieval.nextEvidenceOffset,
-      remainingEvidenceCount: manifest.retrieval.remainingEvidenceCount,
-      candidateSearchLimited: manifest.retrieval.candidateSearchLimited,
-      profile: manifest.retrieval.profile,
-      coverageMode: manifest.retrieval.coverageMode,
-      coverageWarnings: manifest.retrieval.coverageWarnings,
-      wideningLevel: manifest.retrieval.wideningLevel,
-      coverageSufficient: manifest.retrieval.coverageSufficient,
-      evidenceGaps: manifest.retrieval.evidenceGaps,
-      estimatedContextTokens: manifest.retrieval.estimatedContextTokens,
-      coverageCandidateCount: manifest.retrieval.coverageCandidateCount,
-      selectedEvidenceCount: manifest.retrieval.selectedEvidenceCount,
-      fallbackUsed: manifest.retrieval.fallbackUsed,
-    },
-    budget: manifest.budget,
-    task: manifest.task,
-  };
-}
-
 /** Preserve values and ranking while putting volatile task and snapshot data last. */
 export function stableContextPayload(manifest: TaskContext): TaskContext {
   const { version, currentState, decisions, repositoryMap, task, intent, objective, retrieval, size, budget, ...rest } = manifest;
@@ -244,6 +194,7 @@ export function registerContextTools(
           retrievalProfile: retrieval_profile,
           maxEvidence: max_evidence,
           heuristicTokenBudget: heuristic_token_budget,
+          responseDetail: response_detail,
           includeRepositoryMap: include_repository_map,
           asOf: as_of,
           includeAdditional: evidence_cursor !== undefined,

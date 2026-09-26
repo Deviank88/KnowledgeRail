@@ -23,6 +23,7 @@ import {
 } from "./graph-runtime.js";
 import type { RetrievalProfile } from "./text-analysis.js";
 import { wikiPageUri } from "../context/resource-uri.js";
+import { resolveHitPassage } from "../context/context-manifest.js";
 import { SemanticBudget } from "./semantic/budget.js";
 import { configuredSemanticIndex } from "./semantic/index.js";
 import type {
@@ -35,7 +36,7 @@ import type {
 import { registerWorkspaceState } from "./workspace-state.js";
 import { selectLexicalEvidence } from "./retrieval-selection.js";
 import { rerankWithUsage } from "./usage-ledger.js";
-import { configuredReranker, RerankSession, type RerankDiagnostics, type RerankProvider } from "./reranker.js";
+import { configuredReranker, RerankSession, rerankWarning, type RerankDiagnostics, type RerankProvider } from "./reranker.js";
 
 export type RetrievalWideningLevel = 0 | 1 | 2 | 3;
 
@@ -692,7 +693,7 @@ async function retrieveAttempt(params: {
   if (params.rerank) {
     const pool = fused.slice(0, Math.min(64, positiveInteger(request.rerankPoolSize, 32)));
     const documents = pool.map((hit) => {
-      const passage = hit.record?.passages.find((p) => p.heading === hit.heading);
+      const passage = resolveHitPassage(hit);
       return `${hit.title}\n${hit.heading}\n${passage?.text ?? hit.excerpt}`.slice(0, 2048);
     });
     const scores = await params.semanticBudget.excluding(() => params.rerank!.score(request.query, documents));
@@ -748,7 +749,8 @@ function lexicalCoverageWarning(semantic: HybridSemanticDiagnostics): string[] {
 async function assessAttemptCoverage(
   request: HybridRetrievalParams,
   result: AttemptResult,
-  budget: SemanticBudget
+  budget: SemanticBudget,
+  maximumGraphBudget: boolean
 ): Promise<RetrievalCoverage> {
   let coverageMode: RetrievalCoverage["coverageMode"] = "lexical";
   let semanticScores: readonly SemanticCoverageScore[] = [];
@@ -780,6 +782,7 @@ async function assessAttemptCoverage(
     displayHits: result.hits,
     evidenceSignals: result.evidenceSignals,
     graphResult: result.graphResult,
+    maximumGraphBudget,
     requirements: request.coverageRequirements,
     coverageMode,
     semanticScores,
@@ -809,7 +812,7 @@ export async function retrieveWikiHybrid(params: HybridRetrievalParams): Promise
     const result = await retrieveWithBudget(params, budget, rerank);
     // A timed-out coverage operation must not leave a semantic ranking in the output.
     if (budget.expired || (budget.elapsedMs >= budget.milliseconds && result.semantic.descriptor !== undefined)) {
-      const baseline = await retrieveWithBudget({ ...params, semanticEnabled: false, semanticIndex: undefined }, budget);
+      const baseline = await retrieveWithBudget({ ...params, semanticEnabled: false, semanticIndex: undefined }, budget, rerank);
       baseline.semantic = { ...result.semantic, available: false, budgetExceeded: true,
         error: "semantic_budget_exceeded", budgetMs: budget.milliseconds, elapsedMs: budget.elapsedMs };
       baseline.coverage.warnings = [...baseline.coverage.warnings, "Semantic budget exceeded; lexical and graph evidence returned."];
@@ -863,7 +866,8 @@ async function retrieveWithBudget(params: HybridRetrievalParams, semanticBudget:
         return semanticPromise;
       },
     });
-    const coverage = await assessAttemptCoverage(params, result, semanticBudget);
+    // From level 2 the attempt uses the maximum budget and the widest graph multiplier.
+    const coverage = await assessAttemptCoverage(params, result, semanticBudget, level >= 2);
     attempts.push({
       level,
       budget,
@@ -906,7 +910,8 @@ async function retrieveWithBudget(params: HybridRetrievalParams, semanticBudget:
     semanticHits: finalAttempt.semanticHits,
     semantic: finalAttempt.semantic,
     graphResult: finalAttempt.graphResult,
-    coverage: finalCoverage,
+    coverage: rerank && rerankWarning(rerank.diagnostics)
+      ? { ...finalCoverage, warnings: [...finalCoverage.warnings, rerankWarning(rerank.diagnostics)!] } : finalCoverage,
     wideningLevel: finalLevel,
     attempts,
     initialBudget,

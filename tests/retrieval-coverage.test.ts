@@ -10,6 +10,7 @@ import {
   createRetrievalEvidenceSignals,
   extractQueryEntities,
   semanticCoverageQueries,
+  inferCoverageRequirements,
 } from "../src/core/retrieval-coverage.js";
 
 function hit(
@@ -46,7 +47,7 @@ function hit(
   };
 }
 
-function graphResult(): SeededGraphQueryResult {
+function graphResult(stats: Partial<SeededGraphQueryResult["stats"]> = {}): SeededGraphQueryResult {
   return {
     graph: { version: 2, generatedAt: "", nodes: [], edges: [], warnings: [] },
     nodes: [],
@@ -60,6 +61,9 @@ function graphResult(): SeededGraphQueryResult {
       emittedEdges: 0,
       maxDepthReached: 0,
       truncatedFrontierCount: 0,
+      edgeWork: 0,
+      edgeBudgetExhausted: false,
+      ...stats,
     },
   };
 }
@@ -67,6 +71,15 @@ function graphResult(): SeededGraphQueryResult {
 function selectedPassage(hit: RetrievalHit) {
   return hit.record.passages.find((passage) => passage.heading === hit.heading);
 }
+
+test("source connectors do not imply multiple corroborating sources", () => {
+  for (const query of ["Which folders can I connect as sources?", "Quali cartelle collego come fonti?", "Use folders as data sources"]) {
+    assert.equal(inferCoverageRequirements(query).minimumSourceDiversity, 0, query);
+  }
+  assert.equal(inferCoverageRequirements("Compare multiple sources").minimumSourceDiversity, 2);
+  assert.equal(inferCoverageRequirements("Usa più fonti indipendenti").minimumSourceDiversity, 2);
+  assert.equal(inferCoverageRequirements("Connect as sources", { minimumSourceDiversity: 3 }).minimumSourceDiversity, 3);
+});
 
 test("query signal counts share facet and entity matching, independent of retrieved coverage", () => {
   const signals = createRetrievalEvidenceSignals("Explain WORKER_POOL_MAX_PENDING_JOB_COUNT queue timeout queue");
@@ -76,6 +89,20 @@ test("query signal counts share facet and entity matching, independent of retrie
   assert.equal(signals(partial), signals(partial), "selection and coverage reuse the same per-hit signals");
   assert.equal(signals(hit(2, "WORKER_POOL_MAX_PENDING_JOB_COUNT queue timeout")).size, signals.querySignalCount);
   assert.equal(createRetrievalEvidenceSignals("the and").querySignalCount, 0);
+});
+
+test("frontier truncation asks for widening until the maximum graph budget, while exhausted edge work stays a gap", () => {
+  const query = "caching storage";
+  const hits = [hit(1, "Caching storage keeps durable results.")];
+  const coverage = (stats: Partial<SeededGraphQueryResult["stats"]>, maximumGraphBudget?: boolean) =>
+    assessRetrievalCoverage({ query, hits, graphResult: graphResult(stats), maximumGraphBudget });
+  assert.deepEqual(coverage({ truncatedFrontierCount: 5 }).evidenceGaps, ["truncated_frontier"]);
+  const maximal = coverage({ truncatedFrontierCount: 5 }, true);
+  assert.deepEqual(maximal.evidenceGaps, []);
+  assert.equal(maximal.truncatedFrontierCount, 5);
+  assert.match(maximal.warnings.join(" "), /maximum budget; 5 linked pages/);
+  assert.deepEqual(coverage({ edgeBudgetExhausted: true }, true).evidenceGaps, ["truncated_frontier"]);
+  assert.deepEqual(coverage({}, true).warnings, []);
 });
 
 test("coverage preserves complete long technical identifiers without matching prefixes", () => {
@@ -124,6 +151,52 @@ test("entity extraction ignores task verbs and ordinary slash-separated prose", 
   assert.equal(guidedTaskEntities.includes("Capire"), false);
   assert.equal(guidedTaskEntities.includes("lease"), true);
   assert.equal(guidedTaskEntities.includes("SilverFir"), false);
+});
+
+test("entity extraction keeps accented words whole and ignores leading function words", () => {
+  assert.deepEqual(extractQueryEntities("Perché references mostra dipendenze irrisolte?"), []);
+  assert.deepEqual(extractQueryEntities("Quali dati devono essere rigenerati dopo il riavvio?"), []);
+  for (const question of ["Come", "Dove", "Quando", "Devo", "Posso", "Vorrei", "Dopo", "Prima", "Due"]) {
+    assert.deepEqual(extractQueryEntities(`${question} configuro la cache locale?`), [], question);
+  }
+  assert.deepEqual(extractQueryEntities("Qual è il formato del protocollo?"), []);
+  assert.deepEqual(extractQueryEntities("Cos'è il ledger e dov'è salvato?"), []);
+  assert.deepEqual(extractQueryEntities("Why does Payment reject the request?"), ["Payment"]);
+  assert.deepEqual(extractQueryEntities("Should Checkout retry?"), ["Checkout"]);
+  assert.deepEqual(extractQueryEntities("Spiega il modulo Città e la Fatturazione"), ["Città", "Fatturazione"]);
+});
+
+test("function-word filtering keeps acronyms and quoted identifiers", () => {
+  assert.equal(extractQueryEntities("How does the CAN bus fault handler recover?").includes("CAN"), true);
+  assert.equal(extractQueryEntities("Explain the `CAN` adapter timeout").includes("CAN"), true);
+  assert.equal(extractQueryEntities("Which IT assets need a US data residency review?").includes("IT"), true);
+  assert.equal(extractQueryEntities("Which IT assets need a US data residency review?").includes("US"), true);
+  assert.equal(extractQueryEntities("Configure the `Should` rule in the linter").includes("Should"), true);
+  assert.equal(extractQueryEntities("Can Checkout retry?").includes("Can"), false);
+});
+
+test("lowercase hyphenated prose is not a required identifier unless quoted", () => {
+  const entities = extractQueryEntities("Is the always-on per-conversation adapter production-ready for REQ-808 and qwen3-embedding?");
+  assert.deepEqual(entities.filter((entity) => /-/.test(entity)), ["REQ-808", "qwen3-embedding"]);
+  assert.equal(extractQueryEntities("Configure Retry-After headers").includes("Retry-After"), true);
+  assert.equal(extractQueryEntities("Restart the `order-service` deployment").includes("order-service"), true);
+  assert.equal(extractQueryEntities("Restart the \"order-service\" deployment").includes("order-service"), true);
+});
+
+test("hyphenated prose contributes facets instead of a required entity", () => {
+  const coverage = assessRetrievalCoverage({
+    query: "Is the adapter production-ready?",
+    hits: [hit(1, "The adapter is ready for production use.")],
+    graphResult: graphResult(),
+  });
+  assert.deepEqual(coverage.unresolvedEntities, []);
+  assert.equal(coverage.sufficient, true, "the parts match even though the compound is absent");
+  const quoted = assessRetrievalCoverage({
+    query: "Is the `order-service` adapter ready?",
+    hits: [hit(1, "The order adapter is ready for service use.")],
+    graphResult: graphResult(),
+  });
+  assert.deepEqual(quoted.unresolvedEntities, ["order-service"]);
 });
 
 test("single-word proper nouns remain coverage entities without substring matches", () => {

@@ -5,6 +5,7 @@ import { segmentMarkdown, type WikiPageRecord } from "../src/core/page-record.js
 import {
   buildRetrievalContextManifest,
   estimateContextSize,
+  evidenceFromRetrievalHit,
 } from "../src/context/context-manifest.js";
 import { isWikiPassageId, wikiPassageId } from "../src/context/passage-id.js";
 import {
@@ -56,6 +57,16 @@ test("passage ids are content-addressed, order-independent and change with evide
   assert.equal(isWikiPassageId(id), true);
   assert.equal(wikiPassageId(same), id);
   assert.notEqual(wikiPassageId(changed), id);
+});
+
+test("repeated headings resolve the selected excerpt or fall back to the page when ambiguous", () => {
+  const prefix = "The release process preserves the transaction identifier across every retry and records the audit trace. ";
+  const page = record("rules.md", "Rules", `## Rule\n\n${prefix}Keep the lease.\n\n## Rule\n\n${prefix}Revoke the lease.`);
+  const selected = { ...hit(page, "Rule", 1), excerpt: page.passages[1]!.text };
+  assert.equal(evidenceFromRetrievalHit(selected).passageId, wikiPassageId(page.passages[1]!));
+  const ambiguous = evidenceFromRetrievalHit({ ...selected, excerpt: prefix.trim() });
+  assert.equal(ambiguous.passageId, undefined);
+  assert.equal(ambiguous.uri, wikiPageUri(page.path));
 });
 
 test("page and passage URIs round-trip Unicode paths without traversal ambiguity", () => {

@@ -44,6 +44,40 @@ function injectedIndex(hits: readonly SemanticHit[]): SemanticIndex {
 
 const provider = { id: "test", model: "semantic-golden", version: "1", dimensions: 8 };
 
+test("lexical, semantic and graph-only evidence contribute together, with graph preserved on semantic failure", async () => {
+  const wikiRoot = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-rail-three-channels-"));
+  try {
+    await writePage(wikiRoot, "Exact.md", "REQ-7421", "The immutable audit identifier is REQ-7421. See [[Dependency]].");
+    await writePage(wikiRoot, "Dependency.md", "Dependency", "The downstream component supplies durable storage.");
+    await writePage(wikiRoot, "Semantic.md", "Adaptive admission", "Predictive load shedding avoids saturation.");
+    const semanticIndex = injectedIndex([{
+      pagePath: "Semantic.md", passageId: "p-0123456789abcdef", heading: "Adaptive admission",
+      text: "Predictive load shedding avoids saturation.", score: 0.97, provider,
+    }]);
+    const input = { wikiRoot, query: "REQ-7421", maxResults: 8, progressiveWidening: false,
+      persistDerivedIndexes: false, rerankEnabled: false, semanticIndex };
+    const hybrid = await retrieveWikiHybrid(input);
+    const byPath = new Map(hybrid.coverageHits.map((hit) => [hit.path, hit]));
+    assert.equal(byPath.get("Exact.md")?.channels.lexicalRank, 1);
+    assert.equal(byPath.get("Semantic.md")?.channels.semanticRank, 1);
+    assert.equal(byPath.get("Semantic.md")?.channels.lexicalRank, undefined);
+    assert.ok(byPath.get("Dependency.md")?.channels.graphRank);
+    assert.equal(byPath.get("Dependency.md")?.channels.lexicalRank, undefined);
+    assert.equal(byPath.get("Dependency.md")?.channels.semanticRank, undefined);
+    assert.equal(hybrid.hits[0]?.path, "Exact.md");
+    semanticIndex.search = async () => { throw new Error("test provider unavailable"); };
+    const fallback = await retrieveWikiHybrid(input);
+    assert.equal(fallback.semantic.available, false);
+    assert.ok(fallback.coverageHits.some((hit) => hit.path === "Exact.md" && hit.channels.lexicalRank));
+    assert.ok(fallback.coverageHits.some((hit) => hit.path === "Dependency.md" && hit.channels.graphRank));
+  } finally {
+    clearRetrievalIndexes();
+    clearRuntimeWikiGraphs();
+    invalidateWikiGraph(wikiRoot);
+    await fs.rm(wikiRoot, { recursive: true, force: true });
+  }
+});
+
 test("a configured slow reranker keeps successful semantic retrieval and coverage within their separate deadline", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "kr-separate-rerank-budget-"));
   try {

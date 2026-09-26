@@ -53,10 +53,23 @@ export const DEFAULT_SCHEMA_MD = `# Wiki Schema and Conventions
 
 ## Language
 
-**Write new wiki content in the language of the user's current request.**
-An explicit language request overrides inference. When editing an existing page, preserve its language unless the user asks for a translation. If the user's language cannot be inferred safely, ask before writing instead of silently defaulting to English. This policy is open-ended: any natural language understood by the consuming model is valid.
+**Write canonical wiki pages in the workspace knowledge language.**
+The knowledge language is the \`knowledge_language\` field at the top of this file (a BCP 47 tag such as \`en\` or \`it\`). It is declared once and becomes immutable when the first canonical page is written; reinitialization, restarts and page deletions do not change it. It is not recalculated from the language of the latest conversation.
 
-Frontmatter fields (\`title\`, \`tags\`, and so on) retain their technical formats (for example ISO dates and lowercase-with-hyphens tags). Model-facing instructions, stable identifiers, and generated control files remain in English; this does not constrain the language of human-readable wiki pages or deliverables.
+| Element | Language |
+|---|---|
+| Canonical wiki pages | The workspace knowledge language |
+| Retrieval queries (\`query\` with \`query_language\`) | The workspace knowledge language |
+| \`objective\`, answers and deliverables for the user | The language the user requested |
+| Original sources, code, identifiers and quotations | Their original form |
+
+A user may request changes in any language: translate the request into the knowledge language before retrieving and writing, then explain the result in the user's language. Translate the intent only; preserve identifiers, paths, codes, numbers, negations and constraints. When quoting evidence, keep the original wording; label a translated quotation as a translation. Imported sources may stay in other languages: the constraint applies to the canonical knowledge built from them.
+
+The calling agent performs these translations live, without asking the user to translate. Before \`knowledge_page write/edit\` or \`knowledge_ingest apply_claims\`, translate human-readable content and titles and pass \`content_language\` matching the workspace language. Missing or incompatible declarations are rejected before mutation. Language estimates are advisory and do not verify translation fidelity.
+
+If no knowledge language is declared yet, ask the user which language the knowledge is written in and declare it with \`knowledge_admin action=language\`. Until then, preserve an existing page's language and ask before writing if the language cannot be inferred safely. Declaring a language over existing pages does not translate them.
+
+Frontmatter fields (\`title\`, \`tags\`, and so on) retain their technical formats (for example ISO dates and lowercase-with-hyphens tags). Model-facing instructions, stable identifiers, and generated control files remain in English; this does not constrain the knowledge language or the language of deliverables.
 
 ---
 
@@ -380,7 +393,7 @@ Documents are saved under \`docs/deliverables/\`. They are not wiki pages and **
 
 ### Document quality rules
 
-- Use the explicit output language when supplied; otherwise use the language of the user's current request. Translate human-facing template headings and prose instead of treating an English reference template as an English-output requirement.
+- Use the explicit output language when supplied; otherwise use the language of the user's current request. Translate human-facing template headings and prose instead of treating an English reference template as an English-output requirement. Deliverables follow the user; the evidence behind them stays in the knowledge language, so retrieve section evidence with a query in that language.
 - Do not leave placeholders such as \`[Describe...]\`, \`[Name]\`, or \`{{PROJECT_NAME}}\` in the final document.
 - Do not invent details absent from the wiki; report gaps, assumptions, or data to confirm.
 - In client-facing documents, do not mention the wiki, context packs, agents, prompts, MCP tools, \`src/\`, \`tests/\`, \`docs/\` paths, or internal process details.
@@ -395,7 +408,7 @@ const DOCUMENT_QUALITY_RULES =
   "Cross-cutting rules: use the explicit output language when supplied, otherwise the language of the user's current request; " +
   "translate human-facing headings and prose even when the structural reference template is in English; " +
   "leave no unresolved placeholders; do not invent details absent from the wiki; " +
-  "if the wiki is incomplete but code clarifies behavior, update the wiki before regenerating the document; " +
+  "if the wiki is incomplete but code clarifies behavior, update the wiki in its knowledge language before regenerating the document; " +
   "do not mention the wiki, context packs, agents, prompts, MCP tools, or internal paths in client-facing documents; " +
   "diagrams are optional and no representation is enforced when the choice is omitted; use Mermaid or a relative external asset only when the user selected it; " +
   "do not use ASCII art, text trees, or monospace diagrams.";

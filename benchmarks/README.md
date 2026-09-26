@@ -2,6 +2,35 @@
 
 The v4 roadmap treats performance, retrieval quality, context efficiency and migration preservation as simultaneous constraints. A faster implementation is not considered an improvement if it loses relevant evidence or degrades downstream document/context quality.
 
+## Evidence loss at graph hubs
+
+The [remaining-issues report](open-issues-2.9.4.md) records compact-context sizing,
+query-model warmup, answer verification and the frozen relational reranking
+experiment. The [Mac protocol](runtime-validation-2.9.4.md) keeps runtime, slot,
+pool-size, memory and cold-start measurements separate from Linux results.
+
+Run `npm run eval:graph-hubs -- --iterations=5 --json=/tmp/graph-hub-quality.json`.
+The frozen [fixture](fixtures/graph-hub-quality.json) contains 14 synthetic cases,
+including late targets, request siblings, competing seeds, two-hop evidence and
+controls for losses caused by beam width or disconnected components. Each case is
+measured with the initial and widest graph budgets used by eight-result retrieval.
+Three variants change only the edge-work limit: `production` uses the current
+default without a cap, `bounded` explicitly reproduces the rejected cap of 64
+entries per visited-node slot, and `reference` sets the limit to infinity. Seed
+scores, depth, beam width, node budgets, scoring and edge extraction remain
+identical. The reference is unlimited in edge work only, not an exhaustive graph
+search. Production must match it; regression tests cover late targets, request
+siblings, competing seeds and two-hop evidence.
+
+The report separates missing evidence attributable to the edge cap from evidence
+missed by both traversals, and checks that indexed result-edge extraction preserves
+every edge between selected nodes. This is a diagnostic, not a passing quality gate:
+known evidence loss must remain visible. It does not execute lexical/semantic
+retrieval, actual progressive widening decisions or an LLM, and its adversarial
+case frequencies do not estimate production answer accuracy. See the
+[measured report](graph-hub-quality-2.9.2.md) for the original capped results and
+the follow-up with the cap removed from production.
+
 ## Code efficiency across query lifecycles
 
 ```bash

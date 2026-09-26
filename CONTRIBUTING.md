@@ -2,6 +2,8 @@
 
 KnowledgeRail accepts focused bug fixes, tests, documentation improvements, and features that preserve retrieval accuracy, provenance, and bounded context behavior.
 
+Contributions are submitted under the repository's [PolyForm Noncommercial license](LICENSE), unless a separate written agreement states otherwise. Submit only material you have the right to contribute. Inclusion in a separately licensed commercial edition may require an additional agreement with the contributor; submission alone is not a copyright assignment. See [LICENSING.md](LICENSING.md).
+
 ## Setup
 
 Use Node.js `22.12.0` or newer:

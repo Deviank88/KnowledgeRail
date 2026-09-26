@@ -3,6 +3,7 @@ import { pagePathsByClaim, readEvidenceIrStore } from "../core/ingestion/evidenc
 import { claimValidAt } from "../core/ingestion/evidence-claim.js";
 import { evidenceHistory, type ClaimHistoryEntry } from "../core/ingestion/evidence-history.js";
 import { createHash } from "node:crypto";
+import { compactStructuredContext } from "./compact-task-context.js";
 import { tokenizeSearchText } from "../core/text-analysis.js";
 import { wikiPageUri } from "./resource-uri.js";
 import { expandCodeImpact, taskCodePaths, type CodeImpactFields } from "./code-impact.js";
@@ -62,6 +63,8 @@ export interface TaskContextAttempt {
 }
 
 export interface TaskContextRetrieval {
+  /** Retrieval coverage never verifies that a passage answers the user's question. */
+  answerability: "unverified";
   evidenceOffset?: number;
   evidenceRevision?: string;
   nextEvidenceOffset?: number;
@@ -167,6 +170,8 @@ export interface CompileTaskContextParams {
   retrievalProfile?: RetrievalProfile;
   maxEvidence?: number;
   heuristicTokenBudget?: number;
+  /** Size the representation actually returned by the caller. Defaults to the full manifest. */
+  responseDetail?: "compact" | "full";
   includeRepositoryMap?: boolean;
   asOf?: string;
   /** Opt-in persistence for disposable indexes. Context compilation is read-only by default. */
@@ -810,8 +815,8 @@ function contextWithoutSize(params: {
   };
 }
 
-function withSize(base: Omit<TaskContext, "size">, tokenBudget: number): TaskContext {
-  const size = estimateContextSize(JSON.stringify(base));
+function withSize(base: Omit<TaskContext, "size">, tokenBudget: number, responseDetail: "compact" | "full" = "full"): TaskContext {
+  const size = estimateContextSize(JSON.stringify(responseDetail === "compact" ? compactStructuredContext(base) : base));
   return {
     ...base,
     budget: {
@@ -950,6 +955,7 @@ async function compileTaskContextBody(params: CompileTaskContextParams): Promise
     } : evidence;
   }
   const retrieval: TaskContextRetrieval = {
+    answerability: "unverified",
     ...(additional ? { evidenceOffset: offset, evidenceRevision: revision,
       candidateSearchLimited: hybrid.semantic.approximate === true || hybrid.semantic.candidateLimitReached === true } : {}),
     strategy: "hybrid_progressive_widening",
@@ -996,7 +1002,7 @@ async function compileTaskContextBody(params: CompileTaskContextParams): Promise
     coverage: hybrid.coverage,
     retrieval,
     tokenBudget,
-  }), tokenBudget);
+  }), tokenBudget, params.responseDetail);
   while (context.size.heuristicTokens > tokenBudget && selected.length > 1) {
     selected = selected.slice(0, -1);
     context = withSize(contextWithoutSize({
@@ -1011,7 +1017,7 @@ async function compileTaskContextBody(params: CompileTaskContextParams): Promise
       coverage: hybrid.coverage,
       retrieval,
       tokenBudget,
-    }), tokenBudget);
+    }), tokenBudget, params.responseDetail);
   }
   const mentionedPaths = taskCodePaths(`${objective}\n${query}`);
   const attachMap = async (base: TaskContext): Promise<TaskContext> => {
@@ -1027,7 +1033,7 @@ async function compileTaskContextBody(params: CompileTaskContextParams): Promise
         const nodes = map.nodes.slice(0, count), included = new Set(nodes.map((node) => node.uri));
         return withSize({ ...rest, repositoryMap: { ...map, nodes,
           relations: map.relations.filter((edge) => included.has(edge.from) && included.has(edge.to)),
-          truncated: map.truncated || count < map.nodes.length } }, tokenBudget);
+          truncated: map.truncated || count < map.nodes.length } }, tokenBudget, params.responseDetail);
       };
       let low = 0, high = map.nodes.length;
       while (low < high) {
@@ -1070,7 +1076,7 @@ async function compileTaskContextBody(params: CompileTaskContextParams): Promise
         codeRelations: fields.codeRelations!.filter((relation) => rootUris.has(relation.rootUri)),
         codeWikiPages: fields.codeWikiPages!.filter((page) => rootUris.has(page.rootUri)),
       },
-    }, tokenBudget);
+    }, tokenBudget, params.responseDetail);
   };
   let expanded = assemble();
   const fitPrefix = <K extends "codeRelations" | "codeWikiPages" | "codeRoots">(key: K) => {
@@ -1098,7 +1104,7 @@ async function compileTaskContextBody(params: CompileTaskContextParams): Promise
     context = withSize(contextWithoutSize({ intent: params.intent, objective, requestedPaths, selected,
       available: availableCandidates, allHitCount, policy, graph: taskGraph,
       coverage: hybrid.coverage, retrieval, tokenBudget,
-    }), tokenBudget);
+    }), tokenBudget, params.responseDetail);
     trimNotice(); expanded = assemble();
   }
   fitPrefix("codeRoots");
@@ -1121,7 +1127,7 @@ export async function compileTaskContext(params: CompileTaskContextParams): Prom
   const { size: _size, ...base } = context;
   base.budget = { ...base.budget, requestedHeuristicTokens: tokenBudget };
   const assemble = () => withSize({ ...base, history: { ...history, warnings: history.warnings.slice(0, 6), warningCount: history.warnings.length, revision, claims, totalClaims: history.claims.length,
-    ...(offset + claims.length < history.claims.length ? { nextOffset: offset + claims.length } : {}) } }, tokenBudget);
+    ...(offset + claims.length < history.claims.length ? { nextOffset: offset + claims.length } : {}) } }, tokenBudget, params.responseDetail);
   let result = assemble();
   while (!result.budget.withinHeuristicBudget && claims.length > 1) { claims.pop(); result = assemble(); }
   return result;
@@ -1171,6 +1177,7 @@ async function compileHistoricalTaskContext(params: CompileTaskContextParams): P
       ...(additional ? { evidenceOffset: offset, evidenceRevision: revision,
         remainingEvidenceCount: Math.max(0, candidates.length - offset - selected.length),
         ...(selected.length && offset + selected.length < candidates.length ? { nextEvidenceOffset: offset + selected.length } : {}) } : {}),
+      answerability: "unverified",
       strategy: "temporal_claims", coverageMode: "lexical", coverageWarnings: ["Historical lookup uses claim validity; current page prose and current code are not historical evidence."],
       query, profile: params.retrievalProfile ?? "balanced", wideningLevel: 0, coverageSufficient: selected.length > 0 && !buckets.contradictions.length,
       evidenceGaps: unknowns.map((gap) => gap.kind), estimatedContextTokens: 0, hitCount: selected.length, coverageCandidateCount: candidates.length,
@@ -1180,7 +1187,7 @@ async function compileHistoricalTaskContext(params: CompileTaskContextParams): P
         requirements: [], decisions: [], invariants: [], tests: [], incidents: [], risks: [], relations: [] }, retrieval,
       temporal: { asOf, claims: selected.map(({ claim }) => ({ id: claim.id, text: claim.text, kind: claim.kind, status: claim.status,
         sourceUri: claim.sourceUri, segmentId: claim.segmentId, validFrom: claim.validFrom ?? claim.createdAt, ...(claim.validUntil ? { validUntil: claim.validUntil } : {}) })) },
-      budget: { requestedHeuristicTokens: tokenBudget, withinHeuristicBudget: true, omittedEvidenceCount: candidates.length - selected.length } }, tokenBudget);
+      budget: { requestedHeuristicTokens: tokenBudget, withinHeuristicBudget: true, omittedEvidenceCount: candidates.length - selected.length } }, tokenBudget, params.responseDetail);
   };
   let result = assemble();
   while (result.size.heuristicTokens > tokenBudget && selected.length) { selected = selected.slice(0, -1); result = assemble(); }

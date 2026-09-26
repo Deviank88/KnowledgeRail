@@ -156,7 +156,8 @@ The optional reranker activates automatically when `KNOWLEDGE_RAIL_RERANK_BASE_U
 (Ollama's native root) and `KNOWLEDGE_RAIL_RERANK_MODEL` are configured in MCP `env`.
 The verified small model is BGE v2 M3 Q8, prepared once with the supplied script;
 see [setup and compatibility](../../README.md#optional-reranking-through-ollama-292-development-checkout).
-The compatibility adapter checks Ollama 0.34.3 and the exact prepared weights.
+The compatibility adapter checks the exact prepared weights and accepts an Ollama version
+once it reproduces the calibration scores; otherwise the reason is `unsupported_runtime`.
 There is no reranking deadline by default (`KNOWLEDGE_RAIL_RERANK_BUDGET_MS=0`).
 A positive value explicitly opts into a cumulative deadline; it is not required to
 activate reranking. Reranker time is excluded from the separate semantic deadline. `..._API_KEY` optionally supplies bearer authentication.
@@ -165,8 +166,8 @@ The previous `RERANK_ENDPOINT` plus `RERANK_MODEL` HTTP configuration remains
 supported with TEI/Cohere-style results, also without a default deadline. Do not combine endpoint
 and Ollama base URL. Both providers score at most 64 candidates from the hybrid
 union, independently of the display count; this does not remove other candidates.
-Identical pools reuse scores within one request; changed pools share any explicitly requested cumulative
-deadline. Missing configuration, invalid scores, failures and timeouts preserve base
+Scores are cached per query/passage pair within one request, so a widened pool sends only its new
+candidates; all scoring shares any explicitly requested cumulative deadline. Missing configuration, invalid scores, failures and timeouts preserve base
 ranking. Canonical edits during inference discard obsolete candidates. Scores never
 certify coverage; exact identifiers, filters and source links remain protected.
 The MCP process downloads no models and changes no embedding provider.

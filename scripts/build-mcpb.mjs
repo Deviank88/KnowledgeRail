@@ -89,6 +89,9 @@ try {
     fs.cp(path.join(installDirectory, "node_modules"), path.join(bundleDirectory, "node_modules"), { recursive: true }),
     fs.cp(path.join(repositoryRoot, "assets"), path.join(bundleDirectory, "assets"), { recursive: true }),
     fs.copyFile(path.join(repositoryRoot, "LICENSE"), path.join(bundleDirectory, "LICENSE")),
+    fs.copyFile(path.join(repositoryRoot, "NOTICE"), path.join(bundleDirectory, "NOTICE")),
+    fs.copyFile(path.join(repositoryRoot, "LICENSING.md"), path.join(bundleDirectory, "LICENSING.md")),
+    fs.cp(path.join(repositoryRoot, "licenses"), path.join(bundleDirectory, "licenses"), { recursive: true }),
     fs.copyFile(path.join(repositoryRoot, "ACKNOWLEDGEMENTS.md"), path.join(bundleDirectory, "ACKNOWLEDGEMENTS.md")),
   ]);
   await fs.rm(path.join(bundleDirectory, "node_modules", "knowledge-rail"), { recursive: true, force: true });
@@ -100,6 +103,7 @@ try {
   const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
   if (manifest.manifest_version !== "0.3") throw new Error("Unsupported MCPB manifest version.");
   if (manifest.version !== packageDocument.version) throw new Error("MCPB and npm package versions differ.");
+  if (manifest.license !== packageDocument.license) throw new Error("MCPB and npm package licenses differ.");
   if (manifest.server?.mcp_config?.args?.at(-1) !== "desktop") {
     throw new Error("MCPB must launch the context-free desktop adapter.");
   }

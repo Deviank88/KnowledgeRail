@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Add a frozen graph-hub evidence evaluation with early/late targets, incoming and
+  outgoing hubs, request siblings, seed starvation, two-hop paths and negative
+  controls. Compare production traversal and the rejected edge cap against an explicit
+  uncapped reference; report attributable evidence loss separately from beam/depth losses.
+
+- Add a per-workspace knowledge language contract. `knowledge_admin action="init"` or
+  `action="language"` declares a BCP 47 tag in `wiki/SCHEMA.md` frontmatter; it is
+  locked by the first canonical page and survives deletions, restarts and
+  reinitialization. Adopting an existing wiki locks immediately and reports heuristic
+  per-page language estimates without converting pages. Status and workspace selection
+  report the language; once declared, retrieval (`knowledge_context` with a query and
+  `knowledge_document_context action="section"`) requires `query_language` in it and
+  otherwise returns `query_language_required` without retrieving. Page write/edit and
+  claim ingestion require a matching `content_language` before mutation; prose language
+  estimates remain advisory. The calling agent translates queries and stored content
+  live into the knowledge language, and answers into the user's language.
+
 - Add experimental exact/HNSW engines alongside LSH, candidate admission separate
   from coverage, and expandable batches with visible approximation/resource limits.
   Persist HNSW topology independently from the knowledge graph, with checksums and
@@ -17,11 +34,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Restore a valid graph checkpoint before applying journal deltas; use current
   vectors for exact search during maintenance and persist only complete topology.
 - Add optional Ollama reranking activated by MCP base URL/model configuration,
-  with a checksum-verified small BGE Q8 preparation script, guarded Ollama 0.34.3
+  with a checksum-verified small BGE Q8 preparation script, calibrated Ollama
   compatibility and no default reranking deadline. Exclude reranker time from the
   separate embedding budget and preserve retrieval on failure.
 - Add optional HTTP cross-encoder reranking with optional cumulative time limits,
-  repeated-pool reuse, canonical freshness checks and base-ranking fallback.
+  per-pair score reuse, canonical freshness checks and base-ranking fallback.
 - Add task-context evidence/history continuations and explicit sourced `reinstates`
   relations. Display limits do not make later candidates irrelevant; cursors reject
   changed evidence, and history preserves closed intervals and unresolved states.
@@ -30,6 +47,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Add a frozen bilingual 20/40 development/evaluation corpus from real repository
   documentation, retain 16 historical queries, and compare fixed 32/64 pools,
   resident Float32 and exhaustive neighbors using the same real model outputs.
+
+### Changed
+
+- Document a complete llama.cpp MCP `env` configuration and agent setup procedure,
+  including provider selection, migration from Ollama reranking, process ownership,
+  restart and verification. Update licensing contact instructions for the public repository.
+
+- Offer this revision and future releases carrying these terms under PolyForm
+  Noncommercial 1.0.0. Commercial use requires a separate written license from the
+  copyright holder. Align npm and MCPB metadata and include licensing notices in
+  distributions. Previously granted Apache-2.0 rights and dependency licenses remain
+  unchanged; this is not a retroactive restriction on earlier releases.
+
+- Canonical wiki pages follow the workspace knowledge language instead of the language
+  of the user's latest request; objective, answers and deliverables still follow the
+  user. Server instructions, the default `SCHEMA.md`, document rules, the knowledge
+  update prompt and project client rules state the contract, including that sufficient
+  coverage is not proof of an answer. `init` without a declared language now points to
+  `action="language"`. The catalog budget rises to 14,100 bytes / 4,700 estimated
+  tokens for `query_language`, the `language` action and `content_language` on page
+  writes and claim ingestion (measured catalog: 14,050 bytes / 4,684 estimated tokens).
+
+- Cache reranker scores per query/passage pair within a request instead of per pool:
+  progressive widening sends only candidates not scored yet. On 120 live queries
+  (BGE Q8 on llama-server, 1 slot) hits, scores and coverage were identical, with
+  27% (59 English pages) and 41% (151 Italian pages) fewer scored pairs.
+- Keep graph neighbor scans uncapped in retrieval. The proposed limit of 64 neighbor
+  entries per visited-node slot could omit relevant late neighbors and prevent other
+  seeds from expanding; retain it only as an explicit diagnostic comparison. Depth,
+  beam and visited/emitted-node budgets still bound each traversal. Preserve lazy
+  neighbor merging and exact indexed result-edge extraction, which do not discard
+  evidence. See the [hub evaluation](benchmarks/graph-hub-quality-2.9.2.md).
+- `truncated_frontier` no longer blocks sufficiency once widening has reached the
+  maximum graph budget; the unexplored count remains in `truncatedFrontierCount` and in a
+  coverage warning. Before that budget it still requests widening, so two-hop graph-only
+  evidence is found as before. On a 151-page linked client wiki every query had been
+  insufficient (0/30 answerable); now 27/30 are sufficient and 2 of 12 in-domain
+  negatives are judged sufficient (a limit already known from the coverage diagnostics).
+  A 59-page corpus without links is unchanged.
+- Report a configured reranker that did not reorder results (service down, refused
+  runtime, invalid scores, configuration or deadline) as a coverage warning,
+  `Reranker unavailable (<reason>)`, and one server-log warning per outage. Before, a
+  stopped reranker service silently returned the base ranking.
+- Accept any Ollama version for the reranker adapter once it reproduces three fixed
+  calibration scores of the prepared BGE weights, instead of Ollama 0.34.3 only.
+  Refused runtimes or weights report `unsupported_runtime` with an explanation and one
+  server-log warning instead of a generic provider failure. Ollama 0.34.4 reproduced
+  the llama.cpp scores exactly on 3,840 pairs.
 
 ### Removed
 
@@ -41,12 +106,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Size task context using its requested compact/full representation, preserving
+  more evidence in compact replies at the same structured token budget. Resolve
+  repeated passage headings against the complete excerpt; ambiguous matches link
+  to the page and never substitute a different passage in reranking.
+- Warm the configured query embedding model alongside the persisted semantic
+  index, coalescing work without cancelling it when one foreground request expires.
+  Preserve the independent reranker when a semantic timeout returns lexical/graph
+  evidence. Report query-model warmup state separately from index readiness.
+- Treat `as sources`/`come fonti` as input roles rather than a requirement for
+  corroborating sources. Task context explicitly marks answerability unverified
+  and proposes an evidence read even when heuristic coverage passes. Scalar
+  relevance thresholds remain disabled after measured false-gap regressions.
+- Clarify that graph mode exposes dependencies as well as relations. Add a frozen
+  relational reranking experiment and an operator-run Mac validation protocol;
+  neither changes production reranking text, candidate defaults or slot counts.
+
+- Serialize workspace initialization with canonical mutations so concurrent forced
+  initialization cannot erase a newly declared language or its immutable marker.
+  Knowledge update prompts reject explicit language overrides incompatible with the
+  workspace; synthesis uses the mutation lock through language locking and indexing.
+- Bound graph result edge extraction by the selected node set, using the existing
+  incrementally maintained edge index for outgoing hubs. Preserve all directed edge
+  kinds between selected nodes without scanning an entire hub adjacency list.
+
+- Keep an explicit stdio `--root` above client MCP Roots. The legacy Roots refresh after
+  `initialized` re-resolved the workspace without the explicit root, so a client such as
+  Claude Code could switch a `--root`-configured server to its own working directory and
+  write there.
 - Bound the complete foreground semantic contribution (1,500 ms by default),
   including queueing, page priority, search and coverage. On expiry,
   return lexical/graph evidence with explicit diagnostics. Propagate cancellation
   to HTTP/static providers, bound pending work and retry after a circuit cooldown.
 - Check passage identity again after asynchronous coverage embedding, and hydrate
   only selected canonical pages after candidate scoring and page/type selection.
+- Stop treating sentence-initial interrogatives and modals (`Quali`, `Come`, `Why`,
+  `Should`, elided `Qual`) as required coverage entities, keep accented words whole (`Perché`), and
+  treat unquoted lowercase hyphenated prose (`production-ready`) as facets instead of
+  identifiers. Measured in [coverage diagnostics](benchmarks/coverage-diagnostics-2.9.2.md):
+  false gaps 15 → 7 of 90 with queries in the knowledge language, one more in-domain
+  negative judged sufficient. Function words drop only as ordinary words: acronyms
+  (`CAN`, `IT`, `CI`) and quoted spellings remain identifiers.
 
 ## [2.9.1] - 2026-09-23
 

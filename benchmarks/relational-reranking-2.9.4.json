@@ -1,0 +1,5019 @@
+{
+  "generatedAt": "2026-09-26T22:30:52.429Z",
+  "fixtureSha256": "342e78fa813d53a00e18ddbe49056dc48446035bc894221f53ad9b4330674fa3",
+  "fixture": "relational-reranking-294.json",
+  "description": "Authored relational reranking prerequisite, frozen before model scoring. Development/evaluation use disjoint requirement chains. Explicit edges are the oracle, including incoming traversal, two-hop evidence, same-vocabulary distractors and unanswerable relations. Synthetic evidence does not certify production answer quality.",
+  "provider": {
+    "id": "http-rerank-7f6ade0e028a",
+    "model": "bge-reranker-v2-m3-q8_0",
+    "version": "sha256-4bf51534"
+  },
+  "validateOnly": false,
+  "limitation": "Frozen synthetic reranking experiment only. Negative questions have no answer and receive no recall score; model relevance is not answerability. Runtime retrieval is unchanged.",
+  "summaries": [
+    {
+      "split": "development",
+      "variants": [
+        {
+          "mode": "plain",
+          "queries": 9,
+          "mrr": 0.7354497354497354,
+          "ndcgAt3": 0.7222222222222222
+        },
+        {
+          "mode": "with_path",
+          "queries": 9,
+          "mrr": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "split": "evaluation",
+      "variants": [
+        {
+          "mode": "plain",
+          "queries": 9,
+          "mrr": 0.716931216931217,
+          "ndcgAt3": 0.6666666666666666
+        },
+        {
+          "mode": "with_path",
+          "queries": 9,
+          "mrr": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    }
+  ],
+  "rows": [
+    {
+      "id": "alder-test",
+      "split": "development",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 104.014204,
+          "ranked": [
+            {
+              "path": "tests/Alder.md",
+              "score": 0.6072958111763
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -1.7376227378845215
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -2.0454297065734863
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -2.1577444076538086
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -2.214081287384033
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -2.321138858795166
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -6.16336727142334
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -6.912881851196289
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -7.23538875579834
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -7.328435897827148
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -7.4576826095581055
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -7.463275909423828
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -7.539180278778076
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -8.07027816772461
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -8.502832412719727
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -8.830915451049805
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -8.848306655883789
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.020715713500977
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.25796127319336
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.298225402832031
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.404998779296875
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -9.468109130859375
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.992639541625977
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 74.663927,
+          "ranked": [
+            {
+              "path": "tests/Alder.md",
+              "score": 4.567388534545898
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": 0.9893245100975037
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": 0.24833863973617554
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -1.7376227378845215
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -2.0454297065734863
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -2.1577444076538086
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -2.214081287384033
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -2.321138858795166
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -6.912881851196289
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -7.23538875579834
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -7.4576826095581055
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -7.463275909423828
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -7.539180278778076
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -8.07027816772461
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -8.502832412719727
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -8.830915451049805
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -8.848306655883789
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.020715713500977
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.25796127319336
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.298225402832031
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.404998779296875
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -9.468109130859375
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.992639541625977
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "alder-release",
+      "split": "development",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 71.41750200000001,
+          "ranked": [
+            {
+              "path": "releases/Alder.md",
+              "score": -1.300455093383789
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -1.7237145900726318
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -1.7965730428695679
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -2.1061034202575684
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -2.324899196624756
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -2.360987663269043
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.344006538391113
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -8.34598159790039
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -8.462705612182617
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.027891159057617
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.218790054321289
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.365874290466309
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.381994247436523
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.42302131652832
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.444564819335938
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.474627494812012
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.730669975280762
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -9.907901763916016
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -10.7479887008667
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -10.789022445678711
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -10.800098419189453
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -10.820062637329102
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -10.881381034851074
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 73.35787700000003,
+          "ranked": [
+            {
+              "path": "releases/Alder.md",
+              "score": 3.2679836750030518
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -1.4533631801605225
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -1.7237145900726318
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -1.7965730428695679
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -2.1061034202575684
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -2.324899196624756
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -2.3326752185821533
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -2.360987663269043
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.344006538391113
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -8.462705612182617
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.027891159057617
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.218790054321289
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.365874290466309
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.381994247436523
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.42302131652832
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.444564819335938
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.474627494812012
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.730669975280762
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -10.7479887008667
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -10.789022445678711
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -10.800098419189453
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -10.820062637329102
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -10.881381034851074
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "alder-reverse",
+      "split": "development",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 68.96279299999998,
+          "ranked": [
+            {
+              "path": "tests/Birch.md",
+              "score": -4.859554290771484
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -4.916177749633789
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -5.088082790374756
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -5.122833251953125
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -5.191648483276367
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -5.501069068908691
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -6.5503082275390625
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -7.487728595733643
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -7.8200459480285645
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -7.921477794647217
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.886432647705078
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.081195831298828
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -9.181636810302734
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -9.27651596069336
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -9.28966236114502
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -9.3145170211792
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -9.34179973602295
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.502923965454102
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -10.328361511230469
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -10.68446159362793
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -10.741039276123047
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -10.748044967651367
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -10.75948715209961
+            }
+          ],
+          "reciprocalRank": 0.14285714285714285,
+          "ndcgAt3": 0
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 70.40403500000008,
+          "ranked": [
+            {
+              "path": "requirements/Alder.md",
+              "score": 0.9921776056289673
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -1.9883155822753906
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -2.7966082096099854
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -4.859554290771484
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -4.916177749633789
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -5.088082790374756
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -5.122833251953125
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -5.191648483276367
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -7.487728595733643
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -7.8200459480285645
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.886432647705078
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.081195831298828
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -9.181636810302734
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -9.27651596069336
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -9.28966236114502
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -9.3145170211792
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -9.34179973602295
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.502923965454102
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -10.328361511230469
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -10.68446159362793
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -10.741039276123047
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -10.748044967651367
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -10.75948715209961
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "alder-absent",
+      "split": "development",
+      "answerable": false,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 68.27570800000001,
+          "ranked": [
+            {
+              "path": "tests/Alder.md",
+              "score": -9.485618591308594
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -10.120911598205566
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -10.351672172546387
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -10.495073318481445
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -10.540285110473633
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -10.548612594604492
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -10.834514617919922
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -10.917224884033203
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -11.020891189575195
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -11.022037506103516
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -11.024530410766602
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -11.025028228759766
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -11.025548934936523
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -11.026603698730469
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -11.02836799621582
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -11.031017303466797
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -11.03173828125
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -11.032269477844238
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -11.032718658447266
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -11.032751083374023
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -11.032791137695312
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -11.032854080200195
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -11.03889274597168
+            }
+          ],
+          "reciprocalRank": null,
+          "ndcgAt3": null
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 69.85616000000005,
+          "ranked": [
+            {
+              "path": "tests/Alder.md",
+              "score": -2.679269552230835
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -2.902869462966919
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -3.6907265186309814
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -10.120911598205566
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -10.351672172546387
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -10.540285110473633
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -10.548612594604492
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -10.834514617919922
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -11.020891189575195
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -11.022037506103516
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -11.024530410766602
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -11.025028228759766
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -11.025548934936523
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -11.026603698730469
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -11.02836799621582
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -11.031017303466797
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -11.03173828125
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -11.032269477844238
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -11.032718658447266
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -11.032751083374023
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -11.032791137695312
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -11.032854080200195
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -11.03889274597168
+            }
+          ],
+          "reciprocalRank": null,
+          "ndcgAt3": null
+        }
+      ]
+    },
+    {
+      "id": "birch-test",
+      "split": "development",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 71.08528999999999,
+          "ranked": [
+            {
+              "path": "tests/Birch.md",
+              "score": 2.0132856369018555
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -1.4873380661010742
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -1.8338027000427246
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -1.9192185401916504
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -2.066519260406494
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -2.187626361846924
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -5.076194763183594
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -5.781286239624023
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -8.00873851776123
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -8.131909370422363
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -8.149105072021484
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -8.168976783752441
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -8.356127738952637
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -8.93028450012207
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.067683219909668
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.21395492553711
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.26630973815918
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.34345817565918
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.400150299072266
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.419897079467773
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -9.485234260559082
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.576431274414062
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -10.015114784240723
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 72.17199800000003,
+          "ranked": [
+            {
+              "path": "tests/Birch.md",
+              "score": 5.107014179229736
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": 0.9552778005599976
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -0.11917400360107422
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -1.4873380661010742
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -1.8338027000427246
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -1.9192185401916504
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -2.066519260406494
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -2.187626361846924
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -8.00873851776123
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -8.131909370422363
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -8.149105072021484
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -8.168976783752441
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -8.356127738952637
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -8.93028450012207
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.067683219909668
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.21395492553711
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.26630973815918
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.34345817565918
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.400150299072266
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.419897079467773
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -9.485234260559082
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.576431274414062
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -10.015114784240723
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "birch-release",
+      "split": "development",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 71.48164199999997,
+          "ranked": [
+            {
+              "path": "releases/Birch.md",
+              "score": -0.35694074630737305
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -1.7066380977630615
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -1.7119812965393066
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -1.733454942703247
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -1.7683992385864258
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -2.0000686645507812
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -7.8013386726379395
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.179377555847168
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -8.993366241455078
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -9.012655258178711
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.162938117980957
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -9.26258659362793
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.394328117370605
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.429941177368164
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.435168266296387
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.506977081298828
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.578353881835938
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.757678985595703
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -10.702709197998047
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -10.710702896118164
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -10.727301597595215
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -10.81149959564209
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -10.826395034790039
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 72.94023299999992,
+          "ranked": [
+            {
+              "path": "releases/Birch.md",
+              "score": 4.103072166442871
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -1.1542768478393555
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -1.7066380977630615
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -1.7119812965393066
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -1.733454942703247
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -1.7683992385864258
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -2.0000686645507812
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -2.2336130142211914
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.179377555847168
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -8.993366241455078
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.162938117980957
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -9.26258659362793
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.394328117370605
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.429941177368164
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.435168266296387
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.506977081298828
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.578353881835938
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.757678985595703
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -10.702709197998047
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -10.710702896118164
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -10.727301597595215
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -10.81149959564209
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -10.826395034790039
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "birch-reverse",
+      "split": "development",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 69.67599900000005,
+          "ranked": [
+            {
+              "path": "tests/Alder.md",
+              "score": -4.910703182220459
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -4.999231815338135
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -5.18980073928833
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -5.391582012176514
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -5.397953987121582
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -5.4631757736206055
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -5.4977006912231445
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -7.134702205657959
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -7.575376510620117
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -8.43077278137207
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.439669609069824
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -8.668132781982422
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -8.791868209838867
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -9.015159606933594
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -9.088985443115234
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -9.142350196838379
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -9.284622192382812
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.351444244384766
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -10.299484252929688
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -10.304641723632812
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -10.371121406555176
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -10.384346008300781
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -10.493539810180664
+            }
+          ],
+          "reciprocalRank": 0.3333333333333333,
+          "ndcgAt3": 0.5
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 71.647604,
+          "ranked": [
+            {
+              "path": "requirements/Birch.md",
+              "score": 1.4099795818328857
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -2.1094651222229004
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -2.4210665225982666
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -4.910703182220459
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -4.999231815338135
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -5.391582012176514
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -5.397953987121582
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -5.4977006912231445
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -7.134702205657959
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -8.43077278137207
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.439669609069824
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -8.668132781982422
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -8.791868209838867
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -9.015159606933594
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -9.088985443115234
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -9.142350196838379
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -9.284622192382812
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.351444244384766
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -10.299484252929688
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -10.304641723632812
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -10.371121406555176
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -10.384346008300781
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -10.493539810180664
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "birch-absent",
+      "split": "development",
+      "answerable": false,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 69.29681499999992,
+          "ranked": [
+            {
+              "path": "tests/Birch.md",
+              "score": -9.026609420776367
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -10.094915390014648
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -10.17043685913086
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -10.281095504760742
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -10.34324836730957
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -10.641172409057617
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -10.795304298400879
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -10.87592601776123
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -11.019319534301758
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -11.0208740234375
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -11.023294448852539
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -11.025537490844727
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -11.028923034667969
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -11.029069900512695
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -11.03183364868164
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -11.03188419342041
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -11.032150268554688
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -11.033099174499512
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -11.03386402130127
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -11.034761428833008
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -11.036968231201172
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -11.037148475646973
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -11.04043960571289
+            }
+          ],
+          "reciprocalRank": null,
+          "ndcgAt3": null
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 71.71160399999985,
+          "ranked": [
+            {
+              "path": "tests/Birch.md",
+              "score": -3.1204137802124023
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -3.6996164321899414
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -4.162746906280518
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -10.094915390014648
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -10.281095504760742
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -10.34324836730957
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -10.641172409057617
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -10.795304298400879
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -11.019319534301758
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -11.0208740234375
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -11.023294448852539
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -11.025537490844727
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -11.028923034667969
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -11.029069900512695
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -11.03183364868164
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -11.03188419342041
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -11.032150268554688
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -11.033099174499512
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -11.03386402130127
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -11.034761428833008
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -11.036968231201172
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -11.037148475646973
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -11.04043960571289
+            }
+          ],
+          "reciprocalRank": null,
+          "ndcgAt3": null
+        }
+      ]
+    },
+    {
+      "id": "cedar-test",
+      "split": "development",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 70.73204699999997,
+          "ranked": [
+            {
+              "path": "tests/Cedar.md",
+              "score": 2.596296548843384
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -1.6849095821380615
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -1.701613426208496
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -1.828433871269226
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -1.8624885082244873
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -1.9580397605895996
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -4.72131872177124
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -5.478018760681152
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -7.420375823974609
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -7.830837249755859
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -7.8993377685546875
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -7.939813613891602
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -8.032909393310547
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -8.067702293395996
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -8.933643341064453
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.053802490234375
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.17728042602539
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.195732116699219
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.362366676330566
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.569120407104492
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.619327545166016
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -9.65230941772461
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -10.065805435180664
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 70.26778400000012,
+          "ranked": [
+            {
+              "path": "tests/Cedar.md",
+              "score": 5.2353973388671875
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": 1.0886547565460205
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -0.046964287757873535
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -1.6849095821380615
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -1.701613426208496
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -1.828433871269226
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -1.8624885082244873
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -1.9580397605895996
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -7.420375823974609
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -7.830837249755859
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -7.8993377685546875
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -7.939813613891602
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -8.032909393310547
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -8.067702293395996
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -8.933643341064453
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.053802490234375
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.17728042602539
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.195732116699219
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.362366676330566
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.569120407104492
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.619327545166016
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -9.65230941772461
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -10.065805435180664
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "cedar-release",
+      "split": "development",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 69.62127799999985,
+          "ranked": [
+            {
+              "path": "releases/Cedar.md",
+              "score": -0.027085483074188232
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -1.839599847793579
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -1.882300853729248
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -1.8834764957427979
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -1.9068050384521484
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -1.9840037822723389
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -7.448394775390625
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.707401275634766
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -9.004831314086914
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -9.040827751159668
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.288684844970703
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -9.443978309631348
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.653440475463867
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.653884887695312
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.706623077392578
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.772063255310059
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.78194808959961
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.860992431640625
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -10.792526245117188
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -10.803655624389648
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -10.865638732910156
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -10.89116096496582
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -10.898508071899414
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 70.65288699999996,
+          "ranked": [
+            {
+              "path": "releases/Cedar.md",
+              "score": 4.103868007659912
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -1.2305363416671753
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -1.8133084774017334
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -1.839599847793579
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -1.882300853729248
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -1.8834764957427979
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -1.9068050384521484
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -1.9840037822723389
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.707401275634766
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -9.040827751159668
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.288684844970703
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -9.443978309631348
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.653440475463867
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.653884887695312
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.706623077392578
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.772063255310059
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.78194808959961
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.860992431640625
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -10.792526245117188
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -10.803655624389648
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -10.865638732910156
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -10.89116096496582
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -10.898508071899414
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "cedar-reverse",
+      "split": "development",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 69.19622500000014,
+          "ranked": [
+            {
+              "path": "tests/Birch.md",
+              "score": -4.259688377380371
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -4.300104141235352
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -4.6175007820129395
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -4.782418251037598
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -5.024443626403809
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -5.609526634216309
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -5.623203277587891
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -6.896581649780273
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -7.295662879943848
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -7.862691879272461
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.015469551086426
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -8.017337799072266
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -8.047359466552734
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -8.230428695678711
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -8.533227920532227
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -8.58531665802002
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -8.76980972290039
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -8.976432800292969
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -10.01340389251709
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -10.071245193481445
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -10.146590232849121
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -10.185462951660156
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -10.381216049194336
+            }
+          ],
+          "reciprocalRank": 0.14285714285714285,
+          "ndcgAt3": 0
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 68.18129700000009,
+          "ranked": [
+            {
+              "path": "requirements/Cedar.md",
+              "score": 1.5920295715332031
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -2.011787176132202
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -2.403542995452881
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -4.259688377380371
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -4.300104141235352
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -4.6175007820129395
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -4.782418251037598
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -5.024443626403809
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -6.896581649780273
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -7.295662879943848
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.015469551086426
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -8.017337799072266
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -8.047359466552734
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -8.230428695678711
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -8.533227920532227
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -8.58531665802002
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -8.76980972290039
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -8.976432800292969
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -10.01340389251709
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -10.071245193481445
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -10.146590232849121
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -10.185462951660156
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -10.381216049194336
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "cedar-absent",
+      "split": "development",
+      "answerable": false,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 68.98463300000003,
+          "ranked": [
+            {
+              "path": "tests/Cedar.md",
+              "score": -9.438188552856445
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -10.050999641418457
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -10.260435104370117
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -10.383358001708984
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -10.444286346435547
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -10.547456741333008
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -10.724153518676758
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -10.910686492919922
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -10.99600601196289
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -11.006402015686035
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -11.013443946838379
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -11.015138626098633
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -11.02044677734375
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -11.022584915161133
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -11.023412704467773
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -11.02343463897705
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -11.024209976196289
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -11.024641990661621
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -11.028602600097656
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -11.029102325439453
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -11.029605865478516
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -11.031549453735352
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -11.03300666809082
+            }
+          ],
+          "reciprocalRank": null,
+          "ndcgAt3": null
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 71.632384,
+          "ranked": [
+            {
+              "path": "tests/Cedar.md",
+              "score": -3.3064379692077637
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -3.482813596725464
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -4.286434650421143
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -10.050999641418457
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -10.383358001708984
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -10.444286346435547
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -10.547456741333008
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -10.724153518676758
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -10.99600601196289
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -11.006402015686035
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -11.013443946838379
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -11.015138626098633
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -11.02044677734375
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -11.022584915161133
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -11.023412704467773
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -11.02343463897705
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -11.024209976196289
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -11.024641990661621
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -11.028602600097656
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -11.029102325439453
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -11.029605865478516
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -11.031549453735352
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -11.03300666809082
+            }
+          ],
+          "reciprocalRank": null,
+          "ndcgAt3": null
+        }
+      ]
+    },
+    {
+      "id": "elm-test",
+      "split": "evaluation",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 68.61143100000004,
+          "ranked": [
+            {
+              "path": "tests/Elm.md",
+              "score": 1.5781095027923584
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -1.412284016609192
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -1.781467080116272
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -1.798840045928955
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -2.0268189907073975
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -2.0676183700561523
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -5.717294216156006
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -7.053625106811523
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -7.996252059936523
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -8.063708305358887
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -8.099508285522461
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -8.150965690612793
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -8.43911361694336
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -8.514533042907715
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -9.303346633911133
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.321866035461426
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.39688491821289
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.4332914352417
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.436505317687988
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.442597389221191
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -9.535751342773438
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.623040199279785
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.85125732421875
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 71.08971900000006,
+          "ranked": [
+            {
+              "path": "tests/Elm.md",
+              "score": 5.219387054443359
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": 1.1945406198501587
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -0.352070689201355
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -1.412284016609192
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -1.781467080116272
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -1.798840045928955
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -2.0268189907073975
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -2.0676183700561523
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -7.996252059936523
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -8.063708305358887
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -8.099508285522461
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -8.150965690612793
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -8.43911361694336
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -8.514533042907715
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -9.303346633911133
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.321866035461426
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.39688491821289
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.4332914352417
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.436505317687988
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.442597389221191
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -9.535751342773438
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.623040199279785
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.85125732421875
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "elm-release",
+      "split": "evaluation",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 68.38412900000003,
+          "ranked": [
+            {
+              "path": "releases/Elm.md",
+              "score": -0.6319330334663391
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -2.1111536026000977
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -2.253842353820801
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -2.334686040878296
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -2.3426589965820312
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -2.3849833011627197
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.20512580871582
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -8.57914924621582
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -9.340627670288086
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.406213760375977
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.611696243286133
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -9.657670021057129
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.679929733276367
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.785985946655273
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -9.805503845214844
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.8873929977417
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.927774429321289
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.965022087097168
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -10.797703742980957
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -10.820598602294922
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -10.878279685974121
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -10.87986946105957
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -10.893608093261719
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 70.23071299999992,
+          "ranked": [
+            {
+              "path": "releases/Elm.md",
+              "score": 4.058147430419922
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -1.0293078422546387
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -1.800675630569458
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -2.1111536026000977
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -2.253842353820801
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -2.334686040878296
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -2.3426589965820312
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -2.3849833011627197
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.20512580871582
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -9.340627670288086
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.406213760375977
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.611696243286133
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -9.657670021057129
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.679929733276367
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.785985946655273
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.8873929977417
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.927774429321289
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.965022087097168
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -10.797703742980957
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -10.820598602294922
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -10.878279685974121
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -10.87986946105957
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -10.893608093261719
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "elm-reverse",
+      "split": "evaluation",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 68.94430300000022,
+          "ranked": [
+            {
+              "path": "tests/Alder.md",
+              "score": -4.424745559692383
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -4.586057662963867
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -4.631896018981934
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -4.92657995223999
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -5.043485641479492
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -5.394356727600098
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -6.561094284057617
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -6.8039326667785645
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -7.35012149810791
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -7.48007869720459
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -7.927058219909668
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -8.241378784179688
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -8.328195571899414
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.387760162353516
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -8.614925384521484
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -8.70014476776123
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -8.733329772949219
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -8.87077522277832
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.93947696685791
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.972536087036133
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.983648300170898
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -10.118779182434082
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -10.32589340209961
+            }
+          ],
+          "reciprocalRank": 0.14285714285714285,
+          "ndcgAt3": 0
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 69.43375699999979,
+          "ranked": [
+            {
+              "path": "requirements/Elm.md",
+              "score": 1.5127475261688232
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -2.2969260215759277
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -2.7177939414978027
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -4.424745559692383
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -4.586057662963867
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -4.631896018981934
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -4.92657995223999
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -5.043485641479492
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -6.8039326667785645
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -7.48007869720459
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -7.927058219909668
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -8.241378784179688
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -8.328195571899414
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.387760162353516
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -8.614925384521484
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -8.70014476776123
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -8.733329772949219
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -8.87077522277832
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.93947696685791
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.972536087036133
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.983648300170898
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -10.118779182434082
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -10.32589340209961
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "elm-absent",
+      "split": "evaluation",
+      "answerable": false,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 66.88343699999996,
+          "ranked": [
+            {
+              "path": "tests/Elm.md",
+              "score": -9.216177940368652
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -10.073341369628906
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -10.196980476379395
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -10.39474868774414
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -10.538134574890137
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -10.604937553405762
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -10.740053176879883
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -10.89659309387207
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -10.920658111572266
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -10.948713302612305
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -10.952217102050781
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -10.962130546569824
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -10.966255187988281
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -10.976598739624023
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -10.996427536010742
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -11.007820129394531
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -11.008990287780762
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -11.011690139770508
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -11.020381927490234
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -11.02046012878418
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -11.023117065429688
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -11.024313926696777
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -11.02734375
+            }
+          ],
+          "reciprocalRank": null,
+          "ndcgAt3": null
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 68.47646899999972,
+          "ranked": [
+            {
+              "path": "tests/Elm.md",
+              "score": -3.2587151527404785
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -3.6235527992248535
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -4.5735883712768555
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -10.073341369628906
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -10.196980476379395
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -10.538134574890137
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -10.604937553405762
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -10.740053176879883
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -10.920658111572266
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -10.948713302612305
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -10.952217102050781
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -10.962130546569824
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -10.966255187988281
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -10.976598739624023
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -10.996427536010742
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -11.007820129394531
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -11.008990287780762
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -11.011690139770508
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -11.020381927490234
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -11.02046012878418
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -11.023117065429688
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -11.024313926696777
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -11.02734375
+            }
+          ],
+          "reciprocalRank": null,
+          "ndcgAt3": null
+        }
+      ]
+    },
+    {
+      "id": "fir-test",
+      "split": "evaluation",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 71.61547400000018,
+          "ranked": [
+            {
+              "path": "tests/Fir.md",
+              "score": -4.366722583770752
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -5.9884257316589355
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -6.0165934562683105
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -6.0358452796936035
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -6.092902183532715
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -6.111965179443359
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -7.702256202697754
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -8.173625946044922
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.361327171325684
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -8.865469932556152
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -8.979328155517578
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.042142868041992
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.196152687072754
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.270143508911133
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.308963775634766
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -9.431448936462402
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.708724021911621
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.90019416809082
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -9.906893730163574
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -10.218271255493164
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -10.31330394744873
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -10.381105422973633
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -10.419445037841797
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 71.69454399999995,
+          "ranked": [
+            {
+              "path": "tests/Fir.md",
+              "score": 3.5781097412109375
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": 0.07337218523025513
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -0.07964873313903809
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -5.9884257316589355
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -6.0165934562683105
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -6.0358452796936035
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -6.092902183532715
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -6.111965179443359
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -7.702256202697754
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.361327171325684
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -8.865469932556152
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -8.979328155517578
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.042142868041992
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.196152687072754
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.270143508911133
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.308963775634766
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.708724021911621
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.90019416809082
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -9.906893730163574
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -10.218271255493164
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -10.31330394744873
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -10.381105422973633
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -10.419445037841797
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "fir-release",
+      "split": "evaluation",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 72.6777219999999,
+          "ranked": [
+            {
+              "path": "releases/Fir.md",
+              "score": -5.305779457092285
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -6.312577247619629
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -6.508398532867432
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -6.645974159240723
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -6.6727118492126465
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -6.921308994293213
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -7.226775169372559
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -7.819234848022461
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -7.822746753692627
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -7.924569129943848
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -8.155954360961914
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -8.4197998046875
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.05078125
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -9.053010940551758
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.076059341430664
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -9.351102828979492
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.379292488098145
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.59477424621582
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -10.380481719970703
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -10.390298843383789
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -10.436683654785156
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -10.464805603027344
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -10.522348403930664
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 72.73422300000038,
+          "ranked": [
+            {
+              "path": "releases/Fir.md",
+              "score": 3.4151840209960938
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -0.016176819801330566
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -0.8003321290016174
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -6.312577247619629
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -6.508398532867432
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -6.645974159240723
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -6.6727118492126465
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -6.921308994293213
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -7.226775169372559
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -7.822746753692627
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -7.924569129943848
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -8.155954360961914
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -8.4197998046875
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.05078125
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -9.053010940551758
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.076059341430664
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.379292488098145
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -9.59477424621582
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -10.380481719970703
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -10.390298843383789
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -10.436683654785156
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -10.464805603027344
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -10.522348403930664
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "fir-reverse",
+      "split": "evaluation",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 69.09008399999993,
+          "ranked": [
+            {
+              "path": "releases/Fir.md",
+              "score": -5.29774284362793
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -5.502407550811768
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -5.772921562194824
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -5.815789222717285
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -6.0814924240112305
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -6.138830184936523
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -6.819363117218018
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -7.184123516082764
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -7.900149822235107
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -7.9075822830200195
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -8.013298034667969
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -8.104389190673828
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -8.316499710083008
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.416617393493652
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -8.643409729003906
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -8.72817611694336
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -8.850357055664062
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.98845386505127
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -10.000152587890625
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -10.018308639526367
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -10.070528984069824
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -10.130769729614258
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -10.418140411376953
+            }
+          ],
+          "reciprocalRank": 0.14285714285714285,
+          "ndcgAt3": 0
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 70.5568059999996,
+          "ranked": [
+            {
+              "path": "requirements/Fir.md",
+              "score": 0.6493411064147949
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -3.1212165355682373
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -3.412858009338379
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -5.502407550811768
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -5.772921562194824
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -5.815789222717285
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -6.0814924240112305
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -6.138830184936523
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -7.184123516082764
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -7.900149822235107
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -7.9075822830200195
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -8.013298034667969
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -8.104389190673828
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -8.316499710083008
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -8.416617393493652
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -8.72817611694336
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -8.850357055664062
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.98845386505127
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -10.000152587890625
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -10.018308639526367
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -10.070528984069824
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -10.130769729614258
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -10.418140411376953
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "fir-absent",
+      "split": "evaluation",
+      "answerable": false,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 72.78977299999997,
+          "ranked": [
+            {
+              "path": "requirements/Birch.md",
+              "score": -9.55430793762207
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -9.62687873840332
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.98315715789795
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -10.391212463378906
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -10.485027313232422
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -10.504755973815918
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -10.541559219360352
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -10.541897773742676
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -10.55172348022461
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -10.58546257019043
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -10.587589263916016
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -10.619839668273926
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -10.64654541015625
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -10.672802925109863
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -10.69095230102539
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -10.72018051147461
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -10.732131958007812
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -10.919883728027344
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -10.960210800170898
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -10.98542594909668
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -10.985593795776367
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -10.992177963256836
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -10.998900413513184
+            }
+          ],
+          "reciprocalRank": null,
+          "ndcgAt3": null
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 71.0928600000002,
+          "ranked": [
+            {
+              "path": "tests/Fir.md",
+              "score": -2.849653482437134
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -3.4096813201904297
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -3.576754570007324
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -9.55430793762207
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.98315715789795
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -10.485027313232422
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -10.504755973815918
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -10.541559219360352
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -10.541897773742676
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -10.55172348022461
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -10.58546257019043
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -10.587589263916016
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -10.619839668273926
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -10.64654541015625
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -10.672802925109863
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -10.69095230102539
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -10.72018051147461
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -10.732131958007812
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -10.960210800170898
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -10.98542594909668
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -10.985593795776367
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -10.992177963256836
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -10.998900413513184
+            }
+          ],
+          "reciprocalRank": null,
+          "ndcgAt3": null
+        }
+      ]
+    },
+    {
+      "id": "maple-test",
+      "split": "evaluation",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 70.34015399999998,
+          "ranked": [
+            {
+              "path": "tests/Maple.md",
+              "score": 1.3045661449432373
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -1.7342941761016846
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -2.089855909347534
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -2.1572060585021973
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -2.221407413482666
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -2.3320529460906982
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -6.005549430847168
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -6.731846809387207
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -8.404443740844727
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -8.465259552001953
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -8.475687026977539
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -8.56889533996582
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -8.603616714477539
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -8.65362548828125
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.459178924560547
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.472702980041504
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.484142303466797
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -9.57602596282959
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.578391075134277
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.7137451171875
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.749757766723633
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.93423080444336
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.983391761779785
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 72.810023,
+          "ranked": [
+            {
+              "path": "tests/Maple.md",
+              "score": 5.0651702880859375
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": 1.5435597896575928
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": 0.11640352010726929
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -1.7342941761016846
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -2.089855909347534
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -2.1572060585021973
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -2.221407413482666
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -2.3320529460906982
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -8.404443740844727
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -8.465259552001953
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -8.475687026977539
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -8.56889533996582
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -8.603616714477539
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -8.65362548828125
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.459178924560547
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -9.472702980041504
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.484142303466797
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -9.57602596282959
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.578391075134277
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.7137451171875
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.749757766723633
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.93423080444336
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.983391761779785
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "maple-release",
+      "split": "evaluation",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 69.56723800000009,
+          "ranked": [
+            {
+              "path": "releases/Maple.md",
+              "score": -0.9034419059753418
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -2.338798999786377
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -2.37701416015625
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -2.3855648040771484
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -2.556424617767334
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -2.6310486793518066
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -8.172552108764648
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -8.997810363769531
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.17700481414795
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -9.348506927490234
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.432518005371094
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.470155715942383
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -9.643722534179688
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.698551177978516
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.704536437988281
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.865050315856934
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.882089614868164
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -10.012420654296875
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -10.828023910522461
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -10.8414306640625
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -10.903167724609375
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -10.90748405456543
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -10.917543411254883
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 71.82882500000005,
+          "ranked": [
+            {
+              "path": "releases/Maple.md",
+              "score": 3.9615159034729004
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -0.7043112516403198
+            },
+            {
+              "path": "tests/Maple.md",
+              "score": -1.3976527452468872
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -2.338798999786377
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -2.37701416015625
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -2.3855648040771484
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -2.556424617767334
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -2.6310486793518066
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -8.997810363769531
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -9.17700481414795
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -9.432518005371094
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -9.470155715942383
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -9.643722534179688
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -9.698551177978516
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.704536437988281
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -9.865050315856934
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -9.882089614868164
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -10.012420654296875
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -10.828023910522461
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -10.8414306640625
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -10.903167724609375
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -10.90748405456543
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -10.917543411254883
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "maple-reverse",
+      "split": "evaluation",
+      "answerable": true,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 69.41907700000002,
+          "ranked": [
+            {
+              "path": "tests/Alder.md",
+              "score": -4.600534439086914
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -4.800736904144287
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -4.829483509063721
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -4.961438179016113
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -5.3364973068237305
+            },
+            {
+              "path": "requirements/Maple.md",
+              "score": -5.601892471313477
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -6.283222198486328
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -6.754104137420654
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -7.22440242767334
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -8.009378433227539
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -8.44198989868164
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -8.498248100280762
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -8.553969383239746
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -8.586380004882812
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -8.963541984558105
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -8.978952407836914
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.085521697998047
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -9.117776870727539
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -10.259810447692871
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -10.264959335327148
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -10.337267875671387
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -10.34310531616211
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -10.48874282836914
+            }
+          ],
+          "reciprocalRank": 0.16666666666666666,
+          "ndcgAt3": 0
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 70.92205899999999,
+          "ranked": [
+            {
+              "path": "requirements/Maple.md",
+              "score": 0.5075190663337708
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -3.1806023120880127
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -3.243618965148926
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -4.600534439086914
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -4.800736904144287
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -4.829483509063721
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -4.961438179016113
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -5.3364973068237305
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -6.754104137420654
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -7.22440242767334
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -8.009378433227539
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -8.498248100280762
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -8.553969383239746
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -8.586380004882812
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -8.963541984558105
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -8.978952407836914
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -9.085521697998047
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -9.117776870727539
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -10.259810447692871
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -10.264959335327148
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -10.337267875671387
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -10.34310531616211
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -10.48874282836914
+            }
+          ],
+          "reciprocalRank": 1,
+          "ndcgAt3": 1
+        }
+      ]
+    },
+    {
+      "id": "maple-absent",
+      "split": "evaluation",
+      "answerable": false,
+      "variants": [
+        {
+          "mode": "plain",
+          "wallMs": 68.67535099999986,
+          "ranked": [
+            {
+              "path": "tests/Maple.md",
+              "score": -9.324149131774902
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -10.060192108154297
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -10.270968437194824
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -10.467094421386719
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -10.528022766113281
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -10.597286224365234
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -10.738128662109375
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -10.867368698120117
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -10.919660568237305
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -10.991558074951172
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -11.002302169799805
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -11.004222869873047
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -11.006549835205078
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -11.013744354248047
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -11.014899253845215
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -11.015734672546387
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -11.017810821533203
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -11.021585464477539
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -11.021675109863281
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -11.022188186645508
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -11.026477813720703
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -11.027214050292969
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -11.027835845947266
+            }
+          ],
+          "reciprocalRank": null,
+          "ndcgAt3": null
+        },
+        {
+          "mode": "with_path",
+          "wallMs": 70.42203399999971,
+          "ranked": [
+            {
+              "path": "tests/Maple.md",
+              "score": -2.947805404663086
+            },
+            {
+              "path": "releases/Maple.md",
+              "score": -3.6306681632995605
+            },
+            {
+              "path": "implementations/Maple.md",
+              "score": -4.125527381896973
+            },
+            {
+              "path": "requirements/Fir.md",
+              "score": -10.060192108154297
+            },
+            {
+              "path": "requirements/Alder.md",
+              "score": -10.270968437194824
+            },
+            {
+              "path": "requirements/Birch.md",
+              "score": -10.467094421386719
+            },
+            {
+              "path": "requirements/Cedar.md",
+              "score": -10.528022766113281
+            },
+            {
+              "path": "requirements/Elm.md",
+              "score": -10.738128662109375
+            },
+            {
+              "path": "tests/Alder.md",
+              "score": -10.919660568237305
+            },
+            {
+              "path": "tests/Birch.md",
+              "score": -10.991558074951172
+            },
+            {
+              "path": "tests/Cedar.md",
+              "score": -11.002302169799805
+            },
+            {
+              "path": "tests/Elm.md",
+              "score": -11.004222869873047
+            },
+            {
+              "path": "implementations/Fir.md",
+              "score": -11.006549835205078
+            },
+            {
+              "path": "releases/Cedar.md",
+              "score": -11.013744354248047
+            },
+            {
+              "path": "releases/Elm.md",
+              "score": -11.014899253845215
+            },
+            {
+              "path": "implementations/Elm.md",
+              "score": -11.015734672546387
+            },
+            {
+              "path": "tests/Fir.md",
+              "score": -11.017810821533203
+            },
+            {
+              "path": "implementations/Birch.md",
+              "score": -11.021585464477539
+            },
+            {
+              "path": "implementations/Cedar.md",
+              "score": -11.021675109863281
+            },
+            {
+              "path": "implementations/Alder.md",
+              "score": -11.022188186645508
+            },
+            {
+              "path": "releases/Alder.md",
+              "score": -11.026477813720703
+            },
+            {
+              "path": "releases/Birch.md",
+              "score": -11.027214050292969
+            },
+            {
+              "path": "releases/Fir.md",
+              "score": -11.027835845947266
+            }
+          ],
+          "reciprocalRank": null,
+          "ndcgAt3": null
+        }
+      ]
+    }
+  ]
+}

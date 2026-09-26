@@ -1,5 +1,7 @@
+import * as nodePath from "node:path";
 import { fromJsonSchema, type CallToolResult, type McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import { readKnowledgeLanguage } from "../core/knowledge-language.js";
 import { BINDING_FORMAT_VERSION } from "../product.js";
 import { WorkspaceBindingError, WorkspaceBindingManager } from "../workspaces/bindings.js";
 
@@ -41,6 +43,10 @@ const WorkspaceOutputSchema = fromJsonSchema({
     },
     scope: { type: "string", enum: ["read", "write"] },
     expiresAt: { type: "string" },
+    knowledgeLanguage: {
+      type: ["string", "null"],
+      description: "Language of the canonical knowledge: retrieval queries use it; answers follow the user.",
+    },
     nextAction: { type: ["object", "null"] },
   },
   required: ["state", "nextAction"],
@@ -63,6 +69,23 @@ function result(text: string, structuredContent: Record<string, unknown>, isErro
     structuredContent,
     ...(isError ? { isError: true } : {}),
   };
+}
+
+async function workspaceKnowledgeLanguage(bindings: WorkspaceBindingManager, workspaceId: string): Promise<string | null> {
+  const registration = await bindings.registry.get(workspaceId);
+  if (!registration) return null;
+  try {
+    return (await readKnowledgeLanguage(nodePath.join(registration.canonicalRoot, "wiki"))).tag;
+  } catch {
+    return null;
+  }
+}
+
+function languageLine(knowledgeLanguage: string | null): string {
+  return knowledgeLanguage
+    ? `Its knowledge is written in ${knowledgeLanguage}: pass retrieval queries in ${knowledgeLanguage} with ` +
+      `query_language=${knowledgeLanguage}, keep objective and answers in the user's language.`
+    : "Its knowledge language is not declared.";
 }
 
 export function registerWorkspaceTool(
@@ -115,16 +138,27 @@ export function registerWorkspaceTool(
           );
         }
         const status = await bindings.issue(args.workspace_id!, args.scope, principalId);
+        const knowledgeLanguage = await workspaceKnowledgeLanguage(bindings, args.workspace_id!);
         return result(
-          `Workspace ${status.workspace.displayName} selected for this chat with ${status.scope} scope.`,
-          { state: "workspace_selected", ...status, nextAction: { tool: "knowledge_context", requiredArguments: ["mode", "objective", "workspace_binding"] } }
+          `Workspace ${status.workspace.displayName} selected for this chat with ${status.scope} scope. ${languageLine(knowledgeLanguage)}`,
+          {
+            state: "workspace_selected", ...status, knowledgeLanguage,
+            nextAction: {
+              tool: "knowledge_context",
+              requiredArguments: knowledgeLanguage
+                ? ["mode", "objective", "query", "query_language", "workspace_binding"]
+                : ["mode", "objective", "workspace_binding"],
+              ...(knowledgeLanguage ? { suggestedArguments: { mode: "task", query_language: knowledgeLanguage } } : {}),
+            },
+          }
         );
       }
 
       if (args.action === "status") {
         const status = await bindings.status(args.workspace_binding!, principalId);
-        return result(`Binding is active for ${status.workspace.displayName} until ${status.expiresAt}.`, {
-          state: "workspace_binding_active", ...status, nextAction: null,
+        const knowledgeLanguage = await workspaceKnowledgeLanguage(bindings, status.workspace.id);
+        return result(`Binding is active for ${status.workspace.displayName} until ${status.expiresAt}. ${languageLine(knowledgeLanguage)}`, {
+          state: "workspace_binding_active", ...status, knowledgeLanguage, nextAction: null,
         });
       }
       if (args.action === "renew") {

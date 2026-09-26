@@ -30,6 +30,13 @@ if (server.version !== version || server.packages?.[0]?.version !== version) {
 if (desktopBundle.version !== version) {
   throw new Error("packaging/mcpb/manifest.json is not aligned with package.json.");
 }
+if (packageLock.packages?.[""]?.license !== packageJson.license || desktopBundle.license !== packageJson.license) {
+  throw new Error("npm lockfile and MCPB licenses must match package.json.");
+}
+for (const notice of ["LICENSE", "NOTICE", "LICENSING.md", "licenses/Apache-2.0-legacy.txt"]) {
+  if (!packageJson.files?.includes(notice)) throw new Error(`Required licensing document is missing from package files: ${notice}`);
+  if (!(await readFile(new URL(notice, root), "utf8")).trim()) throw new Error(`Licensing document is empty: ${notice}`);
+}
 if (!packageJson.files?.includes("assets/knowledge-rail-logo.png")) {
   throw new Error("The public README logo is not included in the npm package.");
 }

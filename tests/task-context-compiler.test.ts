@@ -4,6 +4,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
 import { compileTaskContext } from "../src/context/task-context-compiler.js";
+import { compactStructuredContext } from "../src/context/compact-task-context.js";
+import { estimateContextSize } from "../src/context/context-manifest.js";
 import { driftLedgerFile } from "../src/core/drift-detection.js";
 import { invalidateWikiGraph } from "../src/core/graph-index.js";
 import { clearRuntimeWikiGraphs } from "../src/core/graph-runtime.js";
@@ -160,6 +162,18 @@ test("modify context compiles decision evidence and directional change impact", 
     assert.equal(new Set(context.evidence.map((evidence) => evidence.uri)).size, context.evidence.length);
     assert.equal(context.size.heuristicTokens <= 4_000, true);
     assert.equal(context.budget.withinHeuristicBudget, true);
+  });
+});
+
+test("compact budgets count the returned projection and retain more evidence at the same budget", async () => {
+  await withFixture(async (wikiRoot) => {
+    const params = { wikiRoot, intent: "understand" as const, objective: "Pine originating transaction identifier", maxEvidence: 8, heuristicTokenBudget: 2000 };
+    const full = await compileTaskContext(params);
+    const compact = await compileTaskContext({ ...params, responseDetail: "compact" });
+    assert.ok(compact.evidence.length > full.evidence.length, `${compact.evidence.length} compact versus ${full.evidence.length} full`);
+    assert.equal(compact.budget.withinHeuristicBudget, true);
+    assert.ok(estimateContextSize(JSON.stringify(compactStructuredContext(compact))).heuristicTokens <= 2000);
+    for (const item of full.evidence) assert.ok(compact.evidence.some((evidence) => evidence.uri === item.uri));
   });
 });
 

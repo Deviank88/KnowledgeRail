@@ -160,6 +160,8 @@ export interface DocumentPlanOptions {
   audience?: string;
   language?: string;
   maxSections?: number;
+  /** Declared workspace knowledge language: section retrieval queries must use it. */
+  knowledgeLanguage?: string | null;
 }
 
 export { DIAGRAM_MODES, type DiagramMode } from "../config/document-options.js";
@@ -345,7 +347,11 @@ export async function buildDocumentPlan(
               `- **Assigned writer:** specialist for section "${section.title}".`,
               `- **Required evidence:** ${evidencePlan.require.join(", ") || "none"}.`,
               `- **Preferred evidence:** ${evidencePlan.prefer.join(", ") || "none"}.`,
-              `- **Context pack:** call \`knowledge_document_context action="section"\` with \`document_type="${options.documentType}"\`, \`section_title="${section.title}"\`, \`query="${query}"\`, \`retrieval_profile="coverage"\`.`,
+              `- **Context pack:** call \`knowledge_document_context action="section"\` with \`document_type="${options.documentType}"\`, \`section_title="${section.title}"\`, ` +
+                (options.knowledgeLanguage
+                  ? `\`query\` = "${query}" expressed in the knowledge language, \`query_language="${options.knowledgeLanguage}"\`, `
+                  : `\`query="${query}"\`, `) +
+                `\`retrieval_profile="coverage"\`.`,
               "- **Expected output:** assembly-ready Markdown with no placeholders, concrete evidence, and explicit gaps.",
             ].join("\n");
           })

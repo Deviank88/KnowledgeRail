@@ -23,11 +23,19 @@ import { randomUUID } from "node:crypto";
 
 const STATIC_CATALOG_TTL_MS = 5 * 60 * 1_000;
 
-export const USER_OUTPUT_LANGUAGE_POLICY =
-  "Write and update human-readable wiki pages and deliverables in the language of the user's current request. " +
-  "An explicit language request overrides inference; when editing existing content, preserve its language unless " +
-  "the user asks for translation. If the language cannot be inferred safely, ask before writing instead of " +
-  "defaulting to English. Keep tool names, schemas, control files, and operational messages in English.";
+export const LANGUAGE_CONTRACT_POLICY =
+  "Language contract: canonical wiki pages use the workspace knowledge language reported by knowledge_admin status " +
+  "and knowledge_workspace select; conversation, answers and deliverables follow the user's language, and a request " +
+  "for another answer language never changes the knowledge language. Keep objective in the user's language; when a " +
+  "knowledge language is declared, pass the retrieval query translated into it with query_language, translating the " +
+  "intent only and preserving identifiers, paths, codes, numbers, negations and constraints. Translate live yourself; " +
+  "do not ask the user to translate. Before knowledge_page write/edit or knowledge_ingest apply_claims, translate " +
+  "human-readable content and titles into the knowledge language and declare it with content_language. Translate " +
+  "retrieved evidence into the user's language when explaining the answer; keep citations traceable. Quote evidence in its " +
+  "original form and label any translated quotation as a translation. If no knowledge language is declared, ask the " +
+  "user which language the knowledge is written in and declare it with knowledge_admin action=language; until then " +
+  "preserve an existing page's language and ask before writing if it cannot be inferred safely. Keep tool names, " +
+  "schemas, control files, and operational messages in English.";
 
 export const DECISION_MEMORY_POLICY =
   "Treat decisions and changeImpact.decisions from knowledge_context as candidates: materialize only an exact " +
@@ -54,9 +62,10 @@ export function mcpAgentInstructions(era: ProtocolEra): string {
     "Follow the structured nextAction returned by each operation. Materialize only relevant " +
     "knowledge-rail:// or code:// links with resources/read when available; otherwise use " +
     "knowledge_page action=read for knowledge-rail:// links. If coverage remains insufficient after " +
-    "the suggested widening, preserve evidenceGaps as explicit unknowns instead of guessing. " +
+    "the suggested widening, preserve evidenceGaps as explicit unknowns instead of guessing. Sufficient coverage " +
+    "is not proof of an answer: state only what the materialized passages support. " +
     DECISION_MEMORY_POLICY + " " +
-    USER_OUTPUT_LANGUAGE_POLICY
+    LANGUAGE_CONTRACT_POLICY
   );
 }
 
@@ -126,7 +135,7 @@ export function buildServer(
     },
     {
       instructions: profile.kind === "catalog"
-        ? "This is a context-free desktop chat. First call knowledge_workspace list, ask the user which workspace to use, then select it with explicit confirmation. Keep the returned opaque workspace_binding only in this conversation and include it in every domain call. Never invent an ID or filesystem path. Prefer a new chat when changing customer workspace. " + USER_OUTPUT_LANGUAGE_POLICY
+        ? "This is a context-free desktop chat. First call knowledge_workspace list, ask the user which workspace to use, then select it with explicit confirmation. Keep the returned opaque workspace_binding only in this conversation and include it in every domain call. Never invent an ID or filesystem path. Prefer a new chat when changing customer workspace. " + LANGUAGE_CONTRACT_POLICY
         : mcpAgentInstructions(context.era),
       // These catalogs are registration metadata and do not depend on wiki
       // contents. Modern clients may safely reuse them, reducing repeated

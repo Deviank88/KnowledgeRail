@@ -4,7 +4,7 @@
   "display_name": "KnowledgeRail",
   "version": "2.9.1",
   "description": "Persistent, evidence-backed project knowledge and task context for coding agents.",
-  "long_description": "Local-first project knowledge with verified evidence retrieval, workspace isolation, and explicit user-approved bindings.",
+  "long_description": "Local-first project knowledge with verified evidence retrieval, workspace isolation, and explicit user-approved bindings. Available under PolyForm Noncommercial 1.0.0; commercial use requires a separate written license.",
   "author": {
     "name": "Deviank88",
     "url": "https://github.com/Deviank88"
@@ -28,7 +28,7 @@
   "tools_generated": true,
   "prompts_generated": true,
   "keywords": ["knowledge", "retrieval", "project", "evidence", "coding"],
-  "license": "Apache-2.0",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "compatibility": {
     "platforms": ["darwin", "win32", "linux"],
     "runtimes": {

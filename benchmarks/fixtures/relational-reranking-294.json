@@ -1,0 +1,472 @@
+{
+  "version": 1,
+  "description": "Authored relational reranking prerequisite, frozen before model scoring. Development/evaluation use disjoint requirement chains. Explicit edges are the oracle, including incoming traversal, two-hop evidence, same-vocabulary distractors and unanswerable relations. Synthetic evidence does not certify production answer quality.",
+  "pages": [
+    {
+      "path": "requirements/Alder.md",
+      "title": "REQ-ALDER-31",
+      "type": "requirement",
+      "body": "Duplicate receipts must reuse the originating transaction key."
+    },
+    {
+      "path": "implementations/Alder.md",
+      "title": "AlderWorker",
+      "type": "implementation",
+      "body": "The worker enforces the documented invariant before accepting a request."
+    },
+    {
+      "path": "tests/Alder.md",
+      "title": "AlderRegression",
+      "type": "test_result",
+      "body": "The regression verifies the worker rejects requests violating the invariant and accepts compliant requests."
+    },
+    {
+      "path": "releases/Alder.md",
+      "title": "AlderRelease",
+      "type": "release",
+      "body": "The release ships the worker after its regression suite passes."
+    },
+    {
+      "path": "requirements/Birch.md",
+      "title": "REQ-BIRCH-42",
+      "type": "requirement",
+      "body": "Refunds require a reviewer when the total exceeds 800 units."
+    },
+    {
+      "path": "implementations/Birch.md",
+      "title": "BirchWorker",
+      "type": "implementation",
+      "body": "The worker enforces the documented invariant before accepting a request."
+    },
+    {
+      "path": "tests/Birch.md",
+      "title": "BirchRegression",
+      "type": "test_result",
+      "body": "The regression verifies the worker rejects requests violating the invariant and accepts compliant requests."
+    },
+    {
+      "path": "releases/Birch.md",
+      "title": "BirchRelease",
+      "type": "release",
+      "body": "The release ships the worker after its regression suite passes."
+    },
+    {
+      "path": "requirements/Cedar.md",
+      "title": "REQ-CEDAR-53",
+      "type": "requirement",
+      "body": "Audit archives expire after 180 days unless a legal hold exists."
+    },
+    {
+      "path": "implementations/Cedar.md",
+      "title": "CedarWorker",
+      "type": "implementation",
+      "body": "The worker enforces the documented invariant before accepting a request."
+    },
+    {
+      "path": "tests/Cedar.md",
+      "title": "CedarRegression",
+      "type": "test_result",
+      "body": "The regression verifies the worker rejects requests violating the invariant and accepts compliant requests."
+    },
+    {
+      "path": "releases/Cedar.md",
+      "title": "CedarRelease",
+      "type": "release",
+      "body": "The release ships the worker after its regression suite passes."
+    },
+    {
+      "path": "requirements/Elm.md",
+      "title": "REQ-ELM-64",
+      "type": "requirement",
+      "body": "Lease renewal requires the latest fencing token."
+    },
+    {
+      "path": "implementations/Elm.md",
+      "title": "ElmWorker",
+      "type": "implementation",
+      "body": "The worker enforces the documented invariant before accepting a request."
+    },
+    {
+      "path": "tests/Elm.md",
+      "title": "ElmRegression",
+      "type": "test_result",
+      "body": "The regression verifies the worker rejects requests violating the invariant and accepts compliant requests."
+    },
+    {
+      "path": "releases/Elm.md",
+      "title": "ElmRelease",
+      "type": "release",
+      "body": "The release ships the worker after its regression suite passes."
+    },
+    {
+      "path": "requirements/Fir.md",
+      "title": "REQ-FIR-75",
+      "type": "requirement",
+      "body": "Tenant encryption keys must never be reused across tenant boundaries."
+    },
+    {
+      "path": "implementations/Fir.md",
+      "title": "FirWorker",
+      "type": "implementation",
+      "body": "The worker enforces the documented invariant before accepting a request."
+    },
+    {
+      "path": "tests/Fir.md",
+      "title": "FirRegression",
+      "type": "test_result",
+      "body": "The regression verifies the worker rejects requests violating the invariant and accepts compliant requests."
+    },
+    {
+      "path": "releases/Fir.md",
+      "title": "FirRelease",
+      "type": "release",
+      "body": "The release ships the worker after its regression suite passes."
+    },
+    {
+      "path": "requirements/Maple.md",
+      "title": "REQ-MAPLE-86",
+      "type": "requirement",
+      "body": "Webhook delivery requires a valid signature and rejects replayed nonces."
+    },
+    {
+      "path": "implementations/Maple.md",
+      "title": "MapleWorker",
+      "type": "implementation",
+      "body": "The worker enforces the documented invariant before accepting a request."
+    },
+    {
+      "path": "tests/Maple.md",
+      "title": "MapleRegression",
+      "type": "test_result",
+      "body": "The regression verifies the worker rejects requests violating the invariant and accepts compliant requests."
+    },
+    {
+      "path": "releases/Maple.md",
+      "title": "MapleRelease",
+      "type": "release",
+      "body": "The release ships the worker after its regression suite passes."
+    }
+  ],
+  "edges": [
+    {
+      "fromPath": "implementations/Alder.md",
+      "toPath": "requirements/Alder.md",
+      "kind": "implements"
+    },
+    {
+      "fromPath": "tests/Alder.md",
+      "toPath": "implementations/Alder.md",
+      "kind": "tests"
+    },
+    {
+      "fromPath": "implementations/Alder.md",
+      "toPath": "releases/Alder.md",
+      "kind": "released_by"
+    },
+    {
+      "fromPath": "implementations/Birch.md",
+      "toPath": "requirements/Birch.md",
+      "kind": "implements"
+    },
+    {
+      "fromPath": "tests/Birch.md",
+      "toPath": "implementations/Birch.md",
+      "kind": "tests"
+    },
+    {
+      "fromPath": "implementations/Birch.md",
+      "toPath": "releases/Birch.md",
+      "kind": "released_by"
+    },
+    {
+      "fromPath": "implementations/Cedar.md",
+      "toPath": "requirements/Cedar.md",
+      "kind": "implements"
+    },
+    {
+      "fromPath": "tests/Cedar.md",
+      "toPath": "implementations/Cedar.md",
+      "kind": "tests"
+    },
+    {
+      "fromPath": "implementations/Cedar.md",
+      "toPath": "releases/Cedar.md",
+      "kind": "released_by"
+    },
+    {
+      "fromPath": "implementations/Elm.md",
+      "toPath": "requirements/Elm.md",
+      "kind": "implements"
+    },
+    {
+      "fromPath": "tests/Elm.md",
+      "toPath": "implementations/Elm.md",
+      "kind": "tests"
+    },
+    {
+      "fromPath": "implementations/Elm.md",
+      "toPath": "releases/Elm.md",
+      "kind": "released_by"
+    },
+    {
+      "fromPath": "implementations/Fir.md",
+      "toPath": "requirements/Fir.md",
+      "kind": "implements"
+    },
+    {
+      "fromPath": "tests/Fir.md",
+      "toPath": "implementations/Fir.md",
+      "kind": "tests"
+    },
+    {
+      "fromPath": "implementations/Fir.md",
+      "toPath": "releases/Fir.md",
+      "kind": "released_by"
+    },
+    {
+      "fromPath": "implementations/Maple.md",
+      "toPath": "requirements/Maple.md",
+      "kind": "implements"
+    },
+    {
+      "fromPath": "tests/Maple.md",
+      "toPath": "implementations/Maple.md",
+      "kind": "tests"
+    },
+    {
+      "fromPath": "implementations/Maple.md",
+      "toPath": "releases/Maple.md",
+      "kind": "released_by"
+    }
+  ],
+  "queries": [
+    {
+      "id": "alder-test",
+      "split": "development",
+      "language": "en",
+      "query": "Which regression verifies the implementation of REQ-ALDER-31?",
+      "seedPath": "requirements/Alder.md",
+      "relevantPaths": [
+        "tests/Alder.md"
+      ]
+    },
+    {
+      "id": "alder-release",
+      "split": "development",
+      "language": "en",
+      "query": "Which release ships the implementation governed by REQ-ALDER-31?",
+      "seedPath": "requirements/Alder.md",
+      "relevantPaths": [
+        "releases/Alder.md"
+      ]
+    },
+    {
+      "id": "alder-reverse",
+      "split": "development",
+      "language": "en",
+      "query": "Which requirement is verified indirectly by AlderRegression?",
+      "seedPath": "tests/Alder.md",
+      "relevantPaths": [
+        "requirements/Alder.md"
+      ]
+    },
+    {
+      "id": "alder-absent",
+      "split": "development",
+      "language": "en",
+      "query": "Which incident motivated REQ-ALDER-31?",
+      "seedPath": "requirements/Alder.md",
+      "relevantPaths": []
+    },
+    {
+      "id": "birch-test",
+      "split": "development",
+      "language": "en",
+      "query": "Which regression verifies the implementation of REQ-BIRCH-42?",
+      "seedPath": "requirements/Birch.md",
+      "relevantPaths": [
+        "tests/Birch.md"
+      ]
+    },
+    {
+      "id": "birch-release",
+      "split": "development",
+      "language": "en",
+      "query": "Which release ships the implementation governed by REQ-BIRCH-42?",
+      "seedPath": "requirements/Birch.md",
+      "relevantPaths": [
+        "releases/Birch.md"
+      ]
+    },
+    {
+      "id": "birch-reverse",
+      "split": "development",
+      "language": "en",
+      "query": "Which requirement is verified indirectly by BirchRegression?",
+      "seedPath": "tests/Birch.md",
+      "relevantPaths": [
+        "requirements/Birch.md"
+      ]
+    },
+    {
+      "id": "birch-absent",
+      "split": "development",
+      "language": "en",
+      "query": "Which incident motivated REQ-BIRCH-42?",
+      "seedPath": "requirements/Birch.md",
+      "relevantPaths": []
+    },
+    {
+      "id": "cedar-test",
+      "split": "development",
+      "language": "en",
+      "query": "Which regression verifies the implementation of REQ-CEDAR-53?",
+      "seedPath": "requirements/Cedar.md",
+      "relevantPaths": [
+        "tests/Cedar.md"
+      ]
+    },
+    {
+      "id": "cedar-release",
+      "split": "development",
+      "language": "en",
+      "query": "Which release ships the implementation governed by REQ-CEDAR-53?",
+      "seedPath": "requirements/Cedar.md",
+      "relevantPaths": [
+        "releases/Cedar.md"
+      ]
+    },
+    {
+      "id": "cedar-reverse",
+      "split": "development",
+      "language": "en",
+      "query": "Which requirement is verified indirectly by CedarRegression?",
+      "seedPath": "tests/Cedar.md",
+      "relevantPaths": [
+        "requirements/Cedar.md"
+      ]
+    },
+    {
+      "id": "cedar-absent",
+      "split": "development",
+      "language": "en",
+      "query": "Which incident motivated REQ-CEDAR-53?",
+      "seedPath": "requirements/Cedar.md",
+      "relevantPaths": []
+    },
+    {
+      "id": "elm-test",
+      "split": "evaluation",
+      "language": "en",
+      "query": "Which regression verifies the implementation of REQ-ELM-64?",
+      "seedPath": "requirements/Elm.md",
+      "relevantPaths": [
+        "tests/Elm.md"
+      ]
+    },
+    {
+      "id": "elm-release",
+      "split": "evaluation",
+      "language": "en",
+      "query": "Which release ships the implementation governed by REQ-ELM-64?",
+      "seedPath": "requirements/Elm.md",
+      "relevantPaths": [
+        "releases/Elm.md"
+      ]
+    },
+    {
+      "id": "elm-reverse",
+      "split": "evaluation",
+      "language": "en",
+      "query": "Which requirement is verified indirectly by ElmRegression?",
+      "seedPath": "tests/Elm.md",
+      "relevantPaths": [
+        "requirements/Elm.md"
+      ]
+    },
+    {
+      "id": "elm-absent",
+      "split": "evaluation",
+      "language": "en",
+      "query": "Which incident motivated REQ-ELM-64?",
+      "seedPath": "requirements/Elm.md",
+      "relevantPaths": []
+    },
+    {
+      "id": "fir-test",
+      "split": "evaluation",
+      "language": "it",
+      "query": "Quale test verifica l’implementazione di REQ-FIR-75?",
+      "seedPath": "requirements/Fir.md",
+      "relevantPaths": [
+        "tests/Fir.md"
+      ]
+    },
+    {
+      "id": "fir-release",
+      "split": "evaluation",
+      "language": "it",
+      "query": "Quale rilascio contiene l’implementazione del requisito REQ-FIR-75?",
+      "seedPath": "requirements/Fir.md",
+      "relevantPaths": [
+        "releases/Fir.md"
+      ]
+    },
+    {
+      "id": "fir-reverse",
+      "split": "evaluation",
+      "language": "it",
+      "query": "Quale requisito viene verificato indirettamente da FirRegression?",
+      "seedPath": "tests/Fir.md",
+      "relevantPaths": [
+        "requirements/Fir.md"
+      ]
+    },
+    {
+      "id": "fir-absent",
+      "split": "evaluation",
+      "language": "it",
+      "query": "Quale incidente ha motivato REQ-FIR-75?",
+      "seedPath": "requirements/Fir.md",
+      "relevantPaths": []
+    },
+    {
+      "id": "maple-test",
+      "split": "evaluation",
+      "language": "en",
+      "query": "Which regression verifies the implementation of REQ-MAPLE-86?",
+      "seedPath": "requirements/Maple.md",
+      "relevantPaths": [
+        "tests/Maple.md"
+      ]
+    },
+    {
+      "id": "maple-release",
+      "split": "evaluation",
+      "language": "en",
+      "query": "Which release ships the implementation governed by REQ-MAPLE-86?",
+      "seedPath": "requirements/Maple.md",
+      "relevantPaths": [
+        "releases/Maple.md"
+      ]
+    },
+    {
+      "id": "maple-reverse",
+      "split": "evaluation",
+      "language": "en",
+      "query": "Which requirement is verified indirectly by MapleRegression?",
+      "seedPath": "tests/Maple.md",
+      "relevantPaths": [
+        "requirements/Maple.md"
+      ]
+    },
+    {
+      "id": "maple-absent",
+      "split": "evaluation",
+      "language": "en",
+      "query": "Which incident motivated REQ-MAPLE-86?",
+      "seedPath": "requirements/Maple.md",
+      "relevantPaths": []
+    }
+  ]
+}

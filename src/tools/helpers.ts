@@ -1,6 +1,7 @@
 import { invalidateWikiGraph } from "../core/graph-index.js";
 import { updateRuntimeWikiGraphPaths } from "../core/graph-runtime.js";
 import { withDerivedCheckpointLock } from "../core/checkpoint-lock.js";
+import { lockKnowledgeLanguage } from "../core/knowledge-language.js";
 import { invalidateManifestEntries } from "../core/manifest-service.js";
 import { getWikiRoot, wikiDir } from "../core/paths.js";
 import { updateRetrievalPaths } from "../core/retrieval-index.js";
@@ -19,6 +20,8 @@ export {
  * line to append to the tool output.
  */
 export async function finalizePageMutation(relPaths: string[]): Promise<string> {
+  // Canonical knowledge now exists: a declared knowledge language becomes immutable.
+  const languageLocked = await lockKnowledgeLanguage(wikiDir());
   await invalidateManifestEntries(wikiDir(), relPaths);
   const runtimeUpdated = await withDerivedCheckpointLock(wikiDir(), async (checkpointLock) => {
     await updateRetrievalPaths(wikiDir(), relPaths, { checkpointLock });
@@ -37,5 +40,6 @@ export async function finalizePageMutation(relPaths: string[]): Promise<string> 
   } catch {
     semanticNotice = " Semantic indexing is unavailable; canonical pages were saved and indexing will retry.";
   }
-  return `Index updated (${pageCount} pages).${semanticNotice}`;
+  const languageNotice = languageLocked ? " The knowledge language is now locked for this workspace." : "";
+  return `Index updated (${pageCount} pages).${semanticNotice}${languageNotice}`;
 }

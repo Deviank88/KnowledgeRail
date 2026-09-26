@@ -51,6 +51,13 @@ try {
   if (manifest.version !== packageDocument.version || manifest.manifest_version !== "0.3") {
     throw new Error("Extracted MCPB manifest identity is invalid.");
   }
+  if (manifest.license !== packageDocument.license) throw new Error("Extracted MCPB license differs from npm metadata.");
+  for (const notice of ["LICENSE", "NOTICE", "LICENSING.md", "licenses/Apache-2.0-legacy.txt"]) {
+    const [source, bundled] = await Promise.all([
+      fs.readFile(path.join(repositoryRoot, notice)), fs.readFile(path.join(extracted, notice)),
+    ]);
+    if (!source.equals(bundled)) throw new Error(`MCPB licensing document differs from the source: ${notice}`);
+  }
   client = new Client(
     { name: "knowledge-rail-mcpb-smoke", version: "1.0.0" },
     { versionNegotiation: { mode: { pin: "2026-07-28" } } }

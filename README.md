@@ -321,7 +321,7 @@ agent reasoning and project work
     └──→ knowledge_document_context ──→ knowledge_document
 ```
 
-For a normal task, the agent calls `knowledge_context mode="task"` with a concrete objective. KnowledgeRail searches the canonical wiki and its derived lexical, graph, passage, code, and optional semantic indexes, ranks the available evidence, and returns a compact context envelope. Large page bodies are exposed as `knowledge-rail://` links instead of being inserted wholesale into the response; the client reads only the selected passages. Coverage is assessed over both the full retrieved candidate set and the smaller display set. The full pool distinguishes truly missing evidence from evidence that is merely `budget_limited`; progressive widening stops only when the evidence returned to the model is sufficient. If the token budget alone excluded relevant evidence, the returned `nextAction` proposes one bounded widening step. Missing, stale, contradictory, or unresolved evidence remains an explicit gap and is never filled by guessing.
+For a normal task, the agent calls `knowledge_context mode="task"` with a concrete objective. KnowledgeRail searches the canonical wiki and its derived lexical, graph, passage, code, and optional semantic indexes, ranks the available evidence, and returns a compact context envelope. Large page bodies are exposed as `knowledge-rail://` links instead of being inserted wholesale into the response; the client reads only the selected passages. Coverage is assessed over both the full retrieved candidate set and the smaller display set. The full pool distinguishes truly missing evidence from evidence that is merely `budget_limited`; progressive widening stops only when the evidence returned to the model is sufficient. If the token budget alone excluded relevant evidence, the returned `nextAction` proposes one bounded widening step. Missing, stale, contradictory, or unresolved evidence remains an explicit gap and is never filled by guessing. Graph exploration retains visited-node, depth, beam and output limits per request, but scans all neighbors of expanded nodes before ranking: a hub's degree does not cut off late links or consume a shared edge budget before other seeds can expand. Unexplored linked pages (`truncated_frontier`) keep widening going until the request's maximum budget; from then on they are reported as a coverage warning rather than a gap, because in a linked wiki some pages always lie beyond any bound. The agent can continue with focused queries, use `knowledge_context mode="graph"` with larger `max_nodes`/`max_depth`, and read selected pages. A sufficient coverage label does not guarantee that every useful branch was explored.
 
 Decision pages are ordinary canonical wiki knowledge and already participate in that retrieval. Each page stays bounded to one coherent flow, component, or project context. Candidate prior choices are exposed in the structured `decisions` and `changeImpact.decisions` fields, but the agent inspects their metadata and materializes only a resource link that actually matches the task—normally the selected passage, or that single bounded page when no reliable passage exists. Detailed retrieval safeguards are included in the task response only when decision candidates exist, avoiding a large fixed instruction cost for unrelated sessions. The agent never loads every decision page, and the absence of a matching decision is normal rather than a coverage gap. When the human-model discussion reaches a clearly accepted, durable project choice, the agent closes the loop at task completion: it rereads and reuses the decision page for the same context (or creates a separate page for a different one), updates the current choice and concise rationale, appends a dated history note describing what changed and why, and writes one `DECISION` log entry. Proposals, unresolved options, incidental implementation details, raw conversation, hidden chain-of-thought, and secrets are never decision memory. The page remains valid if the independent log append must be retried. No decision means no write; an analysis-only or otherwise unauthorized session reports the proposed update instead of mutating the wiki.
 
@@ -383,7 +383,11 @@ Use `evidence_status` for claims and recovery debt; it is intentionally separate
 
 The budget bounds evidence sent to the model; it does not declare omitted knowledge irrelevant. If coverage is insufficient because of the budget, the guided read workflow widens both `max_evidence` (up to 20) and the heuristic token allowance from `2,000` to `4,000`, `8,000`, and at most `12,000`. Widening stops as soon as no evidence is budget-omitted; any remaining semantic or freshness gap is exposed rather than guessed.
 
-`response_detail="compact"` is recommended for normal agent use. `full` keeps the complete historical TaskContext payload for diagnostics and integrations that need it.
+`response_detail="compact"` is recommended for normal agent use. The heuristic token estimate uses the requested structured representation, so compact responses can retain more evidence within the same budget. Accompanying text and the MCP envelope are separate from this estimate. `full` keeps the complete historical TaskContext payload for diagnostics and integrations that need it.
+
+Every context reports `retrieval.answerability="unverified"`: coverage measures retrieval completeness and does not certify that the evidence answers the question. Once retrieval is ready, the guided workflow proposes reading a selected resource. The agent must verify the requested facts, conditions, and relationships in the passages before answering, and report unsupported details as unknown.
+
+When semantic retrieval is configured, workspace preparation also warms the query embedding model in the background, including when document vectors are restored from disk. `queryProviderState` distinguishes `idle`, `warming`, `ready`, and `failed` from index readiness. An immediate query still respects its semantic time budget; lexical retrieval, graph traversal, and an independently configured reranker remain available on semantic timeout. Physical cold-start and Mac measurements follow the [runtime validation protocol](benchmarks/runtime-validation-2.9.4.md).
 
 ## Code-backed claims and drift detection
 
@@ -472,7 +476,28 @@ Diagrams are opt-in. Omitting `diagram_mode` means that review applies no diagra
 
 The generated document is an output of agent memory, not its replacement. Confirmed facts belong in `wiki/`; source artifacts remain in `docs/`; delivery-ready Markdown belongs in `docs/deliverables/`.
 
-KnowledgeRail keeps its MCP catalog, prompts, stable identifiers, operational messages, and generated control files in English. This is an internal interoperability choice, not an output-language restriction: human-readable wiki pages and deliverables follow the language of the user's current request, an explicit language override takes precedence, and edits preserve the existing page language unless translation is requested. The policy has no locale allowlist.
+### Knowledge language
+
+Each workspace has one **knowledge language**: a BCP 47 tag (`en`, `it`, `pt-BR`, …) stored as `knowledge_language` in the frontmatter of `wiki/SCHEMA.md`, so it is versioned and backed up with the wiki. The conversation follows the user; the agent translates between the two. KnowledgeRail itself calls no LLM: the agent translates, the server persists and checks the contract.
+
+| Element | Language |
+|---|---|
+| Canonical wiki pages | The workspace knowledge language |
+| Retrieval queries (`query` + `query_language`) | The workspace knowledge language |
+| `objective`, answers and deliverables | The language the user requested |
+| Original sources, code, identifiers, quotations | Their original form |
+
+- **Declare** it at initialization with `knowledge_admin action="init" options={"knowledge_language":"en"}`, or later with `action="language"` (`setup_mode="preview"` then `"apply"`). It can be changed only until the first canonical page is written; after that it is locked, and deletions, restarts and `init force=true` do not unlock it. It is never recalculated from the latest conversation.
+- **Adopting** an existing wiki records and locks the language immediately. The response includes a heuristic per-page language estimate (function words for en/it/es/fr/de/pt; other languages, short or mixed pages count as `unknown`). Declaring a language does not translate pages.
+- **Discovery**: `knowledge_admin action="status"` and `knowledge_workspace action="select"` report the language before the first search.
+- **Retrieval**: once declared, `knowledge_context` (task, search and graph with a query) and `knowledge_document_context action="section"` require `query_language` in the knowledge language. Otherwise they perform no retrieval and return `state="query_language_required"` with a `nextAction` for a translated `query`, keeping `objective` in the user's language. The check verifies the declared contract, not the fidelity of the translation. Workspaces without a declared language retrieve as before.
+- **Writes**: `knowledge_page write/edit` and `knowledge_ingest apply_claims` require `content_language` matching the declared knowledge language. The agent translates human-readable content and titles live before calling them; a missing or incompatible declaration is rejected before mutation. Sources, evidence references and technical identifiers retain their original form. The prose language estimate remains advisory: it warns about suspected mismatches and does not verify translation fidelity.
+
+The user does not need to translate manually: the calling agent translates the question before retrieval, the content before storage, and the evidence back into the user's language when answering. An explicit `language` on `prepare_knowledge_update` cannot override the workspace language. This workflow requires a client agent that follows the server instructions; KnowledgeRail does not translate text by itself.
+
+The translation step matters for cross-language use: on the coverage diagnostics corpus (English documentation), 16 of 54 answerable Italian questions retrieved no relevant page and only 3 were judged sufficient; their English renderings retrieved a relevant page for all 54, and 48 were judged sufficient. Those renderings were prepared in advance, so this measures the benefit of well-translated queries, not the reliability of a live agent translation. See [coverage diagnostics](benchmarks/coverage-diagnostics-2.9.2.md). A [live test through a real MCP client](benchmarks/language-contract-live-2.9.2.md), with translations produced by the agent during the calls, found a judged relevant page in the first response for 48 of 54 questions (English knowledge, Italian questions) and 27 of 30 (a real Italian knowledge that is partly English, English questions); pages written in a language other than the declared one are the main source of misses.
+
+KnowledgeRail keeps its MCP catalog, prompts, stable identifiers, operational messages, and generated control files in English. This interoperability choice does not constrain the knowledge language or the language of deliverables, and there is no locale allowlist.
 
 ## Optional OCR and semantic retrieval
 
@@ -489,7 +514,7 @@ Common OCR variables:
 | `KNOWLEDGE_RAIL_OCR_TIMEOUT_MS` | Positive request timeout in milliseconds. |
 | `KNOWLEDGE_RAIL_OCR_RETRIES` | Retry count. |
 
-Semantic retrieval and semantic-aware coverage are optional. Without an embedding provider, deterministic lexical/graph/passage retrieval and delimiter-, stemming-, and artifact-equivalence-aware coverage remain fully available offline. With a provider, query facets and entities are additionally checked against indexed passage embeddings, which improves GAP precision. Page coverage uses the strongest indexed passage, while displayed-passage coverage is scored only against the excerpt actually selected; a relevant page therefore cannot hide a weak displayed excerpt. If the configured provider is unavailable, times out, or returns incompatible vectors, `knowledge_context` falls back to lexical coverage and reports the warning instead of failing.
+Semantic retrieval and semantic-aware coverage are optional. Without an embedding provider, deterministic lexical/graph/passage retrieval and delimiter-, stemming-, and artifact-equivalence-aware coverage remain fully available offline. With a provider, query facets and entities are additionally checked against indexed passage embeddings; the effect on coverage depends on the model and corpus and must be measured. In the current Qwen 0.6B diagnostics this signal did not change sufficient/gap decisions. Page coverage uses the strongest indexed passage, while displayed-passage coverage is scored only against the excerpt actually selected. These remain heuristics, not proof that a passage answers the question. If the configured provider is unavailable, times out, or returns incompatible vectors, `knowledge_context` falls back to lexical coverage and reports the warning instead of failing.
 
 The recommended local-first setup is an OpenAI-compatible Ollama endpoint; choose a pinned local model and use its declared vector dimensions:
 
@@ -551,7 +576,7 @@ This feature is in the development checkout, not the published 2.9.1 package.
 
 Use the compact multilingual **BGE Reranker v2 M3 Q8**: 568M parameters, about
 636 MB of weights. Its Ollama conversion needs a one-time metadata correction.
-From this checkout, with local Ollama **0.34.3** and Python 3 installed:
+From this checkout, with local Ollama (verified on 0.34.3 and 0.34.4) and Python 3 installed:
 
 ```sh
 ollama pull qllama/bge-reranker-v2-m3:q8_0
@@ -608,18 +633,107 @@ not part of the configuration above. The earlier 500 ms experiment is retained o
 as historical latency evidence, not as the activation policy. No relevance threshold
 is derived from elapsed time.
 
-**Compatibility is deliberately narrow:** the adapter verifies Ollama 0.34.3 and
-the prepared BGE weights before scoring. Ollama currently has no native `/api/rerank`
-contract; this integration uses the verified, unnormalised classifier output from
-its legacy `/api/embeddings` route. Arbitrary embedding or generative models and
-unverified Ollama versions fall back safely. Do not substitute `/api/embed`, which
-normalises the score. Runtime compatibility needs revalidation when Ollama changes.
+**Compatibility is deliberately narrow:** the adapter verifies the prepared BGE weights
+before scoring, and accepts each Ollama version only after it reproduces the reference
+scores of three fixed calibration pairs (within 1.0 logit, checked once per version and
+process). Ollama currently has no native `/api/rerank` contract; this integration uses
+the verified, unnormalised classifier output from its legacy `/api/embeddings` route.
+Arbitrary embedding or generative models and Ollama versions that change the score fall
+back safely, with the explicit reason `unsupported_runtime` in the retrieval diagnostics
+and one warning on the server log. Do not substitute `/api/embed`, which normalises the
+score. On Ollama 0.34.4 the adapter reproduced the llama.cpp scores exactly on 3,840
+query/passage pairs.
 The client and preparation script are portable; measured hardware results are macOS
 only, not a Windows/Linux performance guarantee.
 
 The existing HTTP `RERANK_ENDPOINT` + `RERANK_MODEL` configuration remains compatible
 with indexed `/rerank` responses; it also has no default reranking deadline. The Ollama configuration
 above needs no separate service. See the [measured results and limits](benchmarks/ollama-reranker-results-2.9.2.md).
+
+#### llama.cpp configuration in the MCP server environment
+
+To configure this checkout, an agent should put the connection settings directly
+in the **KnowledgeRail MCP server's `env`**, as shown below. Shell exports alone
+may not reach a desktop MCP client; KnowledgeRail does not load a repository
+`.env` file. Use `KNOWLEDGE_RAIL_RERANK_PROVIDER="http"` for llama.cpp, not
+`"llama.cpp"`. No source-code change or `semantic_setup` call is needed to enable
+this HTTP reranker.
+
+[llama.cpp](https://github.com/ggml-org/llama.cpp)'s `llama-server` serves the same BGE Q8 file on
+a `/v1/rerank` endpoint, without the metadata correction. On Linux with an NVIDIA RTX 5080 it
+produced identical scores and was faster per 32-candidate pool (230 ms against 333 ms with
+Ollama); macOS has not been measured yet. Embeddings can stay on Ollama. Use the exact measured
+file: `ollama pull qllama/bge-reranker-v2-m3:q8_0` stores it as blob
+`sha256-4bf51534d8d1aebced4de6eca4a8a39bd207170b42e3dcffa7718d194771a713` (635,674,304 bytes),
+or download that blob from `https://registry.ollama.ai/v2/qllama/bge-reranker-v2-m3/blobs/sha256:4bf51534d8d1aebced4de6eca4a8a39bd207170b42e3dcffa7718d194771a713`
+and check it with `sha256sum`. Other Q8_0 conversions have different bytes and were not measured.
+KnowledgeRail never starts or manages the reranker: it only manages the knowledge, and reranking is
+optional. You start and keep the service running yourself, with one slot (more slots change scores
+slightly):
+
+```sh
+llama-server -m /path/to/bge-reranker-v2-m3-q8_0.gguf --reranking --pooling rank \
+  -ngl 99 -np 1 -c 2048 -b 2048 -ub 2048 --host 127.0.0.1 --port 18092
+```
+
+```json
+{
+  "mcpServers": {
+    "knowledge-rail": {
+      "command": "node",
+      "args": ["/absolute/path/to/KnowledgeRail/dist/index.js", "--root", "/absolute/project/path"],
+      "env": {
+        "KNOWLEDGE_RAIL_EMBEDDING_BASE_URL": "http://127.0.0.1:11434/v1",
+        "KNOWLEDGE_RAIL_EMBEDDING_MODEL": "qwen3-embedding:0.6b",
+        "KNOWLEDGE_RAIL_EMBEDDING_DIMENSIONS": "1024",
+        "KNOWLEDGE_RAIL_RERANK_PROVIDER": "http",
+        "KNOWLEDGE_RAIL_RERANK_ENDPOINT": "http://127.0.0.1:18092/v1/rerank",
+        "KNOWLEDGE_RAIL_RERANK_MODEL": "bge-reranker-v2-m3-q8_0",
+        "KNOWLEDGE_RAIL_RERANK_VERSION": "sha256:4bf51534d8d1aebced4de6eca4a8a39bd207170b42e3dcffa7718d194771a713"
+      }
+    }
+  }
+}
+```
+
+The embedding variables are optional and independent of reranking. For the
+example above, install `qwen3-embedding:0.6b` in Ollama in advance. Use the client’s
+equivalent per-server environment section if it does not use JSON `mcpServers`.
+
+| MCP environment variable | llama.cpp setting |
+| --- | --- |
+| `KNOWLEDGE_RAIL_RERANK_PROVIDER` | `http`; optional when the endpoint is set, explicit in the example. |
+| `KNOWLEDGE_RAIL_RERANK_ENDPOINT` | Required full URL, including `/v1/rerank`; match the server's host and port. |
+| `KNOWLEDGE_RAIL_RERANK_MODEL` | Required model identifier sent to the service. |
+| `KNOWLEDGE_RAIL_RERANK_VERSION` | Optional weight/version label used in diagnostics and score-cache identity. It does not verify the remote model's bytes; verify the GGUF checksum separately. |
+| `KNOWLEDGE_RAIL_RERANK_API_KEY` | Optional bearer token if the service requires authentication. |
+| `KNOWLEDGE_RAIL_RERANK_BUDGET_MS` | Optional `0` (the default, no reranking deadline) or an integer from `1` to `30000`. |
+
+Agent setup procedure:
+
+1. Build this checkout with `npm ci` and `npm run build`, using Node.js 22.12 or
+   newer. Point the MCP entry at its absolute `dist/index.js` path; use an absolute
+   Node executable path if the client cannot resolve `node`. The published 2.9.1
+   package does not contain this integration.
+2. Install `llama-server` on the inference host, obtain and verify the GGUF above,
+   and start it with the displayed command. The inference host owns this process;
+   configuring MCP environment variables does not start or stop llama.cpp.
+3. Merge the example into the existing KnowledgeRail MCP entry, preserving the
+   project's binding and unrelated settings. Remove `KNOWLEDGE_RAIL_RERANK_BASE_URL`
+   from the effective MCP environment when switching from Ollama reranking: it
+   conflicts with `RERANK_ENDPOINT`. Keep `EMBEDDING_BASE_URL` if embeddings use
+   Ollama. This MCP process must be able to reach the configured endpoint.
+4. Restart the KnowledgeRail MCP process so it reads the new environment. Check
+   `http://127.0.0.1:18092/health` and submit a normal `knowledge_context mode="task"`
+   query against a nonempty knowledge in its declared language. Confirm the actual
+   `/v1/rerank` request in the llama-server log and inspect coverage warnings;
+   a working health endpoint alone does not prove MCP is using the reranker.
+
+If the reranker service is stopped, unreachable or refused, retrieval continues with the base
+hybrid ranking and each response carries `WARNING: Reranker unavailable (<reason>)`; the server
+log records one warning per outage. A missing Ollama is reported the same way for embeddings
+(`Semantic coverage degraded to lexical mode`). With both models loaded on the RTX 5080, Ollama's
+embedding runner used about 2.5 GiB of GPU memory and llama-server about 0.7 GiB.
 
 ## Compatibility
 
@@ -680,7 +794,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request and [SECURI
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE). You may use, modify, and distribute the project, including commercially, subject to the license terms and preservation of required notices. The license does not require derivative products to be open source.
+Licensed under [PolyForm Noncommercial 1.0.0](LICENSE). Noncommercial use is permitted under its terms; commercial use requires a separate written license from [Deviank88](https://github.com/Deviank88). KnowledgeRail is source available. See [LICENSING.md](LICENSING.md) for permitted uses, commercial inquiries, and the unchanged rights attached to earlier Apache-2.0 releases.
 
 ## Origins and acknowledgement
 

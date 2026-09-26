@@ -77,6 +77,8 @@ function graphResult(): SeededGraphQueryResult {
       emittedEdges: 0,
       maxDepthReached: 0,
       truncatedFrontierCount: 0,
+      edgeWork: 0,
+      edgeBudgetExhausted: false,
     },
   };
 }
